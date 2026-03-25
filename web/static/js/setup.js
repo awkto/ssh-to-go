@@ -37,7 +37,15 @@
                 });
                 if (!res.ok) throw new Error(await res.text());
 
-                // Show the key setup card
+                // If keypairs already exist (existing instance), go to dashboard
+                const kpRes = await fetch("/api/keypairs");
+                const kps = await kpRes.json();
+                if (kps && kps.length > 0) {
+                    window.location.href = "/";
+                    return;
+                }
+
+                // Fresh instance — show the key setup card
                 passwordCard.style.display = "none";
                 keyCard.style.display = "";
             } catch (e) {
