@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ssh-to-go</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-row">
+                <div>
+                    <h1>ssh-to-go</h1>
+                    <p class="subtitle">terminal session manager</p>
+                </div>
+                <div class="header-actions">
+                    <button id="refresh-all-btn" class="btn">Refresh All</button>
+                    <button id="add-host-btn" class="btn">+ Add Host</button>
+                    <button id="new-session-btn" class="btn btn-primary">+ New Session</button>
+                </div>
+            </div>
+        </header>
+
+        <div id="host-list"></div>
+
+        <!-- New Session Modal -->
+        <div id="modal-overlay" class="modal-overlay hidden">
+            <div class="modal">
+                <h3 id="modal-title">New Session</h3>
+                <form id="modal-form">
+                    <div id="modal-fields"></div>
+                    <div class="modal-actions">
+                        <button type="button" id="modal-cancel" class="btn">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="modal-submit">Create</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

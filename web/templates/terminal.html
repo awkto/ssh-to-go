@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Host}} / {{.Session}} — ssh-to-go</title>
+    <link rel="stylesheet" href="/static/vendor/xterm.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; background: #1a1a2e; overflow: hidden; }
+        #toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            background: #16213e;
+            color: #a0a0b0;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+        }
+        #toolbar a { color: #7c83ff; text-decoration: none; }
+        #toolbar a:hover { text-decoration: underline; }
+        #toolbar .info { display: flex; gap: 16px; align-items: center; }
+        #toolbar .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; }
+        #toolbar .status.connected { background: #4ade80; }
+        #toolbar .status.disconnected { background: #f87171; }
+        .btn-small {
+            background: #2a2a4a;
+            color: #ccc;
+            border: 1px solid #444;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-small:hover { background: #3a3a5a; }
+        #terminal { height: calc(100vh - 36px); }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <div class="info">
+            <a href="/">← dashboard</a>
+            <span>{{.Host}} / {{.Session}}</span>
+            <span class="status" id="ws-status"></span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn-small" id="ctrl-d-btn" title="Send Ctrl-D (EOF)">Ctrl-D</button>
+            <button class="btn-small" id="ctrl-c-btn" title="Send Ctrl-C (interrupt)">Ctrl-C</button>
+            <button class="btn-small" id="ctrl-w-btn" title="Send Ctrl-W (delete word)">Ctrl-W</button>
+            <button class="btn-small" id="paste-btn" title="Paste from clipboard">Paste</button>
+            <button class="btn-small" id="duplicate-btn" title="Open duplicate session in new tab">Duplicate</button>
+            <button class="btn-small" id="handoff-btn" title="Copy SSH command">Handoff</button>
+        </div>
+    </div>
+    <div id="terminal"></div>
+
+    <script src="/static/vendor/xterm.min.js"></script>
+    <script src="/static/vendor/xterm-addon-fit.min.js"></script>
+    <script src="/static/js/terminal.js"></script>
+    <script>
+        initTerminal("{{.Host}}", "{{.Session}}");
+    </script>
+</body>
+</html>

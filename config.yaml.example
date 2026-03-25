@@ -1,0 +1,14 @@
+# ssh-to-go configuration
+listen_addr: "127.0.0.1:8080"
+poll_interval: 5s
+
+hosts:
+  - name: dev-server
+    address: "192.168.1.100:22"
+    user: deploy
+    key_path: ~/.ssh/id_ed25519
+
+  - name: cloud-vm
+    address: "cloud.example.com:22"
+    user: ubuntu
+    key_path: ~/.ssh/id_ed25519
