@@ -135,7 +135,8 @@ header h1 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 300px;
+    flex: 1;
+    text-align: right;
 }
 
 .host-status {

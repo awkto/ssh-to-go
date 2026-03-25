@@ -329,6 +329,7 @@
         document.getElementById("create-token-btn").addEventListener("click", () => {
             modalTitle.textContent = "Create API Token";
             modalSubmit.textContent = "Create";
+            modalSubmit.style.display = "";
             modalFields.innerHTML = `
                 <label for="m-name">Token Name</label>
                 <input type="text" id="m-name" placeholder="my-script" required>
@@ -351,13 +352,10 @@
                     <code class="pubkey-code" id="new-token-value">${esc(data.token)}</code>
                     <button type="button" class="btn btn-sm" style="margin-top:8px" onclick="copyText('${ea(data.token)}')">Copy Token</button>
                 `;
-                modalSubmit.style.display = "none";
-                // Re-show submit when modal closes
-                const origClose = () => {
-                    modalSubmit.style.display = "";
+                modalSubmit.textContent = "Done";
+                modalHandler = async () => {
                     fetchTokens();
                 };
-                modalHandler = origClose;
             };
             modal.classList.remove("hidden");
         });
