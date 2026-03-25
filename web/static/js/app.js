@@ -102,7 +102,7 @@
                             ? `<span class="badge badge-attached">attached</span>`
                             : `<span class="badge badge-detached">detached</span>`;
                         return `<tr>
-                            <td><strong>${esc(s.session.name)}</strong></td>
+                            <td><a class="session-link" href="/terminal/${eu(name)}/${eu(s.session.name)}" target="_blank"><strong>${esc(s.session.name)}</strong></a></td>
                             <td>${s.session.windows}</td>
                             <td>${created}</td>
                             <td>${badge}</td>

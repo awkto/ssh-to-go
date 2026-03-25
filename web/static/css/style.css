@@ -188,6 +188,15 @@ header h1 {
     background: #22223a;
 }
 
+.session-link {
+    color: #a78bfa;
+    text-decoration: none;
+}
+
+.session-link:hover {
+    text-decoration: underline;
+}
+
 /* Badges */
 .badge {
     display: inline-block;
