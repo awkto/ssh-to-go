@@ -12,6 +12,7 @@ type Settings struct {
 	DefaultKeypair  string `json:"default_keypair"`
 	DefaultUsername string `json:"default_username"`
 	TmuxWindowSize  string `json:"tmux_window_size"`
+	ShowPubKey      *bool  `json:"show_pub_key,omitempty"`
 }
 
 type SettingsManager struct {
@@ -78,6 +79,9 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 		default:
 			return fmt.Errorf("invalid tmux_window_size %q: must be largest, smallest, or latest", s.TmuxWindowSize)
 		}
+	}
+	if s.ShowPubKey != nil {
+		sm.settings.ShowPubKey = s.ShowPubKey
 	}
 
 	return sm.save()

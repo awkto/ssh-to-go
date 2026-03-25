@@ -11,6 +11,7 @@
     let hosts = [];
     let sessions = [];
     let keypairs = [];
+    let settings = {};
     let pubKey = "";
     let modalHandler = null;
 
@@ -40,22 +41,31 @@
 
     function renderPubKey() {
         const el = document.getElementById("pubkey-display");
+        const section = document.getElementById("pubkey-section");
         if (!el || !pubKey) return;
         el.textContent = pubKey;
-        document.getElementById("pubkey-section").classList.remove("hidden");
+        // Hidden by default; only show if explicitly enabled in settings
+        if (settings.show_pub_key === true) {
+            section.classList.remove("hidden");
+        } else {
+            section.classList.add("hidden");
+        }
     }
 
     async function fetchAll() {
         try {
-            const [hRes, sRes, kRes] = await Promise.all([
+            const [hRes, sRes, kRes, stRes] = await Promise.all([
                 authFetch("/api/hosts"),
                 authFetch("/api/sessions"),
                 authFetch("/api/keypairs"),
+                authFetch("/api/settings"),
             ]);
             hosts = await hRes.json();
             sessions = await sRes.json();
             keypairs = await kRes.json();
+            settings = await stRes.json();
             render();
+            renderPubKey();
         } catch (e) {
             console.error("fetch:", e);
         }
@@ -94,22 +104,22 @@
             } else {
                 sessionsHTML = `<table class="session-table">
                     <thead><tr>
-                        <th>Session</th><th>Windows</th><th>Created</th><th>Status</th><th>Actions</th>
+                        <th>Session</th><th class="hide-mobile">Clients</th><th class="hide-mobile">Age</th><th class="hide-mobile">Status</th><th>Actions</th>
                     </tr></thead>
                     <tbody>${hostSessions.map(s => {
-                        const created = new Date(s.session.created).toLocaleString();
+                        const age = timeAgo(new Date(s.session.created));
                         const badge = s.session.attached
                             ? `<span class="badge badge-attached">attached</span>`
                             : `<span class="badge badge-detached">detached</span>`;
                         return `<tr>
                             <td><a class="session-link" href="/terminal/${eu(name)}/${eu(s.session.name)}" target="_blank"><strong>${esc(s.session.name)}</strong></a></td>
-                            <td>${s.session.windows}</td>
-                            <td>${created}</td>
-                            <td>${badge}</td>
+                            <td class="hide-mobile">${s.session.windows}</td>
+                            <td class="hide-mobile">${age}</td>
+                            <td class="hide-mobile">${badge}</td>
                             <td><div class="action-group">
                                 <a class="btn btn-sm btn-primary" href="/terminal/${eu(name)}/${eu(s.session.name)}" target="_blank">Webview</a>
-                                <button class="btn btn-sm" onclick="handoff('${ea(name)}','${ea(s.session.name)}')">Terminal</button>
-                                <button class="btn btn-sm" onclick="renameSession('${ea(name)}','${ea(s.session.name)}')">Rename</button>
+                                <button class="btn btn-sm hide-mobile" onclick="handoff('${ea(name)}','${ea(s.session.name)}')">Terminal</button>
+                                <button class="btn btn-sm hide-mobile" onclick="renameSession('${ea(name)}','${ea(s.session.name)}')">Rename</button>
                                 <button class="btn btn-sm btn-danger" onclick="killSession('${ea(name)}','${ea(s.session.name)}')">Kill</button>
                             </div></td>
                         </tr>`;
@@ -126,8 +136,7 @@
                     </div>
                     <div class="host-actions">
                         <button class="btn btn-sm" onclick="editHost('${ea(name)}')">Edit</button>
-                        <button class="btn btn-sm" onclick="scanHost('${ea(name)}')">Scan</button>
-                        <button class="btn btn-sm btn-primary" onclick="newSessionFor('${ea(name)}')">+ Session</button>
+                        <button class="btn btn-sm btn-primary" onclick="newSessionFor('${ea(name)}')">+ New</button>
                     </div>
                 </div>
                 <div class="host-body">${sessionsHTML}</div>
@@ -173,16 +182,6 @@
         }
     };
 
-    window.scanHost = async function (host) {
-        toast("Scanning " + host + "...", "success");
-        try {
-            await fetch(`/api/hosts/${eu(host)}/scan`, { method: "POST" });
-            await fetchAll();
-            toast(host + " scanned", "success");
-        } catch (e) {
-            toast("Scan failed: " + e.message, "error");
-        }
-    };
 
     window.editHost = function (hostName) {
         const h = hosts.find(x => x.config.name === hostName);
@@ -210,7 +209,24 @@
             <label for="m-user">User</label>
             <input type="text" id="m-user" value="${ea(h.config.user)}">
             ${keypairHTML}
+            <hr style="border:0;border-top:1px solid #333;margin:16px 0 8px">
+            <button type="button" class="btn btn-danger" id="m-delete-host" style="width:100%">Delete Host</button>
         `;
+
+        setTimeout(() => {
+            document.getElementById("m-delete-host").addEventListener("click", async () => {
+                if (!confirm('Delete host "' + hostName + '"? This cannot be undone.')) return;
+                try {
+                    const res = await fetch('/api/hosts/' + eu(hostName), { method: 'DELETE' });
+                    if (!res.ok) throw new Error(await res.text());
+                    toast('Host "' + hostName + '" deleted', 'success');
+                    modal.classList.add('hidden');
+                    fetchAll();
+                } catch (e) {
+                    toast('Delete failed: ' + e.message, 'error');
+                }
+            });
+        }, 0);
 
         modalHandler = async () => {
             const body = {
@@ -252,55 +268,6 @@
             toast("Failed: " + e.message, "error");
         }
     };
-
-    // ── Refresh All ──
-
-    document.getElementById("refresh-all-btn").addEventListener("click", async () => {
-        const btn = document.getElementById("refresh-all-btn");
-        btn.disabled = true;
-        btn.textContent = "Scanning...";
-        try {
-            await fetch("/api/scan", { method: "POST" });
-            await fetchAll();
-            toast("All hosts scanned", "success");
-        } catch (e) {
-            toast("Refresh failed", "error");
-        } finally {
-            btn.disabled = false;
-            btn.textContent = "Refresh All";
-        }
-    });
-
-    // ── New Session ──
-
-    document.getElementById("new-session-btn").addEventListener("click", async () => {
-        if (hosts.length === 0) {
-            toast("Add a host first", "error");
-            return;
-        }
-        if (hosts.length === 1) {
-            // One host — just create directly
-            window.newSessionFor(hosts[0].config.name);
-            return;
-        }
-        // Multiple hosts — show a quick picker
-        modalTitle.textContent = "New Session";
-        modalSubmit.textContent = "Create";
-        const options = hosts.map(h =>
-            `<option value="${ea(h.config.name)}">${esc(h.config.name)}</option>`
-        ).join("");
-        modalFields.innerHTML = `
-            <label for="m-host">Host</label>
-            <select id="m-host" required>${options}</select>
-        `;
-        modalHandler = async () => {
-            const host = document.getElementById("m-host").value;
-            if (!host) return;
-            modal.classList.add("hidden");
-            window.newSessionFor(host);
-        };
-        modal.classList.remove("hidden");
-    });
 
     // ── Add Host Modal ──
 
@@ -427,9 +394,21 @@
         }
     });
 
+    // ── Version ──
+
+    async function fetchVersion() {
+        try {
+            const res = await authFetch("/api/version");
+            const data = await res.json();
+            const el = document.getElementById("version-footer");
+            if (el && data.version) el.textContent = data.version;
+        } catch (e) { /* ignore */ }
+    }
+
     // ── Init ──
 
     fetchPubKey();
     fetchAll();
+    fetchVersion();
     setInterval(fetchAll, 5000);
 })();

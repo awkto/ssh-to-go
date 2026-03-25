@@ -138,6 +138,43 @@ func UpdateHost(path string, name string, updated Host) error {
 	return os.WriteFile(path, out, 0644)
 }
 
+// RemoveHost removes a host from the config file by name.
+func RemoveHost(path string, name string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+
+	hostsList, _ := raw["hosts"].([]interface{})
+	found := false
+	for i, entry := range hostsList {
+		m, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if m["name"] == name {
+			hostsList = append(hostsList[:i], hostsList[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("host %q not found in config", name)
+	}
+
+	raw["hosts"] = hostsList
+	out, err := yaml.Marshal(raw)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	return os.WriteFile(path, out, 0644)
+}
+
 func Load(path string) (*Config, error) {
 	cfg := &Config{
 		ListenAddr:   "127.0.0.1:8080",

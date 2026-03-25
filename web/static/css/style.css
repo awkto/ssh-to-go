@@ -589,3 +589,11 @@ header h1 {
 }
 
 .section-header h2 { margin-bottom: 0; }
+
+/* Mobile: hide non-essential columns and buttons */
+@media (max-width: 600px) {
+    .hide-mobile { display: none !important; }
+    .container { padding: 12px; }
+    .host-header { flex-wrap: wrap; gap: 8px; }
+    .host-addr { font-size: 11px; }
+}

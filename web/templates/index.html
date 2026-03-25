@@ -15,10 +15,8 @@
                     <p class="subtitle">terminal session manager</p>
                 </div>
                 <div class="header-actions">
-                    <a href="/settings" class="btn">Settings</a>
-                    <button id="refresh-all-btn" class="btn">Refresh All</button>
+                    <a href="/settings" class="btn" title="Settings">&#9881;</a>
                     <button id="add-host-btn" class="btn">+ Add Host</button>
-                    <button id="new-session-btn" class="btn btn-primary">+ New Session</button>
                 </div>
             </div>
         </header>
@@ -33,6 +31,8 @@
         </div>
 
         <div id="host-list"></div>
+
+        <div id="version-footer" style="position:fixed;bottom:8px;left:12px;font-size:11px;color:#555;"></div>
 
         <!-- New Session Modal -->
         <div id="modal-overlay" class="modal-overlay hidden">

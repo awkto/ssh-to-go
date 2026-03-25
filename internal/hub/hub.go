@@ -147,6 +147,18 @@ func (h *Hub) UpdateHost(host config.Host) {
 	}
 }
 
+// RemoveHost removes a host from the hub. Returns false if not found.
+func (h *Hub) RemoveHost(name string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, ok := h.hosts[name]; !ok {
+		return false
+	}
+	delete(h.hosts, name)
+	return true
+}
+
 // ScanHost performs an immediate poll of a single host and updates the hub state.
 // It returns the updated HostState. keyPath is the resolved private key path.
 func (h *Hub) ScanHost(name string, tm *tmux.Manager, keyPath string) (*HostState, error) {

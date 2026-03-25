@@ -26,6 +26,11 @@ type Handlers struct {
 	PollInterval time.Duration
 	PollResults  chan<- tmux.PollResult
 	Done         <-chan struct{}
+	Version      string
+}
+
+func (h *Handlers) GetVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{"version": h.Version})
 }
 
 func (h *Handlers) resolveKey(host config.Host) string {
@@ -316,6 +321,22 @@ func (h *Handlers) UpdateHost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]string{"status": "updated"})
+}
+
+// DeleteHost removes a host from the hub and config file.
+func (h *Handlers) DeleteHost(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+
+	if !h.Hub.RemoveHost(hostName) {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	if err := config.RemoveHost(h.ConfigPath, hostName); err != nil {
+		log.Printf("warning: host removed at runtime but config save failed: %v", err)
+	}
+
+	writeJSON(w, map[string]string{"status": "deleted"})
 }
 
 // PubKey returns the default keypair's public key.

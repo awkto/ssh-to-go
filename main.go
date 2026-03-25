@@ -1,12 +1,14 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/awkto/ssh-to-go/internal/api"
 	"github.com/awkto/ssh-to-go/internal/auth"
@@ -17,6 +19,9 @@ import (
 	"github.com/awkto/ssh-to-go/internal/tmux"
 	"github.com/awkto/ssh-to-go/web"
 )
+
+//go:embed VERSION
+var version string
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
@@ -137,6 +142,7 @@ func main() {
 		PollInterval: cfg.PollInterval,
 		PollResults:  pollResults,
 		Done:         done,
+		Version:      strings.TrimSpace(version),
 	})
 
 	log.Printf("server starting at http://%s", cfg.ListenAddr)

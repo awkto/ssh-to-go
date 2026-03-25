@@ -21,6 +21,7 @@ type RouterConfig struct {
 	PollInterval time.Duration
 	PollResults  chan<- tmux.PollResult
 	Done         <-chan struct{}
+	Version      string
 }
 
 func NewRouter(rc RouterConfig) http.Handler {
@@ -34,6 +35,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 		PollInterval: rc.PollInterval,
 		PollResults:  rc.PollResults,
 		Done:         rc.Done,
+		Version:      rc.Version,
 	}
 	mux := http.NewServeMux()
 
@@ -51,6 +53,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("GET /api/hosts", handlers.ListHosts)
 	mux.HandleFunc("POST /api/hosts", handlers.AddHost)
 	mux.HandleFunc("PUT /api/hosts/{host}", handlers.UpdateHost)
+	mux.HandleFunc("DELETE /api/hosts/{host}", handlers.DeleteHost)
 	mux.HandleFunc("POST /api/hosts/{host}/sessions", handlers.CreateSession)
 	mux.HandleFunc("POST /api/hosts/{host}/scan", handlers.ScanHost)
 	mux.HandleFunc("DELETE /api/hosts/{host}/sessions/{session}", handlers.KillSession)
@@ -58,6 +61,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/handoff", handlers.Handoff)
 	mux.HandleFunc("POST /api/scan", handlers.ScanAll)
 	mux.HandleFunc("GET /api/pubkey", handlers.PubKey)
+	mux.HandleFunc("GET /api/version", handlers.GetVersion)
 
 	// Keypair API
 	mux.HandleFunc("GET /api/keypairs", handlers.ListKeypairs)
