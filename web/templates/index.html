@@ -22,6 +22,15 @@
             </div>
         </header>
 
+        <div id="pubkey-section" class="pubkey-section hidden">
+            <div class="pubkey-header">
+                <strong>Server Public Key</strong>
+                <span class="pubkey-hint">Add this to <code>~/.ssh/authorized_keys</code> on your target hosts</span>
+                <button class="btn btn-sm" id="copy-pubkey-btn">Copy</button>
+            </div>
+            <code id="pubkey-display" class="pubkey-code"></code>
+        </div>
+
         <div id="host-list"></div>
 
         <!-- New Session Modal -->

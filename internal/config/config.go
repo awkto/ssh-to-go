@@ -20,19 +20,29 @@ type Host struct {
 type Config struct {
 	ListenAddr   string        `yaml:"listen_addr"`
 	PollInterval time.Duration `yaml:"poll_interval"`
+	DataDir      string        `yaml:"data_dir"`
 	Hosts        []Host        `yaml:"hosts"`
 }
 
 // AppendHost adds a host to the config file by re-reading, appending, and re-writing.
+// Creates the config file if it doesn't exist.
 func AppendHost(path string, host Host) error {
+	var raw map[string]interface{}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("read config: %w", err)
+		if os.IsNotExist(err) {
+			raw = map[string]interface{}{}
+		} else {
+			return fmt.Errorf("read config: %w", err)
+		}
+	} else {
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return fmt.Errorf("parse config: %w", err)
+		}
 	}
-
-	var raw map[string]interface{}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("parse config: %w", err)
+	if raw == nil {
+		raw = map[string]interface{}{}
 	}
 
 	// Get existing hosts list or create one
@@ -60,14 +70,22 @@ func AppendHost(path string, host Host) error {
 }
 
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
-	}
-
 	cfg := &Config{
 		ListenAddr:   "127.0.0.1:8080",
 		PollInterval: 5 * time.Second,
+	}
+
+	absPath, _ := filepath.Abs(path)
+	configDir := filepath.Dir(absPath)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No config file — start with defaults and no hosts
+			cfg.DataDir = filepath.Join(configDir, "data")
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("read config: %w", err)
 	}
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
@@ -88,8 +106,17 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	if len(cfg.Hosts) == 0 {
-		return nil, fmt.Errorf("no hosts configured")
+	if cfg.DataDir == "" {
+		cfg.DataDir = "data"
+	}
+	if strings.HasPrefix(cfg.DataDir, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("expand home dir: %w", err)
+		}
+		cfg.DataDir = filepath.Join(home, cfg.DataDir[1:])
+	} else if !filepath.IsAbs(cfg.DataDir) {
+		cfg.DataDir = filepath.Join(configDir, cfg.DataDir)
 	}
 
 	return cfg, nil

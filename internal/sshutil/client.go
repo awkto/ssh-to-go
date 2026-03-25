@@ -9,7 +9,17 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// DefaultKeyPath is set at startup by main after EnsureKeypair runs.
+var DefaultKeyPath string
+
 func Dial(address, user, keyPath string) (*ssh.Client, error) {
+	if keyPath == "" {
+		keyPath = DefaultKeyPath
+	}
+	if keyPath == "" {
+		return nil, fmt.Errorf("no SSH key configured")
+	}
+
 	keyData, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("read key %s: %w", keyPath, err)

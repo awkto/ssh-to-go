@@ -10,6 +10,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/api"
 	"github.com/awkto/ssh-to-go/internal/config"
 	"github.com/awkto/ssh-to-go/internal/hub"
+	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 	"github.com/awkto/ssh-to-go/web"
 )
@@ -22,6 +23,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+
+	// Generate or load SSH keypair
+	keyPath, err := sshutil.EnsureKeypair(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("ssh keypair: %v", err)
+	}
+	sshutil.DefaultKeyPath = keyPath
+	log.Printf("SSH key: %s", keyPath)
+
+	pubKey, err := sshutil.ReadPublicKey(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("read public key: %v", err)
+	}
+	log.Printf("Public key: %s", pubKey)
 
 	log.Printf("loaded %d hosts, listening on %s", len(cfg.Hosts), cfg.ListenAddr)
 
@@ -40,7 +55,7 @@ func main() {
 	h := hub.New(cfg.Hosts)
 	tm := tmux.NewManager()
 
-	pollResults := make(chan tmux.PollResult, len(cfg.Hosts)*2)
+	pollResults := make(chan tmux.PollResult, max(len(cfg.Hosts)*2, 4))
 	done := make(chan struct{})
 	defer close(done)
 
@@ -75,6 +90,7 @@ func main() {
 		PollInterval: cfg.PollInterval,
 		PollResults:  pollResults,
 		Done:         done,
+		DataDir:      cfg.DataDir,
 	})
 
 	log.Printf("server starting at http://%s", cfg.ListenAddr)

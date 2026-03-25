@@ -40,6 +40,51 @@ header h1 {
     align-items: center;
 }
 
+/* Public key banner */
+.pubkey-section {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+}
+
+.pubkey-section.hidden { display: none; }
+
+.pubkey-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.pubkey-hint {
+    font-size: 12px;
+    color: #888;
+}
+
+.pubkey-hint code {
+    color: #a78bfa;
+}
+
+.pubkey-code {
+    display: block;
+    background: #0f0f23;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #6ee7b7;
+    word-break: break-all;
+    line-height: 1.5;
+}
+
+.modal-hint {
+    font-size: 12px;
+    color: #888;
+    margin-top: 12px;
+}
+
 /* Host cards */
 .host-card {
     background: #1a1a2e;

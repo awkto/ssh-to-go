@@ -1,14 +1,16 @@
 # ssh-to-go configuration
 listen_addr: "127.0.0.1:8080"
 poll_interval: 5s
+data_dir: data  # where the server's SSH keypair is stored
 
+# Hosts can be added here or via the web UI.
+# The server uses its own SSH key (generated in data_dir).
+# Add the server's public key to ~/.ssh/authorized_keys on each target.
 hosts:
-  - name: dev-server
-    address: "192.168.1.100:22"
-    user: deploy
-    key_path: ~/.ssh/id_ed25519
-
-  - name: cloud-vm
-    address: "cloud.example.com:22"
-    user: ubuntu
-    key_path: ~/.ssh/id_ed25519
+  # - name: dev-server
+  #   address: "192.168.1.100"
+  #   user: deploy
+  #
+  # - name: cloud-vm
+  #   address: "cloud.example.com"
+  #   user: ubuntu

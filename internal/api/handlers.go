@@ -21,6 +21,7 @@ type Handlers struct {
 	PollInterval time.Duration
 	PollResults  chan<- tmux.PollResult
 	Done         <-chan struct{}
+	DataDir      string
 }
 
 func (h *Handlers) ListSessions(w http.ResponseWriter, r *http.Request) {
@@ -160,10 +161,10 @@ type addHostReq struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
 	User    string `json:"user"`
-	KeyPath string `json:"key_path"`
 }
 
 // AddHost adds a new host at runtime and saves it to the config file.
+// The server's own SSH key is used for all connections.
 func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 	var req addHostReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -185,7 +186,6 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 		Name:    req.Name,
 		Address: address,
 		User:    req.User,
-		KeyPath: req.KeyPath,
 	}
 
 	if !h.Hub.AddHost(host) {
@@ -196,9 +196,8 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 	// Save to config file
 	if err := config.AppendHost(h.ConfigPath, config.Host{
 		Name:    req.Name,
-		Address: req.Address, // save original (without normalized port)
+		Address: req.Address,
 		User:    req.User,
-		KeyPath: req.KeyPath,
 	}); err != nil {
 		log.Printf("warning: host added at runtime but config save failed: %v", err)
 	}
@@ -209,6 +208,16 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "added", "name": req.Name})
+}
+
+// PubKey returns the server's SSH public key.
+func (h *Handlers) PubKey(w http.ResponseWriter, r *http.Request) {
+	pubKey, err := sshutil.ReadPublicKey(h.DataDir)
+	if err != nil {
+		http.Error(w, "public key not available", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"public_key": strings.TrimSpace(pubKey)})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

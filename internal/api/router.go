@@ -17,6 +17,7 @@ type RouterConfig struct {
 	PollInterval time.Duration
 	PollResults  chan<- tmux.PollResult
 	Done         <-chan struct{}
+	DataDir      string
 }
 
 func NewRouter(rc RouterConfig) *http.ServeMux {
@@ -27,6 +28,7 @@ func NewRouter(rc RouterConfig) *http.ServeMux {
 		PollInterval: rc.PollInterval,
 		PollResults:  rc.PollResults,
 		Done:         rc.Done,
+		DataDir:      rc.DataDir,
 	}
 	mux := http.NewServeMux()
 
@@ -39,6 +41,7 @@ func NewRouter(rc RouterConfig) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/hosts/{host}/sessions/{session}", handlers.KillSession)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/handoff", handlers.Handoff)
 	mux.HandleFunc("POST /api/scan", handlers.ScanAll)
+	mux.HandleFunc("GET /api/pubkey", handlers.PubKey)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws/{host}/{session}", handlers.WebSocket)

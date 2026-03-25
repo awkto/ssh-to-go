@@ -10,9 +10,28 @@
 
     let hosts = [];
     let sessions = [];
+    let pubKey = "";
     let modalHandler = null;
 
     // ── Fetch ──
+
+    async function fetchPubKey() {
+        try {
+            const res = await fetch("/api/pubkey");
+            const data = await res.json();
+            pubKey = data.public_key || "";
+            renderPubKey();
+        } catch (e) {
+            console.error("fetch pubkey:", e);
+        }
+    }
+
+    function renderPubKey() {
+        const el = document.getElementById("pubkey-display");
+        if (!el || !pubKey) return;
+        el.textContent = pubKey;
+        document.getElementById("pubkey-section").classList.remove("hidden");
+    }
 
     async function fetchAll() {
         try {
@@ -210,24 +229,22 @@
             <label for="m-hname">Name</label>
             <input type="text" id="m-hname" placeholder="my-server" required>
             <label for="m-addr">Address</label>
-            <input type="text" id="m-addr" placeholder="192.168.1.100:22" required>
+            <input type="text" id="m-addr" placeholder="192.168.1.100" required>
             <label for="m-user">User</label>
             <input type="text" id="m-user" placeholder="deploy" required>
-            <label for="m-key">SSH Key Path (on server)</label>
-            <input type="text" id="m-key" placeholder="~/.ssh/id_ed25519">
+            <p class="modal-hint">Make sure the server's public key is in ~/.ssh/authorized_keys on the target host.</p>
         `;
 
         modalHandler = async () => {
             const name = document.getElementById("m-hname").value.trim();
             const address = document.getElementById("m-addr").value.trim();
             const user = document.getElementById("m-user").value.trim();
-            const key_path = document.getElementById("m-key").value.trim();
             if (!name || !address || !user) return;
 
             const res = await fetch("/api/hosts", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, address, user, key_path }),
+                body: JSON.stringify({ name, address, user }),
             });
             if (!res.ok) throw new Error(await res.text());
             toast(`Host "${name}" added`, "success");
@@ -293,8 +310,20 @@
         setTimeout(() => el.remove(), 3000);
     }
 
+    // ── Copy pubkey ──
+
+    document.getElementById("copy-pubkey-btn").addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(pubKey);
+            toast("Public key copied", "success");
+        } catch (e) {
+            toast("Copy failed", "error");
+        }
+    });
+
     // ── Init ──
 
+    fetchPubKey();
     fetchAll();
     setInterval(fetchAll, 5000);
 })();
