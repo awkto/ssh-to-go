@@ -42,9 +42,12 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 }
 
 // CreateSession creates a new detached tmux session on the remote host.
-// Sets window-size to largest so multiple clients don't get dots.
-func (m *Manager) CreateSession(client *ssh.Client, name string) error {
-	cmd := fmt.Sprintf("tmux new-session -d -s %q \\; set-option -t %q window-size largest", name, name)
+// Sets window-size so multiple clients behave as configured (largest/smallest/latest).
+func (m *Manager) CreateSession(client *ssh.Client, name, windowSize string) error {
+	if windowSize == "" {
+		windowSize = "largest"
+	}
+	cmd := fmt.Sprintf("tmux new-session -d -s %q \\; set-option -t %q window-size %s", name, name, windowSize)
 	_, err := sshutil.Exec(client, cmd)
 	if err != nil {
 		return fmt.Errorf("create session %q: %w", name, err)
@@ -77,5 +80,5 @@ func (m *Manager) HandoffCommand(user, address, sessionName string) string {
 	if strings.HasSuffix(host, ":22") {
 		host = strings.TrimSuffix(host, ":22")
 	}
-	return fmt.Sprintf("ssh -t %s@%s tmux attach-session -t %s", user, host, sessionName)
+	return fmt.Sprintf("ssh -t %s@%s tmux attach-session -t %q", user, host, sessionName)
 }

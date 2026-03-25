@@ -21,7 +21,7 @@ type resizeMsg struct {
 }
 
 // Relay bridges a WebSocket connection to a tmux session over SSH.
-func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sessionName string) error {
+func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sessionName, windowSize string) error {
 	client, err := sshutil.Dial(address, user, keyPath)
 	if err != nil {
 		return fmt.Errorf("ssh dial: %w", err)
@@ -51,7 +51,10 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		return fmt.Errorf("stdout pipe: %w", err)
 	}
 
-	cmd := fmt.Sprintf("tmux set-option -t %s window-size largest 2>/dev/null; tmux attach-session -t %s || tmux new-session -s %s", sessionName, sessionName, sessionName)
+	if windowSize == "" {
+		windowSize = "largest"
+	}
+	cmd := fmt.Sprintf("tmux set-option -t %q window-size %s 2>/dev/null; tmux attach-session -t %q || tmux new-session -s %q", sessionName, windowSize, sessionName, sessionName)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("start tmux: %w", err)
 	}
@@ -142,6 +145,6 @@ func PipeIO(ctx context.Context, client *ssh.Client, sessionName string, r io.Re
 	session.Stdout = w
 	session.Stderr = w
 
-	cmd := fmt.Sprintf("tmux attach-session -t %s", sessionName)
+	cmd := fmt.Sprintf("tmux attach-session -t %q", sessionName)
 	return session.Run(cmd)
 }
