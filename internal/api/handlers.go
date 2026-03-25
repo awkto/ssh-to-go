@@ -109,6 +109,45 @@ func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "killed"})
 }
 
+type renameSessionReq struct {
+	NewName string `json:"new_name"`
+}
+
+func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+	sessionName := r.PathValue("session")
+
+	var req renameSessionReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.NewName == "" {
+		http.Error(w, "new_name is required", http.StatusBadRequest)
+		return
+	}
+
+	hostCfg, ok := h.Hub.GetHostConfig(hostName)
+	if !ok {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	client, err := sshutil.Dial(hostCfg.Address, hostCfg.User, h.resolveKey(hostCfg))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer client.Close()
+
+	if err := h.Tmux.RenameSession(client, sessionName, req.NewName); err != nil {
+		http.Error(w, fmt.Sprintf("rename failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "renamed", "old_name": sessionName, "new_name": req.NewName})
+}
+
 func (h *Handlers) Handoff(w http.ResponseWriter, r *http.Request) {
 	hostName := r.PathValue("host")
 	sessionName := r.PathValue("session")

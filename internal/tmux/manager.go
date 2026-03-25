@@ -61,6 +61,15 @@ func (m *Manager) KillSession(client *ssh.Client, name string) error {
 	return nil
 }
 
+// RenameSession renames a tmux session on the remote host.
+func (m *Manager) RenameSession(client *ssh.Client, oldName, newName string) error {
+	_, err := sshutil.Exec(client, fmt.Sprintf("tmux rename-session -t %q %q", oldName, newName))
+	if err != nil {
+		return fmt.Errorf("rename session %q -> %q: %w", oldName, newName, err)
+	}
+	return nil
+}
+
 // HandoffCommand returns the SSH command to directly attach to a session.
 func (m *Manager) HandoffCommand(user, address, sessionName string) string {
 	// Strip port if it's the default

@@ -46,30 +46,24 @@ function initTerminal(host, session) {
             }));
         };
 
-        let sessionEnded = false;
-
         ws.onmessage = function (e) {
             if (e.data instanceof ArrayBuffer) {
                 term.write(new Uint8Array(e.data));
             } else {
-                // Check for control messages
+                // Check for control messages (resize acks, etc)
                 try {
                     const msg = JSON.parse(e.data);
-                    if (msg.type === "session_ended") {
-                        sessionEnded = true;
-                        term.write("\r\n\x1b[93m--- session ended ---\x1b[0m\r\n");
-                        statusEl.className = "status disconnected";
-                        return;
-                    }
+                    if (msg.type === "resize") return;
                 } catch (_) {}
                 term.write(e.data);
             }
         };
 
-        ws.onclose = function () {
+        ws.onclose = function (e) {
             statusEl.className = "status disconnected";
-            if (sessionEnded) {
-                // Don't reconnect — session exited normally
+            // Code 4000 = session ended normally (server-side signal)
+            if (e.code === 4000) {
+                term.write("\r\n\x1b[93m--- session ended ---\x1b[0m\r\n");
                 return;
             }
             term.write("\r\n\x1b[90m--- disconnected, reconnecting in 3s ---\x1b[0m\r\n");
@@ -114,6 +108,27 @@ function initTerminal(host, session) {
             setTimeout(() => { this.textContent = "Handoff"; }, 2000);
         } catch (e) {
             alert("Failed to copy: " + e.message);
+        }
+    });
+
+    // Rename button
+    document.getElementById("rename-btn").addEventListener("click", async function () {
+        const newName = prompt(`Rename session "${session}":`, session);
+        if (!newName || newName === session) return;
+        try {
+            const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ new_name: newName }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            // Update the page title and label
+            session = newName;
+            document.getElementById("session-label").textContent = host + " / " + newName;
+            document.title = host + " / " + newName + " — ssh-to-go";
+            term.focus();
+        } catch (e) {
+            alert("Rename failed: " + e.message);
         }
     });
 

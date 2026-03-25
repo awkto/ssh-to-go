@@ -112,17 +112,20 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 	// Wait for SSH command to finish
 	err = session.Wait()
 
-	// Signal the client BEFORE cancelling goroutines, while the WS is still alive
-	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	_ = ws.Write(closeCtx, websocket.MessageText, []byte(`{"type":"session_ended"}`))
-	closeCancel()
-
 	cancel()
 	wg.Wait()
 
 	if err != nil {
 		log.Printf("relay session ended: %v", err)
 	}
+
+	// Use a custom close code (4000) to signal "session ended normally"
+	// This is checked by the client to decide whether to reconnect
+	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer closeCancel()
+	ws.Close(websocket.StatusCode(4000), "session ended")
+	// Block briefly so the close frame is sent before the defer ws.CloseNow() in the caller
+	<-closeCtx.Done()
 
 	return nil
 }

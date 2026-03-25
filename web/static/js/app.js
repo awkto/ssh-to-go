@@ -97,6 +97,7 @@
                             <td>${badge}</td>
                             <td><div class="action-group">
                                 <a class="btn btn-sm btn-primary" href="/terminal/${eu(name)}/${eu(s.session.name)}" target="_blank">Attach</a>
+                                <button class="btn btn-sm" onclick="renameSession('${ea(name)}','${ea(s.session.name)}')">Rename</button>
                                 <button class="btn btn-sm" onclick="handoff('${ea(name)}','${ea(s.session.name)}')">SSH</button>
                                 <button class="btn btn-sm btn-danger" onclick="killSession('${ea(name)}','${ea(s.session.name)}')">Kill</button>
                             </div></td>
@@ -134,6 +135,20 @@
         } catch (e) {
             toast("Failed to copy handoff command", "error");
         }
+    };
+
+    window.renameSession = function (host, session) {
+        const newName = prompt(`Rename session "${session}":`, session);
+        if (!newName || newName === session) return;
+        fetch(`/api/hosts/${eu(host)}/sessions/${eu(session)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ new_name: newName }),
+        }).then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t); });
+            toast(`Renamed to "${newName}"`, "success");
+            fetchAll();
+        }).catch(e => toast("Rename failed: " + e.message, "error"));
     };
 
     window.killSession = async function (host, session) {

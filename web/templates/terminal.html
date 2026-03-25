@@ -41,7 +41,7 @@
     <div id="toolbar">
         <div class="info">
             <a href="/">← dashboard</a>
-            <span>{{.Host}} / {{.Session}}</span>
+            <span id="session-label">{{.Host}} / {{.Session}}</span>
             <span class="status" id="ws-status"></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
@@ -49,6 +49,7 @@
             <button class="btn-small" id="ctrl-c-btn" title="Send Ctrl-C (interrupt)">Ctrl-C</button>
             <button class="btn-small" id="ctrl-w-btn" title="Send Ctrl-W (delete word)">Ctrl-W</button>
             <button class="btn-small" id="paste-btn" title="Paste from clipboard">Paste</button>
+            <button class="btn-small" id="rename-btn" title="Rename this session">Rename</button>
             <button class="btn-small" id="duplicate-btn" title="Open duplicate session in new tab">Duplicate</button>
             <button class="btn-small" id="handoff-btn" title="Copy SSH command">Handoff</button>
         </div>
