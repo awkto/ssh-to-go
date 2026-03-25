@@ -28,8 +28,12 @@ func (m *Manager) DetectTmux(client *ssh.Client) (string, error) {
 func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 	out, err := sshutil.Exec(client, fmt.Sprintf("tmux list-sessions -F '%s'", ListFormat))
 	if err != nil {
-		// "no server running" or "no sessions" is not an error — just empty
-		if strings.Contains(err.Error(), "no server running") || strings.Contains(err.Error(), "no sessions") {
+		// No tmux server running or no sessions is not an error — just empty
+		errStr := err.Error()
+		if strings.Contains(errStr, "no server running") ||
+			strings.Contains(errStr, "no sessions") ||
+			strings.Contains(errStr, "error connecting to") ||
+			strings.Contains(errStr, "no current") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("list sessions: %w", err)
@@ -38,8 +42,10 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 }
 
 // CreateSession creates a new detached tmux session on the remote host.
+// Sets window-size to largest so multiple clients don't get dots.
 func (m *Manager) CreateSession(client *ssh.Client, name string) error {
-	_, err := sshutil.Exec(client, fmt.Sprintf("tmux new-session -d -s %q", name))
+	cmd := fmt.Sprintf("tmux new-session -d -s %q \\; set-option -t %q window-size largest", name, name)
+	_, err := sshutil.Exec(client, cmd)
 	if err != nil {
 		return fmt.Errorf("create session %q: %w", name, err)
 	}

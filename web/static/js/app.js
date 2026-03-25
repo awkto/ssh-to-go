@@ -158,8 +158,22 @@
         }
     };
 
-    window.newSessionFor = function (host) {
-        openNewSessionModal(host);
+    window.newSessionFor = async function (host) {
+        // One-click: auto-generate session name and create immediately
+        const name = "s-" + Date.now().toString(36);
+        try {
+            const res = await fetch(`/api/hosts/${eu(host)}/sessions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            // Open terminal immediately
+            window.open(`/terminal/${eu(host)}/${eu(name)}`, "_blank");
+            fetchAll();
+        } catch (e) {
+            toast("Failed: " + e.message, "error");
+        }
     };
 
     // ── Refresh All ──
@@ -180,46 +194,35 @@
         }
     });
 
-    // ── New Session Modal ──
+    // ── New Session ──
 
-    function openNewSessionModal(preselectedHost) {
+    document.getElementById("new-session-btn").addEventListener("click", async () => {
+        if (hosts.length === 0) {
+            toast("Add a host first", "error");
+            return;
+        }
+        if (hosts.length === 1) {
+            // One host — just create directly
+            window.newSessionFor(hosts[0].config.name);
+            return;
+        }
+        // Multiple hosts — show a quick picker
         modalTitle.textContent = "New Session";
         modalSubmit.textContent = "Create";
-
-        const onlineHosts = hosts.filter(h => h.online && h.tmux_detected);
-        const options = onlineHosts.map(h => {
-            const sel = h.config.name === preselectedHost ? "selected" : "";
-            return `<option value="${ea(h.config.name)}" ${sel}>${esc(h.config.name)}</option>`;
-        }).join("");
-
+        const options = hosts.map(h =>
+            `<option value="${ea(h.config.name)}">${esc(h.config.name)}</option>`
+        ).join("");
         modalFields.innerHTML = `
             <label for="m-host">Host</label>
             <select id="m-host" required>${options}</select>
-            <label for="m-name">Session Name</label>
-            <input type="text" id="m-name" placeholder="my-session" required>
         `;
-
         modalHandler = async () => {
             const host = document.getElementById("m-host").value;
-            const name = document.getElementById("m-name").value.trim();
-            if (!host || !name) return;
-
-            const res = await fetch(`/api/hosts/${eu(host)}/sessions`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-            toast(`Session "${name}" created on ${host}`, "success");
-            fetchAll();
+            if (!host) return;
+            modal.classList.add("hidden");
+            window.newSessionFor(host);
         };
-
         modal.classList.remove("hidden");
-        setTimeout(() => document.getElementById("m-name").focus(), 50);
-    }
-
-    document.getElementById("new-session-btn").addEventListener("click", () => {
-        openNewSessionModal(null);
     });
 
     // ── Add Host Modal ──
@@ -228,34 +231,39 @@
         modalTitle.textContent = "Add Host";
         modalSubmit.textContent = "Add";
 
-        const kpOptions = keypairs.map(kp =>
-            `<option value="${ea(kp.name)}">${esc(kp.name)}</option>`
-        ).join("");
+        // Only show keypair selector if there's more than one
+        let keypairHTML = "";
+        if (keypairs.length > 1) {
+            const kpOptions = keypairs.map(kp =>
+                `<option value="${ea(kp.name)}">${esc(kp.name)}</option>`
+            ).join("");
+            keypairHTML = `
+                <label for="m-keyname">Keypair</label>
+                <select id="m-keyname">${kpOptions}</select>
+            `;
+        }
 
         modalFields.innerHTML = `
-            <label for="m-hname">Name</label>
-            <input type="text" id="m-hname" placeholder="my-server" required>
-            <label for="m-addr">Address</label>
-            <input type="text" id="m-addr" placeholder="192.168.1.100" required>
+            <label for="m-addr">Host Address</label>
+            <input type="text" id="m-addr" placeholder="myserver.example.com" required>
             <label for="m-user">User (leave blank for default)</label>
-            <input type="text" id="m-user" placeholder="deploy">
-            <label for="m-keyname">Keypair</label>
-            <select id="m-keyname">
-                <option value="">(default)</option>
-                ${kpOptions}
-            </select>
+            <input type="text" id="m-user" placeholder="">
+            <label for="m-hname">Name (optional, defaults to hostname)</label>
+            <input type="text" id="m-hname" placeholder="">
+            ${keypairHTML}
         `;
 
         modalHandler = async () => {
-            const name = document.getElementById("m-hname").value.trim();
             const address = document.getElementById("m-addr").value.trim();
-            const user = document.getElementById("m-user").value.trim();
-            const key_name = document.getElementById("m-keyname").value;
-            if (!name || !address) return;
+            if (!address) return;
 
-            const body = { name, address };
+            const body = { address };
+            const name = document.getElementById("m-hname").value.trim();
+            const user = document.getElementById("m-user").value.trim();
+            if (name) body.name = name;
             if (user) body.user = user;
-            if (key_name) body.key_name = key_name;
+            const kpEl = document.getElementById("m-keyname");
+            if (kpEl && kpEl.value) body.key_name = kpEl.value;
 
             const res = await fetch("/api/hosts", {
                 method: "POST",
@@ -263,12 +271,13 @@
                 body: JSON.stringify(body),
             });
             if (!res.ok) throw new Error(await res.text());
-            toast(`Host "${name}" added`, "success");
+            const data = await res.json();
+            toast(`Host "${data.name}" added`, "success");
             fetchAll();
         };
 
         modal.classList.remove("hidden");
-        setTimeout(() => document.getElementById("m-hname").focus(), 50);
+        setTimeout(() => document.getElementById("m-addr").focus(), 50);
     });
 
     // ── Modal plumbing ──

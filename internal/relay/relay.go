@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"golang.org/x/crypto/ssh"
@@ -50,7 +51,7 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		return fmt.Errorf("stdout pipe: %w", err)
 	}
 
-	cmd := fmt.Sprintf("tmux attach-session -t %s || tmux new-session -s %s", sessionName, sessionName)
+	cmd := fmt.Sprintf("tmux set-option -t %s window-size largest 2>/dev/null; tmux attach-session -t %s || tmux new-session -s %s", sessionName, sessionName, sessionName)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("start tmux: %w", err)
 	}
@@ -110,11 +111,16 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 
 	// Wait for SSH command to finish
 	err = session.Wait()
+
+	// Signal the client BEFORE cancelling goroutines, while the WS is still alive
+	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	_ = ws.Write(closeCtx, websocket.MessageText, []byte(`{"type":"session_ended"}`))
+	closeCancel()
+
 	cancel()
 	wg.Wait()
 
 	if err != nil {
-		// Session exited, which is normal when detaching or closing
 		log.Printf("relay session ended: %v", err)
 	}
 

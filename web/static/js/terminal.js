@@ -46,16 +46,32 @@ function initTerminal(host, session) {
             }));
         };
 
+        let sessionEnded = false;
+
         ws.onmessage = function (e) {
             if (e.data instanceof ArrayBuffer) {
                 term.write(new Uint8Array(e.data));
             } else {
+                // Check for control messages
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === "session_ended") {
+                        sessionEnded = true;
+                        term.write("\r\n\x1b[93m--- session ended ---\x1b[0m\r\n");
+                        statusEl.className = "status disconnected";
+                        return;
+                    }
+                } catch (_) {}
                 term.write(e.data);
             }
         };
 
         ws.onclose = function () {
             statusEl.className = "status disconnected";
+            if (sessionEnded) {
+                // Don't reconnect — session exited normally
+                return;
+            }
             term.write("\r\n\x1b[90m--- disconnected, reconnecting in 3s ---\x1b[0m\r\n");
             setTimeout(connect, 3000);
         };

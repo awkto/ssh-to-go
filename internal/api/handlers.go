@@ -177,9 +177,18 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.Name == "" || req.Address == "" {
-		http.Error(w, "name and address are required", http.StatusBadRequest)
+	if req.Address == "" {
+		http.Error(w, "address is required", http.StatusBadRequest)
 		return
+	}
+
+	// Default name to hostname portion of address
+	if req.Name == "" {
+		name := req.Address
+		if idx := strings.Index(name, ":"); idx != -1 {
+			name = name[:idx]
+		}
+		req.Name = name
 	}
 
 	// Use default username if not provided
