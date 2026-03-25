@@ -130,6 +130,10 @@ header h1 {
 .host-meta-text {
     font-size: 12px;
     color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 300px;
 }
 
 .host-status {

@@ -2,6 +2,7 @@ package hub
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -84,15 +85,18 @@ func (h *Hub) AllSessions() []HostSession {
 	return all
 }
 
-// AllHosts returns the state of all hosts.
+// AllHosts returns the state of all hosts, sorted by name for stable ordering.
 func (h *Hub) AllHosts() []HostState {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	var all []HostState
+	all := make([]HostState, 0, len(h.hosts))
 	for _, state := range h.hosts {
 		all = append(all, *state)
 	}
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].Config.Name < all[j].Config.Name
+	})
 	return all
 }
 
