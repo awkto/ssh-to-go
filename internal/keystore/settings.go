@@ -11,6 +11,7 @@ import (
 type Settings struct {
 	DefaultKeypair  string `json:"default_keypair"`
 	DefaultUsername string `json:"default_username"`
+	TmuxWindowSize  string `json:"tmux_window_size"`
 }
 
 type SettingsManager struct {
@@ -70,6 +71,14 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 		sm.settings.DefaultKeypair = s.DefaultKeypair
 	}
 	sm.settings.DefaultUsername = s.DefaultUsername
+	if s.TmuxWindowSize != "" {
+		switch s.TmuxWindowSize {
+		case "largest", "smallest", "latest":
+			sm.settings.TmuxWindowSize = s.TmuxWindowSize
+		default:
+			return fmt.Errorf("invalid tmux_window_size %q: must be largest, smallest, or latest", s.TmuxWindowSize)
+		}
+	}
 
 	return sm.save()
 }
@@ -87,4 +96,13 @@ func (sm *SettingsManager) DefaultUsername() string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return sm.settings.DefaultUsername
+}
+
+func (sm *SettingsManager) TmuxWindowSize() string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if sm.settings.TmuxWindowSize == "" {
+		return "largest"
+	}
+	return sm.settings.TmuxWindowSize
 }

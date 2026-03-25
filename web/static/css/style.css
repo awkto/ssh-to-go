@@ -512,3 +512,57 @@ header h1 {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* Login page */
+.login-container {
+    max-width: 400px;
+    margin-top: 15vh;
+}
+
+.login-card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 32px;
+}
+
+.login-card label {
+    display: block;
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 6px;
+}
+
+.login-card input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid #3a3a5a;
+    background: #0f0f23;
+    color: #e0e0e8;
+    font-size: 14px;
+}
+
+.login-error {
+    color: #f87171;
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+.login-error.hidden { display: none; }
+
+.login-btn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.section-header h2 { margin-bottom: 0; }

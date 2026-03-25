@@ -6,8 +6,10 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/awkto/ssh-to-go/internal/api"
+	"github.com/awkto/ssh-to-go/internal/auth"
 	"github.com/awkto/ssh-to-go/internal/config"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
@@ -42,6 +44,16 @@ func main() {
 		log.Fatalf("settings: %v", err)
 	}
 
+	// Initialize auth
+	noAuth := os.Getenv("SSH_TO_GO_NO_AUTH") == "1"
+	am, err := auth.NewManager(cfg.DataDir, noAuth)
+	if err != nil {
+		log.Fatalf("auth: %v", err)
+	}
+	if noAuth {
+		log.Printf("authentication disabled (SSH_TO_GO_NO_AUTH=1)")
+	}
+
 	// Set global default key path (used as fallback)
 	if len(ks.List()) > 0 {
 		sshutil.DefaultKeyPath = ks.PrivateKeyPath(sm.DefaultKeypairName())
@@ -73,7 +85,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("parse setup template: %v", err)
 	}
-	api.SetTemplates(dashboardTmpl, terminalTmpl, settingsTmpl, setupTmpl)
+	loginTmpl, err := template.ParseFS(web.TemplateFS, "templates/login.html")
+	if err != nil {
+		log.Fatalf("parse login template: %v", err)
+	}
+	api.SetTemplates(dashboardTmpl, terminalTmpl, settingsTmpl, setupTmpl, loginTmpl)
 
 	// Set up hub and pollers
 	h := hub.New(cfg.Hosts)
@@ -115,6 +131,7 @@ func main() {
 		Tmux:         tm,
 		KeyStore:     ks,
 		Settings:     sm,
+		Auth:         am,
 		StaticFS:     http.FS(staticSub),
 		ConfigPath:   *configPath,
 		PollInterval: cfg.PollInterval,

@@ -14,6 +14,11 @@
                     <h1><a href="/" class="header-link">ssh-to-go</a></h1>
                     <p class="subtitle">settings</p>
                 </div>
+                {{if .AuthEnabled}}
+                <div class="header-actions">
+                    <button class="btn" id="logout-btn">Logout</button>
+                </div>
+                {{end}}
             </div>
         </header>
 
@@ -28,6 +33,15 @@
                 <div class="form-row">
                     <label for="default-keypair">Default Keypair</label>
                     <select id="default-keypair"></select>
+                </div>
+                <div class="form-row">
+                    <label for="tmux-window-size">Multi-Client Window Size</label>
+                    <select id="tmux-window-size">
+                        <option value="largest">Largest client</option>
+                        <option value="smallest">Smallest client</option>
+                        <option value="latest">Latest resize</option>
+                    </select>
+                    <p class="setup-desc" style="margin-bottom:0">How tmux sizes the session when multiple clients connect. Takes effect on next attach.</p>
                 </div>
                 <button class="btn btn-primary" id="save-settings-btn">Save</button>
             </div>
@@ -45,6 +59,40 @@
             <div id="keypair-list"></div>
         </section>
 
+        {{if .AuthEnabled}}
+        <!-- Change Password -->
+        <section class="settings-section">
+            <h2>Change Password</h2>
+            <div class="settings-form">
+                <div class="form-row">
+                    <label for="current-password">Current Password</label>
+                    <input type="password" id="current-password" placeholder="Current password">
+                </div>
+                <div class="form-row">
+                    <label for="new-password">New Password</label>
+                    <input type="password" id="new-password" placeholder="New password (min 4 chars)">
+                </div>
+                <div class="form-row">
+                    <label for="confirm-password">Confirm New Password</label>
+                    <input type="password" id="confirm-password" placeholder="Confirm new password">
+                </div>
+                <button class="btn btn-primary" id="change-password-btn">Change Password</button>
+            </div>
+        </section>
+
+        <!-- API Tokens -->
+        <section class="settings-section">
+            <div class="section-header">
+                <h2>API Tokens</h2>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="create-token-btn">Create Token</button>
+                </div>
+            </div>
+            <p class="setup-desc">API tokens allow programmatic access via <code>Authorization: Bearer &lt;token&gt;</code> header.</p>
+            <div id="token-list"></div>
+        </section>
+        {{end}}
+
         <!-- Modal -->
         <div id="modal-overlay" class="modal-overlay hidden">
             <div class="modal">
@@ -60,6 +108,7 @@
         </div>
     </div>
 
+    <script>window.__authEnabled = {{.AuthEnabled}};</script>
     <script src="/static/js/settings.js"></script>
 </body>
 </html>

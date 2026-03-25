@@ -14,11 +14,22 @@
     let pubKey = "";
     let modalHandler = null;
 
+    // ── Auth-aware fetch ──
+
+    async function authFetch(url, opts) {
+        const res = await fetch(url, opts);
+        if (res.status === 401) {
+            window.location.href = "/login";
+            throw new Error("Session expired");
+        }
+        return res;
+    }
+
     // ── Fetch ──
 
     async function fetchPubKey() {
         try {
-            const res = await fetch("/api/pubkey");
+            const res = await authFetch("/api/pubkey");
             const data = await res.json();
             pubKey = data.public_key || "";
             renderPubKey();
@@ -37,9 +48,9 @@
     async function fetchAll() {
         try {
             const [hRes, sRes, kRes] = await Promise.all([
-                fetch("/api/hosts"),
-                fetch("/api/sessions"),
-                fetch("/api/keypairs"),
+                authFetch("/api/hosts"),
+                authFetch("/api/sessions"),
+                authFetch("/api/keypairs"),
             ]);
             hosts = await hRes.json();
             sessions = await sRes.json();

@@ -7,21 +7,37 @@
     const modalFields = document.getElementById("modal-fields");
     const modalForm = document.getElementById("modal-form");
     const modalSubmit = document.getElementById("modal-submit");
+    const authEnabled = window.__authEnabled;
 
     let keypairs = [];
     let settings = {};
     let modalHandler = null;
 
+    // ── Auth-aware fetch ──
+
+    async function authFetch(url, opts) {
+        const res = await fetch(url, opts);
+        if (res.status === 401) {
+            window.location.href = "/login";
+            throw new Error("Session expired");
+        }
+        return res;
+    }
+
     // ── Fetch ──
 
     async function fetchAll() {
         const [kRes, sRes] = await Promise.all([
-            fetch("/api/keypairs"),
-            fetch("/api/settings"),
+            authFetch("/api/keypairs"),
+            authFetch("/api/settings"),
         ]);
         keypairs = await kRes.json();
         settings = await sRes.json();
         render();
+
+        if (authEnabled) {
+            fetchTokens();
+        }
     }
 
     // ── Render ──
@@ -33,6 +49,8 @@
         sel.innerHTML = keypairs.map(kp =>
             `<option value="${ea(kp.name)}" ${kp.name === settings.default_keypair ? "selected" : ""}>${esc(kp.name)}</option>`
         ).join("");
+
+        document.getElementById("tmux-window-size").value = settings.tmux_window_size || "largest";
 
         if (keypairs.length === 0) {
             keypairList.innerHTML = `<div class="no-sessions">No keypairs. Generate or import one.</div>`;
@@ -67,7 +85,7 @@
             return;
         }
         try {
-            const res = await fetch(`/api/keypairs/${encodeURIComponent(name)}`);
+            const res = await authFetch(`/api/keypairs/${encodeURIComponent(name)}`);
             const data = await res.json();
             el.innerHTML = `<code class="pubkey-code">${esc(data.public_key)}</code>
                 <button class="btn btn-sm" onclick="copyText('${ea(data.public_key)}')">Copy</button>`;
@@ -89,7 +107,7 @@
     window.deleteKeypair = async function (name) {
         if (!confirm(`Delete keypair "${name}"?`)) return;
         try {
-            const res = await fetch(`/api/keypairs/${encodeURIComponent(name)}`, { method: "DELETE" });
+            const res = await authFetch(`/api/keypairs/${encodeURIComponent(name)}`, { method: "DELETE" });
             if (!res.ok) throw new Error(await res.text());
             toast("Deleted", "success");
             fetchAll();
@@ -103,14 +121,16 @@
     document.getElementById("save-settings-btn").addEventListener("click", async () => {
         const defaultUsername = document.getElementById("default-username").value.trim();
         const defaultKeypair = document.getElementById("default-keypair").value;
+        const tmuxWindowSize = document.getElementById("tmux-window-size").value;
 
         try {
-            const res = await fetch("/api/settings", {
+            const res = await authFetch("/api/settings", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     default_username: defaultUsername,
                     default_keypair: defaultKeypair,
+                    tmux_window_size: tmuxWindowSize,
                 }),
             });
             if (!res.ok) throw new Error(await res.text());
@@ -133,7 +153,7 @@
         modalHandler = async () => {
             const name = document.getElementById("m-name").value.trim();
             if (!name) return;
-            const res = await fetch("/api/keypairs", {
+            const res = await authFetch("/api/keypairs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name }),
@@ -189,7 +209,7 @@
                 if (!body.server_path) throw new Error("Enter the key path");
             }
 
-            const res = await fetch("/api/keypairs/import", {
+            const res = await authFetch("/api/keypairs/import", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
@@ -215,6 +235,133 @@
             toast("Error: " + err.message, "error");
         }
     });
+
+    // ── Password change ──
+
+    if (authEnabled) {
+        document.getElementById("change-password-btn").addEventListener("click", async () => {
+            const currentPassword = document.getElementById("current-password").value;
+            const newPassword = document.getElementById("new-password").value;
+            const confirmPassword = document.getElementById("confirm-password").value;
+
+            if (newPassword.length < 4) {
+                toast("Password must be at least 4 characters", "error");
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                toast("Passwords do not match", "error");
+                return;
+            }
+
+            try {
+                const res = await authFetch("/api/auth/password", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword,
+                    }),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                toast("Password changed", "success");
+                document.getElementById("current-password").value = "";
+                document.getElementById("new-password").value = "";
+                document.getElementById("confirm-password").value = "";
+            } catch (e) {
+                toast("Error: " + e.message, "error");
+            }
+        });
+
+        // ── Logout ──
+
+        document.getElementById("logout-btn").addEventListener("click", async () => {
+            try {
+                await fetch("/api/auth/logout", { method: "POST" });
+            } catch (e) { /* ignore */ }
+            window.location.href = "/login";
+        });
+
+        // ── API Tokens ──
+
+        const tokenList = document.getElementById("token-list");
+
+        async function fetchTokens() {
+            try {
+                const res = await authFetch("/api/auth/tokens");
+                const tokens = await res.json();
+                renderTokens(tokens);
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderTokens(tokens) {
+            if (!tokens || tokens.length === 0) {
+                tokenList.innerHTML = `<div class="no-sessions">No API tokens created yet.</div>`;
+                return;
+            }
+            tokenList.innerHTML = tokens.map(t => {
+                const created = new Date(t.created).toLocaleDateString();
+                return `<div class="keypair-card">
+                    <div class="keypair-header">
+                        <div class="keypair-title">
+                            <strong>${esc(t.name)}</strong>
+                            <span class="host-meta-text">created ${esc(created)}</span>
+                        </div>
+                        <div class="action-group">
+                            <button class="btn btn-sm btn-danger" onclick="deleteToken('${ea(t.name)}')">Revoke</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join("");
+        }
+
+        window.deleteToken = async function (name) {
+            if (!confirm(`Revoke API token "${name}"?`)) return;
+            try {
+                const res = await authFetch(`/api/auth/tokens/${encodeURIComponent(name)}`, { method: "DELETE" });
+                if (!res.ok) throw new Error(await res.text());
+                toast("Token revoked", "success");
+                fetchTokens();
+            } catch (e) {
+                toast("Error: " + e.message, "error");
+            }
+        };
+
+        document.getElementById("create-token-btn").addEventListener("click", () => {
+            modalTitle.textContent = "Create API Token";
+            modalSubmit.textContent = "Create";
+            modalFields.innerHTML = `
+                <label for="m-name">Token Name</label>
+                <input type="text" id="m-name" placeholder="my-script" required>
+            `;
+            modalHandler = async () => {
+                const name = document.getElementById("m-name").value.trim();
+                if (!name) return;
+                const res = await authFetch("/api/auth/tokens", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name }),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+
+                // Show the token once
+                modalTitle.textContent = "Token Created";
+                modalFields.innerHTML = `
+                    <p style="color:#888;font-size:13px;margin-bottom:12px">Copy this token now — it won't be shown again.</p>
+                    <code class="pubkey-code" id="new-token-value">${esc(data.token)}</code>
+                    <button type="button" class="btn btn-sm" style="margin-top:8px" onclick="copyText('${ea(data.token)}')">Copy Token</button>
+                `;
+                modalSubmit.style.display = "none";
+                // Re-show submit when modal closes
+                const origClose = () => {
+                    modalSubmit.style.display = "";
+                    fetchTokens();
+                };
+                modalHandler = origClose;
+            };
+            modal.classList.remove("hidden");
+        });
+    }
 
     // ── Helpers ──
 

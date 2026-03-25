@@ -13,7 +13,29 @@
             <p class="subtitle">first-time setup</p>
         </header>
 
-        <div class="setup-card">
+        {{if .NeedsPassword}}
+        <div class="setup-card" id="password-card">
+            <h2>Set admin password</h2>
+            <p class="setup-desc">
+                Choose a password to protect your ssh-to-go instance.
+                You'll use this to log in from the browser.
+            </p>
+            <div class="settings-form">
+                <div class="form-row">
+                    <label for="setup-password">Password</label>
+                    <input type="password" id="setup-password" placeholder="Enter a password (min 4 chars)" required>
+                </div>
+                <div class="form-row">
+                    <label for="setup-password-confirm">Confirm Password</label>
+                    <input type="password" id="setup-password-confirm" placeholder="Confirm password" required>
+                </div>
+                <div id="password-error" class="login-error hidden"></div>
+                <button class="btn btn-primary" id="set-password-btn">Set Password & Continue</button>
+            </div>
+        </div>
+        {{end}}
+
+        <div class="setup-card" id="key-card" {{if .NeedsPassword}}style="display:none"{{end}}>
             <h2>Set up your SSH key</h2>
             <p class="setup-desc">
                 ssh-to-go needs an SSH keypair to connect to your hosts.

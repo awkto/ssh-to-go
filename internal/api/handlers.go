@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/awkto/ssh-to-go/internal/auth"
 	"github.com/awkto/ssh-to-go/internal/config"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
@@ -20,6 +21,7 @@ type Handlers struct {
 	Tmux         *tmux.Manager
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
+	Auth         *auth.Manager
 	ConfigPath   string
 	PollInterval time.Duration
 	PollResults  chan<- tmux.PollResult
@@ -75,7 +77,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	if err := h.Tmux.CreateSession(client, req.Name); err != nil {
+	if err := h.Tmux.CreateSession(client, req.Name, h.Settings.TmuxWindowSize()); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -417,6 +419,158 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	sshutil.DefaultKeyPath = h.KeyStore.PrivateKeyPath(h.Settings.DefaultKeypairName())
 
 	writeJSON(w, h.Settings.Get())
+}
+
+// ── Auth ──
+
+type setupPasswordReq struct {
+	Password string `json:"password"`
+}
+
+func (h *Handlers) AuthSetup(w http.ResponseWriter, r *http.Request) {
+	if h.Auth.HasPassword() {
+		http.Error(w, "password already set", http.StatusConflict)
+		return
+	}
+
+	var req setupPasswordReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(req.Password) < 4 {
+		http.Error(w, "password must be at least 4 characters", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Auth.SetPassword("", req.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Auto-login after setup
+	token, err := h.Auth.CreateSession()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, sessionCookie(token))
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+type loginReq struct {
+	Password string `json:"password"`
+}
+
+func (h *Handlers) AuthLogin(w http.ResponseWriter, r *http.Request) {
+	var req loginReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if !h.Auth.CheckPassword(req.Password) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid password"})
+		return
+	}
+
+	token, err := h.Auth.CreateSession()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, sessionCookie(token))
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (h *Handlers) AuthLogout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie("session"); err == nil {
+		h.Auth.DeleteSession(cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+type changePasswordReq struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+func (h *Handlers) AuthChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req changePasswordReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(req.NewPassword) < 4 {
+		http.Error(w, "password must be at least 4 characters", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Auth.SetPassword(req.CurrentPassword, req.NewPassword); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+type createTokenReq struct {
+	Name string `json:"name"`
+}
+
+func (h *Handlers) AuthListTokens(w http.ResponseWriter, r *http.Request) {
+	tokens := h.Auth.ListAPITokens()
+	if tokens == nil {
+		tokens = []auth.APIToken{}
+	}
+	writeJSON(w, tokens)
+}
+
+func (h *Handlers) AuthCreateToken(w http.ResponseWriter, r *http.Request) {
+	var req createTokenReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	plain, err := h.Auth.CreateAPIToken(req.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]string{"name": req.Name, "token": plain})
+}
+
+func (h *Handlers) AuthDeleteToken(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := h.Auth.DeleteAPIToken(name); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "deleted"})
+}
+
+func sessionCookie(token string) *http.Cookie {
+	return &http.Cookie{
+		Name:     "session",
+		Value:    token,
+		Path:     "/",
+		MaxAge:   7 * 24 * 60 * 60, // 7 days
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

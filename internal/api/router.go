@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/awkto/ssh-to-go/internal/auth"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/tmux"
@@ -14,6 +15,7 @@ type RouterConfig struct {
 	Tmux         *tmux.Manager
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
+	Auth         *auth.Manager
 	StaticFS     http.FileSystem
 	ConfigPath   string
 	PollInterval time.Duration
@@ -21,18 +23,28 @@ type RouterConfig struct {
 	Done         <-chan struct{}
 }
 
-func NewRouter(rc RouterConfig) *http.ServeMux {
+func NewRouter(rc RouterConfig) http.Handler {
 	handlers := &Handlers{
 		Hub:          rc.Hub,
 		Tmux:         rc.Tmux,
 		KeyStore:     rc.KeyStore,
 		Settings:     rc.Settings,
+		Auth:         rc.Auth,
 		ConfigPath:   rc.ConfigPath,
 		PollInterval: rc.PollInterval,
 		PollResults:  rc.PollResults,
 		Done:         rc.Done,
 	}
 	mux := http.NewServeMux()
+
+	// Auth API (some routes are public, gated by middleware)
+	mux.HandleFunc("POST /api/auth/setup", handlers.AuthSetup)
+	mux.HandleFunc("POST /api/auth/login", handlers.AuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", handlers.AuthLogout)
+	mux.HandleFunc("PUT /api/auth/password", handlers.AuthChangePassword)
+	mux.HandleFunc("GET /api/auth/tokens", handlers.AuthListTokens)
+	mux.HandleFunc("POST /api/auth/tokens", handlers.AuthCreateToken)
+	mux.HandleFunc("DELETE /api/auth/tokens/{name}", handlers.AuthDeleteToken)
 
 	// Session/host API
 	mux.HandleFunc("GET /api/sessions", handlers.ListSessions)
@@ -62,10 +74,11 @@ func NewRouter(rc RouterConfig) *http.ServeMux {
 
 	// Static files and pages
 	mux.Handle("GET /static/", http.FileServer(rc.StaticFS))
+	mux.HandleFunc("GET /login", handlers.LoginPage)
 	mux.HandleFunc("GET /terminal/{host}/{session}", handlers.TerminalPage)
 	mux.HandleFunc("GET /settings", handlers.SettingsPage)
 	mux.HandleFunc("GET /setup", handlers.SetupPage)
 	mux.HandleFunc("GET /", handlers.DashboardPage)
 
-	return mux
+	return auth.Middleware(rc.Auth, mux)
 }

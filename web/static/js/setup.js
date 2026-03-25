@@ -1,7 +1,57 @@
 (function () {
     "use strict";
 
-    // Tab switching
+    // ── Password setup ──
+
+    const passwordCard = document.getElementById("password-card");
+    const keyCard = document.getElementById("key-card");
+
+    if (passwordCard) {
+        const passwordBtn = document.getElementById("set-password-btn");
+        const passwordError = document.getElementById("password-error");
+
+        passwordBtn.addEventListener("click", async () => {
+            const password = document.getElementById("setup-password").value;
+            const confirm = document.getElementById("setup-password-confirm").value;
+            passwordError.classList.add("hidden");
+
+            if (password.length < 4) {
+                passwordError.textContent = "Password must be at least 4 characters";
+                passwordError.classList.remove("hidden");
+                return;
+            }
+            if (password !== confirm) {
+                passwordError.textContent = "Passwords do not match";
+                passwordError.classList.remove("hidden");
+                return;
+            }
+
+            passwordBtn.disabled = true;
+            passwordBtn.textContent = "Setting password...";
+
+            try {
+                const res = await fetch("/api/auth/setup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ password }),
+                });
+                if (!res.ok) throw new Error(await res.text());
+
+                // Show the key setup card
+                passwordCard.style.display = "none";
+                keyCard.style.display = "";
+            } catch (e) {
+                passwordError.textContent = "Error: " + e.message;
+                passwordError.classList.remove("hidden");
+            } finally {
+                passwordBtn.disabled = false;
+                passwordBtn.textContent = "Set Password & Continue";
+            }
+        });
+    }
+
+    // ── Tab switching ──
+
     document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — ssh-to-go</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container login-container">
+        <header>
+            <h1>ssh-to-go</h1>
+            <p class="subtitle">login</p>
+        </header>
+
+        <div class="login-card">
+            <form id="login-form">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter admin password" autofocus required>
+                <div id="login-error" class="login-error hidden"></div>
+                <button type="submit" class="btn btn-primary login-btn">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/login.js"></script>
+</body>
+</html>
