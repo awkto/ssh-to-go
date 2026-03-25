@@ -37,7 +37,6 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("relay error: %v", err)
 	}
-
-	ws.Close(websocket.StatusNormalClosure, "session ended")
+	// relay.Relay already sends close code 4000; don't send another close
 	log.Printf("terminal detached: host=%s session=%s", hostName, sessionName)
 }

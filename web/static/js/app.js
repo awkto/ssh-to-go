@@ -124,7 +124,6 @@
                         <span class="host-name">${esc(name)}</span>
                         <span class="host-addr">${esc(h.config.user)}@${esc(h.config.address)}${h.config.port && h.config.port !== 22 ? ':' + h.config.port : ''}</span>
                     </div>
-                    <span class="host-meta-text">${esc(statusText)} &middot; polled ${lastPoll}</span>
                     <div class="host-actions">
                         <button class="btn btn-sm" onclick="editHost('${ea(name)}')">Edit</button>
                         <button class="btn btn-sm" onclick="scanHost('${ea(name)}')">Scan</button>
