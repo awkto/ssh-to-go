@@ -54,7 +54,8 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 	if windowSize == "" {
 		windowSize = "largest"
 	}
-	cmd := fmt.Sprintf("tmux set-option -t %q window-size %s 2>/dev/null; tmux attach-session -t %q || tmux new-session -s %q", sessionName, windowSize, sessionName, sessionName)
+
+	cmd := fmt.Sprintf("tmux set-option -g mouse on 2>/dev/null; tmux set-option -t %q window-size %s 2>/dev/null; tmux attach-session -t %q || tmux new-session -s %q", sessionName, windowSize, sessionName, sessionName)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("start tmux: %w", err)
 	}

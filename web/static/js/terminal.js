@@ -4,6 +4,7 @@ function initTerminal(host, session) {
         fontSize: 14,
         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
         rightClickSelectsWord: true,
+        scrollback: 5000,
         theme: {
             background: "#1a1a2e",
             foreground: "#e0e0e8",
@@ -15,9 +16,106 @@ function initTerminal(host, session) {
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
 
+    const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+    term.loadAddon(webLinksAddon);
+
     const container = document.getElementById("terminal");
     term.open(container);
     fitAddon.fit();
+
+    // Scroll overlay buttons (touch devices) — dispatch wheel events same as
+    // desktop mouse wheel, which tmux handles natively for scrollback.
+    (function () {
+        const screen = container.querySelector(".xterm-screen");
+        if (!screen) return;
+
+        function sendWheel(direction, count) {
+            for (var i = 0; i < count; i++) {
+                screen.dispatchEvent(new WheelEvent("wheel", {
+                    deltaY: direction,
+                    deltaMode: 1,
+                    bubbles: true,
+                    cancelable: true,
+                }));
+            }
+        }
+
+        // Continuous scroll on hold
+        var holdTimer = null;
+        var holdInterval = null;
+
+        function startHold(direction) {
+            sendWheel(direction, 3);
+            holdTimer = setTimeout(function () {
+                holdInterval = setInterval(function () {
+                    sendWheel(direction, 5);
+                }, 50);
+            }, 300);
+        }
+
+        function stopHold() {
+            clearTimeout(holdTimer);
+            clearInterval(holdInterval);
+            holdTimer = null;
+            holdInterval = null;
+        }
+
+        var upBtn = document.getElementById("scroll-up");
+        var downBtn = document.getElementById("scroll-down");
+
+        if (upBtn && downBtn) {
+            upBtn.addEventListener("touchstart", function (e) { e.preventDefault(); startHold(-1); });
+            upBtn.addEventListener("mousedown", function (e) { e.preventDefault(); startHold(-1); });
+            upBtn.addEventListener("touchend", stopHold);
+            upBtn.addEventListener("mouseup", stopHold);
+            upBtn.addEventListener("touchcancel", stopHold);
+            upBtn.addEventListener("mouseleave", stopHold);
+
+            downBtn.addEventListener("touchstart", function (e) { e.preventDefault(); startHold(1); });
+            downBtn.addEventListener("mousedown", function (e) { e.preventDefault(); startHold(1); });
+            downBtn.addEventListener("touchend", stopHold);
+            downBtn.addEventListener("mouseup", stopHold);
+            downBtn.addEventListener("touchcancel", stopHold);
+            downBtn.addEventListener("mouseleave", stopHold);
+        }
+
+        // Touch swipe scrolling — throttled via rAF for smooth delivery.
+        var touchY = 0;
+        var pendingLines = 0;
+        var scrollRaf = null;
+        var PX_PER_LINE = 10;
+
+        function flushScroll() {
+            scrollRaf = null;
+            if (pendingLines !== 0) {
+                sendWheel(pendingLines > 0 ? 1 : -1, Math.abs(pendingLines));
+                pendingLines = 0;
+            }
+        }
+
+        container.addEventListener("touchstart", function (e) {
+            if (e.touches.length === 1 && !e.target.closest("#scroll-overlay")) {
+                touchY = e.touches[0].clientY;
+                pendingLines = 0;
+            }
+        }, { passive: true });
+
+        container.addEventListener("touchmove", function (e) {
+            if (e.touches.length !== 1) return;
+            if (e.target.closest("#scroll-overlay")) return;
+            e.preventDefault();
+
+            var curY = e.touches[0].clientY;
+            var dy = touchY - curY;
+            var lines = Math.trunc(dy / PX_PER_LINE);
+            if (lines !== 0) {
+                touchY += lines * PX_PER_LINE;
+                pendingLines += lines;
+                if (!scrollRaf) scrollRaf = requestAnimationFrame(flushScroll);
+            }
+        }, { passive: false });
+
+    })();
 
     const statusEl = document.getElementById("ws-status");
 
@@ -93,10 +191,6 @@ function initTerminal(host, session) {
             }
         });
 
-        // Window resize -> fit -> terminal resize event
-        window.addEventListener("resize", function () {
-            fitAddon.fit();
-        });
     }
 
     // Handoff button
@@ -245,6 +339,71 @@ function initTerminal(host, session) {
                 term.focus();
             });
         });
+    });
+
+    // Mobile keyboard toolbar
+    let ctrlActive = false;
+    const mobileBar = document.getElementById("mobile-bar");
+    if (mobileBar) {
+        const keyMap = {
+            Tab: "\t",
+            Escape: "\x1b",
+            ArrowUp: "\x1b[A",
+            ArrowDown: "\x1b[B",
+            ArrowRight: "\x1b[C",
+            ArrowLeft: "\x1b[D",
+        };
+
+        mobileBar.addEventListener("click", function (e) {
+            const btn = e.target.closest("button");
+            if (!btn) return;
+            e.preventDefault();
+
+            // Ctrl modifier toggle
+            if (btn.dataset.mod === "ctrl") {
+                ctrlActive = !ctrlActive;
+                btn.style.background = ctrlActive ? "#7c83ff" : "";
+                btn.style.color = ctrlActive ? "#fff" : "";
+                return;
+            }
+
+            let data;
+            if (btn.dataset.key && keyMap[btn.dataset.key]) {
+                data = keyMap[btn.dataset.key];
+            } else if (btn.dataset.key) {
+                data = btn.dataset.key.trim();
+            }
+
+            if (data && ctrlActive && data.length === 1) {
+                // Convert to ctrl character (a=1, b=2, ..., z=26)
+                const code = data.toLowerCase().charCodeAt(0);
+                if (code >= 97 && code <= 122) {
+                    data = String.fromCharCode(code - 96);
+                }
+                ctrlActive = false;
+                const ctrlBtn = mobileBar.querySelector('[data-mod="ctrl"]');
+                if (ctrlBtn) { ctrlBtn.style.background = ""; ctrlBtn.style.color = ""; }
+            }
+
+            if (data && activeWs && activeWs.readyState === WebSocket.OPEN) {
+                activeWs.send(new TextEncoder().encode(data));
+            }
+            term.focus();
+        });
+
+        // Use visualViewport to refit terminal when keyboard opens/closes
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener("resize", function () {
+                fitAddon.fit();
+                term.scrollToBottom();
+            });
+        }
+    }
+
+    // On any viewport resize (including mobile keyboard), refit and scroll to cursor
+    window.addEventListener("resize", function () {
+        fitAddon.fit();
+        term.scrollToBottom();
     });
 
     connect();

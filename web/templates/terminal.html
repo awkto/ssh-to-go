@@ -2,12 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>{{.Host}} / {{.Session}} — ssh-to-go</title>
     <link rel="stylesheet" href="/static/vendor/xterm.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; background: #1a1a2e; overflow: hidden; }
+        body {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+        }
         #toolbar {
             display: flex;
             align-items: center;
@@ -34,30 +40,116 @@
             font-size: 12px;
         }
         .btn-small:hover { background: #3a3a5a; }
-        #terminal { height: calc(100vh - 36px); }
+
+        /* Narrow/mobile: hide Ctrl-C/Ctrl-W/Ctrl-D/Paste, compact dashboard link */
+        @media (max-width: 600px) {
+            .toolbar-desktop { display: none !important; }
+            .dash-text { display: none; }
+            .dash-icon { display: inline; }
+            #toolbar { padding: 4px 8px; }
+            #toolbar .info { gap: 8px; }
+        }
+        @media (min-width: 601px) {
+            .dash-icon { display: none; }
+        }
+
+        #terminal { flex: 1; min-height: 0; overflow: hidden; }
+
+        /* Mobile keyboard toolbar — only shown on touch devices */
+        #mobile-bar {
+            display: none;
+            background: #16213e;
+            border-top: 1px solid #2a2a4a;
+            padding: 6px 8px;
+            gap: 6px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        @media (pointer: coarse) {
+            #mobile-bar { display: flex; }
+        }
+        #mobile-bar button {
+            background: #2a2a4a;
+            color: #ccc;
+            border: 1px solid #444;
+            padding: 4px 7px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            white-space: nowrap;
+            flex-shrink: 0;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        #mobile-bar button:active { background: #3a3a5a; }
+
+        /* Scroll overlay buttons — only on touch devices */
+        #scroll-overlay {
+            display: flex;
+            position: absolute;
+            right: 12px;
+            bottom: 60px;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 9999;
+        }
+        .scroll-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(60, 60, 80, 0.45);
+            color: #888;
+            border: 1px solid #555;
+            font-size: 16px;
+            line-height: 40px;
+            text-align: center;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: pointer;
+        }
+        .scroll-btn:active { background: rgba(100, 100, 130, 0.8); color: #ccc; }
     </style>
 </head>
 <body>
     <div id="toolbar">
         <div class="info">
-            <a href="/">← dashboard</a>
+            <a href="/"><span class="dash-icon">&#9664;</span><span class="dash-text">← dashboard</span></a>
             <span id="session-label">{{.Host}} / {{.Session}}</span>
             <span class="status" id="ws-status"></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
-            <button class="btn-small" id="ctrl-d-btn" title="Send Ctrl-D (EOF)">Ctrl-D</button>
-            <button class="btn-small" id="ctrl-c-btn" title="Send Ctrl-C (interrupt)">Ctrl-C</button>
-            <button class="btn-small" id="ctrl-w-btn" title="Send Ctrl-W (delete word)">Ctrl-W</button>
-            <button class="btn-small" id="paste-btn" title="Paste from clipboard">Paste</button>
+            <button class="btn-small toolbar-desktop" id="ctrl-d-btn" title="Send Ctrl-D (EOF)">Ctrl-D</button>
+            <button class="btn-small toolbar-desktop" id="ctrl-c-btn" title="Send Ctrl-C (interrupt)">Ctrl-C</button>
+            <button class="btn-small toolbar-desktop" id="ctrl-w-btn" title="Send Ctrl-W (delete word)">Ctrl-W</button>
+            <button class="btn-small toolbar-desktop" id="paste-btn" title="Paste from clipboard">Paste</button>
             <button class="btn-small" id="rename-btn" title="Rename this session">Rename</button>
             <button class="btn-small" id="duplicate-btn" title="Open duplicate session in new tab">Duplicate</button>
             <button class="btn-small" id="handoff-btn" title="Copy SSH command">Handoff</button>
         </div>
     </div>
-    <div id="terminal"></div>
+    <div id="terminal" style="position:relative;">
+        <div id="scroll-overlay">
+            <button id="scroll-up" class="scroll-btn">&#9650;</button>
+            <button id="scroll-down" class="scroll-btn">&#9660;</button>
+        </div>
+    </div>
+    <div id="mobile-bar">
+        <button data-key="Tab">Tab</button>
+        <button data-key="Escape">Esc</button>
+        <button data-key="ArrowUp">↑</button>
+        <button data-key="ArrowDown">↓</button>
+        <button data-key="ArrowLeft">←</button>
+        <button data-key="ArrowRight">→</button>
+        <button data-mod="ctrl">Ctrl</button>
+        <button data-key="/">/</button>
+        <button data-key="|">|</button>
+        <button data-key="~">~</button>
+    </div>
 
     <script src="/static/vendor/xterm.min.js"></script>
     <script src="/static/vendor/xterm-addon-fit.min.js"></script>
+    <script src="/static/vendor/xterm-addon-web-links.min.js"></script>
     <script src="/static/js/terminal.js"></script>
     <script>
         initTerminal("{{.Host}}", "{{.Session}}");
