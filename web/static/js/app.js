@@ -107,9 +107,9 @@
                             <td>${created}</td>
                             <td>${badge}</td>
                             <td><div class="action-group">
-                                <a class="btn btn-sm btn-primary" href="/terminal/${eu(name)}/${eu(s.session.name)}" target="_blank">Attach</a>
+                                <a class="btn btn-sm btn-primary" href="/terminal/${eu(name)}/${eu(s.session.name)}" target="_blank">Webview</a>
+                                <button class="btn btn-sm" onclick="handoff('${ea(name)}','${ea(s.session.name)}')">Terminal</button>
                                 <button class="btn btn-sm" onclick="renameSession('${ea(name)}','${ea(s.session.name)}')">Rename</button>
-                                <button class="btn btn-sm" onclick="handoff('${ea(name)}','${ea(s.session.name)}')">SSH</button>
                                 <button class="btn btn-sm btn-danger" onclick="killSession('${ea(name)}','${ea(s.session.name)}')">Kill</button>
                             </div></td>
                         </tr>`;
