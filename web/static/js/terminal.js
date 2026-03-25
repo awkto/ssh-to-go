@@ -3,6 +3,7 @@ function initTerminal(host, session) {
         cursorBlink: true,
         fontSize: 14,
         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+        rightClickSelectsWord: true,
         theme: {
             background: "#1a1a2e",
             foreground: "#e0e0e8",
@@ -190,11 +191,60 @@ function initTerminal(host, session) {
     });
 
     // Copy-on-select: automatically copy highlighted text to clipboard
+    // Uses a brief delay so the selection is finalized before copying
+    let copyTimer = null;
     term.onSelectionChange(function () {
+        clearTimeout(copyTimer);
+        copyTimer = setTimeout(function () {
+            const sel = term.getSelection();
+            if (sel) {
+                navigator.clipboard.writeText(sel).catch(() => {});
+            }
+        }, 100);
+    });
+
+    // Right-click context menu: Copy (if selected) / Paste
+    const ctxMenu = document.createElement("div");
+    ctxMenu.id = "ctx-menu";
+    ctxMenu.style.cssText = "display:none;position:fixed;z-index:1000;background:#1e1e38;border:1px solid #3a3a5a;border-radius:6px;padding:4px 0;min-width:120px;font-family:sans-serif;font-size:13px;color:#e0e0e8;box-shadow:0 4px 16px rgba(0,0,0,0.4);";
+    document.body.appendChild(ctxMenu);
+
+    function hideCtxMenu() { ctxMenu.style.display = "none"; }
+    document.addEventListener("click", hideCtxMenu);
+    document.addEventListener("keydown", hideCtxMenu);
+
+    container.addEventListener("contextmenu", function (e) {
+        e.preventDefault();
         const sel = term.getSelection();
+        let items = "";
         if (sel) {
-            navigator.clipboard.writeText(sel).catch(() => {});
+            items += '<div class="ctx-item" data-action="copy">Copy</div>';
         }
+        items += '<div class="ctx-item" data-action="paste">Paste</div>';
+        ctxMenu.innerHTML = items;
+        ctxMenu.style.display = "block";
+        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 140) + "px";
+        ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 80) + "px";
+
+        ctxMenu.querySelectorAll(".ctx-item").forEach(function (el) {
+            el.style.cssText = "padding:6px 16px;cursor:pointer;";
+            el.addEventListener("mouseenter", function () { this.style.background = "#3a3a5a"; });
+            el.addEventListener("mouseleave", function () { this.style.background = "none"; });
+            el.addEventListener("click", async function () {
+                hideCtxMenu();
+                if (this.dataset.action === "copy") {
+                    await navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+                } else if (this.dataset.action === "paste") {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if (text && activeWs && activeWs.readyState === WebSocket.OPEN) {
+                            activeWs.send(new TextEncoder().encode(text));
+                        }
+                    } catch (_) {}
+                }
+                term.focus();
+            });
+        });
     });
 
     connect();
