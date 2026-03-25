@@ -8,6 +8,9 @@ import (
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 )
 
+// KeyResolver returns the private key path for a given host.
+type KeyResolver func(host config.Host) string
+
 // PollResult is sent from a poller to the hub on each poll cycle.
 type PollResult struct {
 	HostName     string
@@ -19,13 +22,14 @@ type PollResult struct {
 
 // StartPoller launches a goroutine that periodically discovers tmux sessions
 // on the given host and sends results to the provided channel.
-func StartPoller(host config.Host, interval time.Duration, results chan<- PollResult, done <-chan struct{}) {
+func StartPoller(host config.Host, interval time.Duration, resolveKey KeyResolver, results chan<- PollResult, done <-chan struct{}) {
 	go func() {
 		mgr := NewManager()
 		poll := func() {
 			result := PollResult{HostName: host.Name}
 
-			client, err := sshutil.Dial(host.Address, host.User, host.KeyPath)
+			keyPath := resolveKey(host)
+			client, err := sshutil.Dial(host.Address, host.User, keyPath)
 			if err != nil {
 				result.Error = err
 				results <- result

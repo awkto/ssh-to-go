@@ -1,0 +1,90 @@
+package keystore
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+)
+
+type Settings struct {
+	DefaultKeypair  string `json:"default_keypair"`
+	DefaultUsername string `json:"default_username"`
+}
+
+type SettingsManager struct {
+	mu       sync.RWMutex
+	path     string
+	settings Settings
+}
+
+func NewSettingsManager(dataDir string) (*SettingsManager, error) {
+	sm := &SettingsManager{
+		path: filepath.Join(dataDir, "settings.json"),
+	}
+	if err := sm.load(); err != nil {
+		return nil, err
+	}
+	return sm, nil
+}
+
+func (sm *SettingsManager) load() error {
+	data, err := os.ReadFile(sm.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			sm.settings = Settings{
+				DefaultKeypair:  "server",
+				DefaultUsername: "",
+			}
+			return nil
+		}
+		return fmt.Errorf("read settings: %w", err)
+	}
+	return json.Unmarshal(data, &sm.settings)
+}
+
+func (sm *SettingsManager) save() error {
+	data, err := json.MarshalIndent(sm.settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(sm.path, data, 0600)
+}
+
+func (sm *SettingsManager) Get() Settings {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.settings
+}
+
+func (sm *SettingsManager) Update(s Settings, ks *Store) error {
+	if s.DefaultKeypair != "" && !ks.Exists(s.DefaultKeypair) {
+		return fmt.Errorf("keypair %q does not exist", s.DefaultKeypair)
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if s.DefaultKeypair != "" {
+		sm.settings.DefaultKeypair = s.DefaultKeypair
+	}
+	sm.settings.DefaultUsername = s.DefaultUsername
+
+	return sm.save()
+}
+
+func (sm *SettingsManager) DefaultKeypairName() string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if sm.settings.DefaultKeypair == "" {
+		return "server"
+	}
+	return sm.settings.DefaultKeypair
+}
+
+func (sm *SettingsManager) DefaultUsername() string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.settings.DefaultUsername
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup — ssh-to-go</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container setup-container">
+        <header>
+            <h1>ssh-to-go</h1>
+            <p class="subtitle">first-time setup</p>
+        </header>
+
+        <div class="setup-card">
+            <h2>Set up your SSH key</h2>
+            <p class="setup-desc">
+                ssh-to-go needs an SSH keypair to connect to your hosts.
+                You can generate a new one or import an existing key.
+            </p>
+
+            <div class="setup-options">
+                <div class="setup-option">
+                    <h3>Generate a new keypair</h3>
+                    <p>Creates a new ed25519 key. You'll need to add the public key to
+                       <code>~/.ssh/authorized_keys</code> on each target host.</p>
+                    <div class="setup-form-row">
+                        <input type="text" id="gen-name" value="server" placeholder="keypair name">
+                        <button class="btn btn-primary" id="gen-btn">Generate</button>
+                    </div>
+                </div>
+
+                <div class="setup-divider"><span>or</span></div>
+
+                <div class="setup-option">
+                    <h3>Import an existing keypair</h3>
+                    <p>Paste a private key you already use, or specify its path on this server.</p>
+
+                    <div class="setup-tabs">
+                        <button class="tab-btn active" data-tab="paste">Paste Key</button>
+                        <button class="tab-btn" data-tab="path">Server Path</button>
+                    </div>
+
+                    <div id="tab-paste" class="tab-content active">
+                        <label for="import-name-paste">Name</label>
+                        <input type="text" id="import-name-paste" value="server" placeholder="keypair name">
+                        <label for="import-key">Private Key (PEM)</label>
+                        <textarea id="import-key" rows="8" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
+                        <button class="btn btn-primary" id="import-paste-btn">Import</button>
+                    </div>
+
+                    <div id="tab-path" class="tab-content">
+                        <label for="import-name-path">Name</label>
+                        <input type="text" id="import-name-path" value="server" placeholder="keypair name">
+                        <label for="import-path">Path on this server</label>
+                        <input type="text" id="import-path" placeholder="~/.ssh/id_ed25519">
+                        <button class="btn btn-primary" id="import-path-btn">Import</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="setup-result" class="setup-result hidden">
+                <h3>Your public key</h3>
+                <p>Add this to <code>~/.ssh/authorized_keys</code> on your target hosts:</p>
+                <code id="setup-pubkey" class="pubkey-code"></code>
+                <div class="setup-result-actions">
+                    <button class="btn" id="copy-setup-key">Copy Public Key</button>
+                    <a href="/" class="btn btn-primary">Continue to Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/setup.js"></script>
+</body>
+</html>

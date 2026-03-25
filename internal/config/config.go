@@ -11,10 +11,11 @@ import (
 )
 
 type Host struct {
-	Name    string `yaml:"name"`
-	Address string `yaml:"address"`
-	User    string `yaml:"user"`
-	KeyPath string `yaml:"key_path"`
+	Name    string `yaml:"name"     json:"name"`
+	Address string `yaml:"address"  json:"address"`
+	User    string `yaml:"user"     json:"user"`
+	KeyPath string `yaml:"key_path" json:"key_path,omitempty"`
+	KeyName string `yaml:"key_name" json:"key_name,omitempty"`
 }
 
 type Config struct {

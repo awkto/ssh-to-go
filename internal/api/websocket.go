@@ -33,7 +33,7 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("terminal attached: host=%s session=%s", hostName, sessionName)
 
-	err = relay.Relay(r.Context(), ws, hostCfg.Address, hostCfg.User, hostCfg.KeyPath, sessionName)
+	err = relay.Relay(r.Context(), ws, hostCfg.Address, hostCfg.User, h.resolveKey(hostCfg), sessionName)
 	if err != nil {
 		log.Printf("relay error: %v", err)
 	}

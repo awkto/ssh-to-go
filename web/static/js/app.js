@@ -10,6 +10,7 @@
 
     let hosts = [];
     let sessions = [];
+    let keypairs = [];
     let pubKey = "";
     let modalHandler = null;
 
@@ -35,12 +36,14 @@
 
     async function fetchAll() {
         try {
-            const [hRes, sRes] = await Promise.all([
+            const [hRes, sRes, kRes] = await Promise.all([
                 fetch("/api/hosts"),
                 fetch("/api/sessions"),
+                fetch("/api/keypairs"),
             ]);
             hosts = await hRes.json();
             sessions = await sRes.json();
+            keypairs = await kRes.json();
             render();
         } catch (e) {
             console.error("fetch:", e);
@@ -225,26 +228,39 @@
         modalTitle.textContent = "Add Host";
         modalSubmit.textContent = "Add";
 
+        const kpOptions = keypairs.map(kp =>
+            `<option value="${ea(kp.name)}">${esc(kp.name)}</option>`
+        ).join("");
+
         modalFields.innerHTML = `
             <label for="m-hname">Name</label>
             <input type="text" id="m-hname" placeholder="my-server" required>
             <label for="m-addr">Address</label>
             <input type="text" id="m-addr" placeholder="192.168.1.100" required>
-            <label for="m-user">User</label>
-            <input type="text" id="m-user" placeholder="deploy" required>
-            <p class="modal-hint">Make sure the server's public key is in ~/.ssh/authorized_keys on the target host.</p>
+            <label for="m-user">User (leave blank for default)</label>
+            <input type="text" id="m-user" placeholder="deploy">
+            <label for="m-keyname">Keypair</label>
+            <select id="m-keyname">
+                <option value="">(default)</option>
+                ${kpOptions}
+            </select>
         `;
 
         modalHandler = async () => {
             const name = document.getElementById("m-hname").value.trim();
             const address = document.getElementById("m-addr").value.trim();
             const user = document.getElementById("m-user").value.trim();
-            if (!name || !address || !user) return;
+            const key_name = document.getElementById("m-keyname").value;
+            if (!name || !address) return;
+
+            const body = { name, address };
+            if (user) body.user = user;
+            if (key_name) body.key_name = key_name;
 
             const res = await fetch("/api/hosts", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, address, user }),
+                body: JSON.stringify(body),
             });
             if (!res.ok) throw new Error(await res.text());
             toast(`Host "${name}" added`, "success");

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — ssh-to-go</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-row">
+                <div>
+                    <h1><a href="/" class="header-link">ssh-to-go</a></h1>
+                    <p class="subtitle">settings</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Global Settings -->
+        <section class="settings-section">
+            <h2>Defaults</h2>
+            <div class="settings-form">
+                <div class="form-row">
+                    <label for="default-username">Default Username</label>
+                    <input type="text" id="default-username" placeholder="root">
+                </div>
+                <div class="form-row">
+                    <label for="default-keypair">Default Keypair</label>
+                    <select id="default-keypair"></select>
+                </div>
+                <button class="btn btn-primary" id="save-settings-btn">Save</button>
+            </div>
+        </section>
+
+        <!-- Keypairs -->
+        <section class="settings-section">
+            <div class="section-header">
+                <h2>SSH Keypairs</h2>
+                <div class="header-actions">
+                    <button class="btn" id="import-keypair-btn">Import</button>
+                    <button class="btn btn-primary" id="generate-keypair-btn">Generate New</button>
+                </div>
+            </div>
+            <div id="keypair-list"></div>
+        </section>
+
+        <!-- Modal -->
+        <div id="modal-overlay" class="modal-overlay hidden">
+            <div class="modal">
+                <h3 id="modal-title"></h3>
+                <form id="modal-form">
+                    <div id="modal-fields"></div>
+                    <div class="modal-actions">
+                        <button type="button" id="modal-cancel" class="btn">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="modal-submit">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/settings.js"></script>
+</body>
+</html>
