@@ -1,79 +1,113 @@
-# Web Terminal Session Manager — Why This Needs to Exist
+# ssh-to-go
 
-## The Problem
+A web-based terminal session manager that discovers and manages tmux sessions across multiple SSH hosts. Single binary, no agents needed on target machines.
 
-If you work across multiple machines — say a Linux workstation, a Windows laptop, and a cloud VM — there's no clean way to keep terminal sessions alive and accessible from wherever you happen to be. Reboot into a different OS? Session gone. Switch to your laptop on the couch? Start over. Running a long `claude code` vibe coding session you absolutely cannot afford to interrupt? Better hope your SSH connection holds.
+- **Web dashboard** — see all sessions across all hosts in one place
+- **Browser terminal** — attach to any session via xterm.js
+- **Session persistence** — tmux sessions live on the target, survive disconnects
+- **Handoff** — copy an SSH command to resume from your terminal
+- **Multi-client** — multiple browsers can attach to the same session
+- **Key management** — generate, import, and manage SSH keypairs from the UI
 
-**tmux and screen exist**, and they're great at what they do on a single machine. But they don't give you a unified view across hosts, they have no web interface, and reconnecting from a different device still means SSH-ing in manually and reattaching. It works, but it's duct tape.
+See [PURPOSE.md](PURPOSE.md) for the full motivation and architecture vision.
 
-**Apache Guacamole** technically solves this, but the setup complexity is brutal — Java, Tomcat, a database, guacd, and a mountain of configuration before you see a single terminal. Most people give up before they get there.
+## Quick Start
 
-## What Exists Today
+### Binary
 
-We surveyed the current landscape of open-source and self-hosted tools. Here's what's out there and where each falls short of the full vision:
+```bash
+# Build
+go build -o ssh-to-go .
 
-| Tool | What It Does | What's Missing |
-|------|-------------|----------------|
-| **[tmate](https://tmate.io)** | tmux fork with instant terminal sharing via SSH or web URL. Supports named sessions for stable reconnection. | Designed for pair programming, not personal session management. No dashboard. Keeping sessions alive on headless machines can be unreliable. |
-| **[ttyd](https://github.com/tsl0922/ttyd)** | Lightweight C-based tool that shares a terminal over the web via xterm.js and libwebsockets. Fast and stable. | One command per instance. No built-in session persistence or multi-machine management — you wire that up yourself with tmux. |
-| **[GoTTY](https://github.com/sorenisanerd/gotty)** | Go-based tool that turns CLI programs into web applications. | Spawns a new process per client — no session resumption by default. Same tmux-wiring requirement as ttyd. |
-| **[Sshwifty](https://github.com/nirui/sshwifty)** | Clean web-based SSH/Telnet client. Easy Docker deployment. | It's a connection client, not a session persistence layer. Doesn't manage or maintain sessions on the remote side. |
-| **[ShellNGN](https://shellngn.com)** | Web SSH client with tabbed sessions, SFTP, and team features. Available as SaaS or self-hosted. | More of an SSH client replacement than a session orchestrator. No cross-machine session dashboard. |
-| **[Apache Guacamole](https://guacamole.apache.org)** | Full-featured gateway for SSH, VNC, and RDP in the browser. | Notoriously complex to deploy. Java stack, Tomcat, PostgreSQL/MySQL, guacd daemon. Overkill for terminal-only use cases. |
-| **[WeTTY](https://github.com/butlerx/wetty)** | Browser-based terminal using hterm over websockets. | Similar to ttyd/GoTTY — a transport layer, not a session manager. |
+# Run (no config needed — setup wizard on first visit)
+./ssh-to-go
 
-## The Gap
-
-None of these tools combine **all** of the following:
-
-1. **A web dashboard** showing all your active sessions across multiple machines in one place
-2. **True session persistence** — sessions survive browser disconnects, network changes, and machine reboots
-3. **Reconnect from anywhere** — open a URL from any device and pick up exactly where you left off
-4. **Minimal setup** — a single binary or Docker container, not a multi-service Java stack
-5. **Session management** — name, organize, tag, and kill sessions from the UI
-6. **Multi-machine support** — a lightweight agent on each host, one central dashboard to rule them all
-
-## Proposed Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│                  Web Dashboard                   │
-│          (xterm.js + session list UI)            │
-└──────────────────────┬──────────────────────────┘
-                       │ WebSocket
-┌──────────────────────┴──────────────────────────┐
-│               Central Server                     │
-│     (session registry, auth, WS relay)           │
-└───────┬──────────────┬──────────────┬───────────┘
-        │              │              │
-   ┌────┴────┐    ┌────┴────┐   ┌────┴────┐
-   │ Agent   │    │ Agent   │   │ Agent   │
-   │ + tmux  │    │ + tmux  │   │ + tmux  │
-   │ (host1) │    │ (host2) │   │ (host3) │
-   └─────────┘    └─────────┘   └─────────┘
+# Or with a config file
+./ssh-to-go -config config.yaml
 ```
 
-- **Agent**: Lightweight daemon on each machine. Manages local tmux sessions, reports status back to the central server.
-- **Central Server**: Session registry, WebSocket relay, authentication. Self-hostable as a single binary or container.
-- **Web Dashboard**: Browser-based UI with xterm.js. Lists all sessions across all machines. Click to connect, sessions persist whether you're watching or not.
+Open `http://localhost:8080`. On first run you'll be prompted to generate or import an SSH keypair.
 
-## Use Cases
+### Docker
 
-- **Vibe coding with Claude Code** — Start a session on your desktop, continue on your laptop, never lose context
-- **Multi-machine DevOps** — One dashboard for all your servers, dev VMs, and cloud instances
-- **Pair programming / mentoring** — Share a persistent session URL with a teammate
-- **Long-running tasks** — Deploy, build, or migrate without babysitting a terminal window
+```bash
+docker run -p 8080:8080 awkto/ssh-to-go
+```
 
-## Prior Art & Inspiration
+#### Volume Mounts
 
-This project would stand on the shoulders of excellent existing work:
+Two independent mount points for persistence:
 
-- **tmux** — Battle-tested session persistence on the server side
-- **xterm.js** — The standard for terminal emulation in the browser
-- **ttyd** — Proof that a fast, minimal web terminal is achievable
-- **tmate** — Demonstrated that relay-based terminal access works at scale
-- **Guacamole** — Proved the concept, but showed that simplicity matters just as much as features
+| Mount Point | Contents | Purpose |
+|---|---|---|
+| `/etc/ssh-to-go/` | `config.yaml` | Host list, listen address, poll interval |
+| `/data/` | `keys/`, `settings.json` | SSH keypairs, default username/keypair |
 
-## Status
+```bash
+# Persist everything (config + keys)
+docker run -p 8080:8080 \
+  -v ./config:/etc/ssh-to-go \
+  -v ./keys:/data \
+  awkto/ssh-to-go
 
-This project is in the idea/planning stage. Contributions, feedback, and architecture discussions are welcome.
+# Persist config only (keys regenerated on restart)
+docker run -p 8080:8080 \
+  -v ./config:/etc/ssh-to-go \
+  awkto/ssh-to-go
+
+# Fully ephemeral
+docker run -p 8080:8080 awkto/ssh-to-go
+```
+
+## Configuration
+
+Config file is optional. Hosts can be added from the web UI.
+
+```yaml
+listen_addr: "127.0.0.1:8080"
+poll_interval: 5s
+data_dir: data
+
+hosts:
+  - name: dev-server
+    address: 192.168.1.100
+    user: deploy
+
+  - name: cloud-vm
+    address: cloud.example.com
+    user: ubuntu
+    key_name: my-deploy-key  # optional, uses default keypair if omitted
+```
+
+## How It Works
+
+```
+Browser / Terminal
+    ↕ attach/detach
+ssh-to-go server (discovers sessions, relays terminal)
+    ↕ SSH
+Target machines (tmux sessions live here)
+```
+
+1. The server SSHes into your hosts and runs `tmux list-sessions` to discover sessions
+2. The web dashboard shows all sessions grouped by host
+3. Click to attach — xterm.js in the browser connects via WebSocket to an SSH relay
+4. Sessions live on the target machines, so you can always `ssh` in directly and `tmux attach`
+5. The "Handoff" button copies the direct SSH command to your clipboard
+
+## SSH Keys
+
+On first run, the setup wizard lets you either:
+
+- **Generate** a new ed25519 keypair (add the public key to `~/.ssh/authorized_keys` on your targets)
+- **Import** an existing private key (paste PEM or point to a file path on the server)
+
+Manage multiple keypairs from the Settings page. Set a default keypair and default username globally, or assign specific keypairs per host.
+
+## Development
+
+```bash
+go build -o ssh-to-go . && ./ssh-to-go
+```
+
+The web UI is embedded in the binary via `go:embed`. No npm, no build step. xterm.js is vendored in `web/static/vendor/`.
