@@ -133,6 +133,16 @@ func (h *Hub) AddHost(host config.Host) bool {
 	return true
 }
 
+// UpdateHost updates the config for an existing host.
+func (h *Hub) UpdateHost(host config.Host) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if state, ok := h.hosts[host.Name]; ok {
+		state.Config = host
+	}
+}
+
 // ScanHost performs an immediate poll of a single host and updates the hub state.
 // It returns the updated HostState. keyPath is the resolved private key path.
 func (h *Hub) ScanHost(name string, tm *tmux.Manager, keyPath string) (*HostState, error) {
@@ -143,7 +153,7 @@ func (h *Hub) ScanHost(name string, tm *tmux.Manager, keyPath string) (*HostStat
 
 	result := tmux.PollResult{HostName: name}
 
-	client, err := sshutil.Dial(hostCfg.Address, hostCfg.User, keyPath)
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
 	if err != nil {
 		result.Error = err
 		h.Update(result)

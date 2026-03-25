@@ -122,10 +122,11 @@
                     <div class="host-title">
                         <span class="host-status ${statusClass}"></span>
                         <span class="host-name">${esc(name)}</span>
-                        <span class="host-addr">${esc(h.config.user)}@${esc(h.config.address)}</span>
+                        <span class="host-addr">${esc(h.config.user)}@${esc(h.config.address)}${h.config.port && h.config.port !== 22 ? ':' + h.config.port : ''}</span>
                     </div>
                     <div class="host-actions">
                         <span class="host-meta-text">${esc(statusText)} &middot; polled ${lastPoll}</span>
+                        <button class="btn btn-sm" onclick="editHost('${ea(name)}')">Edit</button>
                         <button class="btn btn-sm" onclick="scanHost('${ea(name)}')">Scan</button>
                         <button class="btn btn-sm btn-primary" onclick="newSessionFor('${ea(name)}')">+ Session</button>
                     </div>
@@ -182,6 +183,57 @@
         } catch (e) {
             toast("Scan failed: " + e.message, "error");
         }
+    };
+
+    window.editHost = function (hostName) {
+        const h = hosts.find(x => x.config.name === hostName);
+        if (!h) return;
+
+        modalTitle.textContent = "Edit Host";
+        modalSubmit.textContent = "Save";
+
+        let keypairHTML = "";
+        if (keypairs.length > 1) {
+            const kpOptions = keypairs.map(kp =>
+                `<option value="${ea(kp.name)}" ${kp.name === h.config.key_name ? "selected" : ""}>${esc(kp.name)}</option>`
+            ).join("");
+            keypairHTML = `
+                <label for="m-keyname">Keypair</label>
+                <select id="m-keyname">${kpOptions}</select>
+            `;
+        }
+
+        modalFields.innerHTML = `
+            <label for="m-addr">Host Address</label>
+            <input type="text" id="m-addr" value="${ea(h.config.address)}" required>
+            <label for="m-port">SSH Port</label>
+            <input type="number" id="m-port" value="${h.config.port || 22}" min="1" max="65535">
+            <label for="m-user">User</label>
+            <input type="text" id="m-user" value="${ea(h.config.user)}">
+            ${keypairHTML}
+        `;
+
+        modalHandler = async () => {
+            const body = {
+                address: document.getElementById("m-addr").value.trim(),
+                port: parseInt(document.getElementById("m-port").value, 10) || 22,
+                user: document.getElementById("m-user").value.trim(),
+            };
+            const kpEl = document.getElementById("m-keyname");
+            if (kpEl) body.key_name = kpEl.value;
+
+            const res = await fetch(`/api/hosts/${eu(hostName)}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            toast("Host updated", "success");
+            fetchAll();
+        };
+
+        modal.classList.remove("hidden");
+        setTimeout(() => document.getElementById("m-addr").focus(), 50);
     };
 
     window.newSessionFor = async function (host) {
@@ -272,6 +324,8 @@
         modalFields.innerHTML = `
             <label for="m-addr">Host Address</label>
             <input type="text" id="m-addr" placeholder="myserver.example.com" required>
+            <label for="m-port">SSH Port</label>
+            <input type="number" id="m-port" placeholder="22" min="1" max="65535">
             <label for="m-user">User (leave blank for default)</label>
             <input type="text" id="m-user" placeholder="">
             <label for="m-hname">Name (optional, defaults to hostname)</label>
@@ -284,6 +338,8 @@
             if (!address) return;
 
             const body = { address };
+            const port = parseInt(document.getElementById("m-port").value, 10);
+            if (port > 0) body.port = port;
             const name = document.getElementById("m-hname").value.trim();
             const user = document.getElementById("m-user").value.trim();
             if (name) body.name = name;

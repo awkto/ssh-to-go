@@ -29,7 +29,7 @@ func StartPoller(host config.Host, interval time.Duration, resolveKey KeyResolve
 			result := PollResult{HostName: host.Name}
 
 			keyPath := resolveKey(host)
-			client, err := sshutil.Dial(host.Address, host.User, keyPath)
+			client, err := sshutil.Dial(host.DialAddress(), host.User, keyPath)
 			if err != nil {
 				result.Error = err
 				results <- result

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,9 +14,19 @@ import (
 type Host struct {
 	Name    string `yaml:"name"     json:"name"`
 	Address string `yaml:"address"  json:"address"`
+	Port    int    `yaml:"port"     json:"port"`
 	User    string `yaml:"user"     json:"user"`
 	KeyPath string `yaml:"key_path" json:"key_path,omitempty"`
 	KeyName string `yaml:"key_name" json:"key_name,omitempty"`
+}
+
+// DialAddress returns host:port for SSH dialing.
+func (h Host) DialAddress() string {
+	port := h.Port
+	if port == 0 {
+		port = 22
+	}
+	return fmt.Sprintf("%s:%d", h.Address, port)
 }
 
 type Config struct {
@@ -53,8 +64,14 @@ func AppendHost(path string, host Host) error {
 		"address": host.Address,
 		"user":    host.User,
 	}
+	if host.Port != 0 && host.Port != 22 {
+		newHost["port"] = host.Port
+	}
 	if host.KeyPath != "" {
 		newHost["key_path"] = host.KeyPath
+	}
+	if host.KeyName != "" {
+		newHost["key_name"] = host.KeyName
 	}
 	hostsList = append(hostsList, newHost)
 	raw["hosts"] = hostsList
@@ -68,6 +85,57 @@ func AppendHost(path string, host Host) error {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
+}
+
+// UpdateHost updates a host in the config file by name.
+func UpdateHost(path string, name string, updated Host) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+
+	hostsList, _ := raw["hosts"].([]interface{})
+	found := false
+	for i, entry := range hostsList {
+		m, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if m["name"] == name {
+			newHost := map[string]interface{}{
+				"name":    updated.Name,
+				"address": updated.Address,
+				"user":    updated.User,
+			}
+			if updated.Port != 0 && updated.Port != 22 {
+				newHost["port"] = updated.Port
+			}
+			if updated.KeyName != "" {
+				newHost["key_name"] = updated.KeyName
+			}
+			if updated.KeyPath != "" {
+				newHost["key_path"] = updated.KeyPath
+			}
+			hostsList[i] = newHost
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("host %q not found in config", name)
+	}
+
+	raw["hosts"] = hostsList
+	out, err := yaml.Marshal(raw)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	return os.WriteFile(path, out, 0644)
 }
 
 func Load(path string) (*Config, error) {
@@ -102,8 +170,19 @@ func Load(path string) (*Config, error) {
 			}
 			h.KeyPath = filepath.Join(home, h.KeyPath[1:])
 		}
-		if h.Address != "" && !strings.Contains(h.Address, ":") {
-			h.Address = h.Address + ":22"
+		// Backwards compat: if address has an embedded port, extract it
+		if h.Address != "" && strings.Contains(h.Address, ":") {
+			parts := strings.SplitN(h.Address, ":", 2)
+			h.Address = parts[0]
+			if h.Port == 0 {
+				p, _ := strconv.Atoi(parts[1])
+				if p > 0 {
+					h.Port = p
+				}
+			}
+		}
+		if h.Port == 0 {
+			h.Port = 22
 		}
 	}
 

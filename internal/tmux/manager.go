@@ -74,11 +74,12 @@ func (m *Manager) RenameSession(client *ssh.Client, oldName, newName string) err
 }
 
 // HandoffCommand returns the SSH command to directly attach to a session.
-func (m *Manager) HandoffCommand(user, address, sessionName string) string {
-	// Strip port if it's the default
-	host := address
-	if strings.HasSuffix(host, ":22") {
-		host = strings.TrimSuffix(host, ":22")
+func (m *Manager) HandoffCommand(user, address string, port int, sessionName string) string {
+	if port == 0 {
+		port = 22
 	}
-	return fmt.Sprintf("ssh -t %s@%s tmux attach-session -t %q", user, host, sessionName)
+	if port == 22 {
+		return fmt.Sprintf("ssh -t %s@%s tmux attach-session -t %q", user, address, sessionName)
+	}
+	return fmt.Sprintf("ssh -t -p %d %s@%s tmux attach-session -t %q", port, user, address, sessionName)
 }

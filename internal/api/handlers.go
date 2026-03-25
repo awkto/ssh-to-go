@@ -70,7 +70,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := sshutil.Dial(hostCfg.Address, hostCfg.User, h.resolveKey(hostCfg))
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
 		return
@@ -96,7 +96,7 @@ func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := sshutil.Dial(hostCfg.Address, hostCfg.User, h.resolveKey(hostCfg))
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
 		return
@@ -135,7 +135,7 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := sshutil.Dial(hostCfg.Address, hostCfg.User, h.resolveKey(hostCfg))
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
 		return
@@ -160,7 +160,7 @@ func (h *Handlers) Handoff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := h.Tmux.HandoffCommand(hostCfg.User, hostCfg.Address, sessionName)
+	cmd := h.Tmux.HandoffCommand(hostCfg.User, hostCfg.Address, hostCfg.Port, sessionName)
 	writeJSON(w, map[string]string{"command": cmd})
 }
 
@@ -207,6 +207,7 @@ func (h *Handlers) ScanAll(w http.ResponseWriter, r *http.Request) {
 type addHostReq struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
+	Port    int    `json:"port"`
 	User    string `json:"user"`
 	KeyName string `json:"key_name,omitempty"`
 }
@@ -242,14 +243,15 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	address := req.Address
-	if !strings.Contains(address, ":") {
-		address = address + ":22"
+	port := req.Port
+	if port == 0 {
+		port = 22
 	}
 
 	host := config.Host{
 		Name:    req.Name,
-		Address: address,
+		Address: req.Address,
+		Port:    port,
 		User:    user,
 		KeyName: req.KeyName,
 	}
@@ -259,12 +261,7 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := config.AppendHost(h.ConfigPath, config.Host{
-		Name:    req.Name,
-		Address: req.Address,
-		User:    user,
-		KeyName: req.KeyName,
-	}); err != nil {
+	if err := config.AppendHost(h.ConfigPath, host); err != nil {
 		log.Printf("warning: host added at runtime but config save failed: %v", err)
 	}
 
@@ -272,10 +269,53 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 		return keystore.ResolveKeyPath(hc, h.KeyStore, h.Settings)
 	}
 	tmux.StartPoller(host, h.PollInterval, resolveKey, h.PollResults, h.Done)
-	log.Printf("started poller for new host %s (%s@%s)", host.Name, host.User, host.Address)
+	log.Printf("started poller for new host %s (%s@%s)", host.Name, host.User, host.DialAddress())
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "added", "name": req.Name})
+}
+
+type updateHostReq struct {
+	Address string `json:"address"`
+	Port    int    `json:"port"`
+	User    string `json:"user"`
+	KeyName string `json:"key_name"`
+}
+
+// UpdateHost updates a host's config at runtime and in the config file.
+func (h *Handlers) UpdateHost(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+
+	hostCfg, ok := h.Hub.GetHostConfig(hostName)
+	if !ok {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	var req updateHostReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Address != "" {
+		hostCfg.Address = req.Address
+	}
+	if req.Port > 0 {
+		hostCfg.Port = req.Port
+	}
+	if req.User != "" {
+		hostCfg.User = req.User
+	}
+	hostCfg.KeyName = req.KeyName
+
+	h.Hub.UpdateHost(hostCfg)
+
+	if err := config.UpdateHost(h.ConfigPath, hostName, hostCfg); err != nil {
+		log.Printf("warning: host updated at runtime but config save failed: %v", err)
+	}
+
+	writeJSON(w, map[string]string{"status": "updated"})
 }
 
 // PubKey returns the default keypair's public key.

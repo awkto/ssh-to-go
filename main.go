@@ -104,7 +104,7 @@ func main() {
 	}
 
 	for _, host := range cfg.Hosts {
-		log.Printf("starting poller for %s (%s@%s)", host.Name, host.User, host.Address)
+		log.Printf("starting poller for %s (%s@%s)", host.Name, host.User, host.DialAddress())
 		tmux.StartPoller(host, cfg.PollInterval, resolveKey, pollResults, done)
 	}
 
