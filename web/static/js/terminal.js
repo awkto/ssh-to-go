@@ -189,5 +189,13 @@ function initTerminal(host, session) {
         }
     });
 
+    // Copy-on-select: automatically copy highlighted text to clipboard
+    term.onSelectionChange(function () {
+        const sel = term.getSelection();
+        if (sel) {
+            navigator.clipboard.writeText(sel).catch(() => {});
+        }
+    });
+
     connect();
 }
