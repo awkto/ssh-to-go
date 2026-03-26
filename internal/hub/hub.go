@@ -19,6 +19,7 @@ type HostState struct {
 	LastPoll     time.Time      `json:"last_poll"`
 	Error        string         `json:"error,omitempty"`
 	Online       bool           `json:"online"`
+	DetectedOS   string         `json:"detected_os,omitempty"`
 }
 
 // HostSession is a flattened view of a session with its host info.
@@ -64,6 +65,9 @@ func (h *Hub) Update(result tmux.PollResult) {
 		state.Error = ""
 		state.Online = true
 		state.Sessions = result.Sessions
+	}
+	if result.DetectedOS != "" {
+		state.DetectedOS = result.DetectedOS
 	}
 }
 
@@ -193,6 +197,7 @@ func (h *Hub) ScanHost(name string, tm *tmux.Manager, keyPath string) (*HostStat
 		return nil, fmt.Errorf("list sessions failed: %w", err)
 	}
 	result.Sessions = sessions
+	result.DetectedOS = tmux.DetectOSViaClient(client)
 
 	h.Update(result)
 

@@ -285,6 +285,7 @@ type updateHostReq struct {
 	Port    int    `json:"port"`
 	User    string `json:"user"`
 	KeyName string `json:"key_name"`
+	OS      string `json:"os"`
 }
 
 // UpdateHost updates a host's config at runtime and in the config file.
@@ -313,6 +314,7 @@ func (h *Handlers) UpdateHost(w http.ResponseWriter, r *http.Request) {
 		hostCfg.User = req.User
 	}
 	hostCfg.KeyName = req.KeyName
+	hostCfg.OS = req.OS
 
 	h.Hub.UpdateHost(hostCfg)
 
