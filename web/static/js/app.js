@@ -418,9 +418,15 @@
             const host = hosts.find(h => h.config.name === s.host_name);
             const statusClass = s.session.attached ? "attached" : "detached";
             const age = timeAgo(new Date(s.session.created));
+            const hostIcon = host ? (host.config.icon || "terminal") : "terminal";
+            const hostColor = host ? (host.config.icon_color || "default") : "default";
+            const sessionIcon = getSessionIcon(s.host_name, s.session.name) || hostIcon;
+            const sessionColor = getSessionIconColor(s.host_name, s.session.name) || hostColor;
+            const hasCustom = sessionIcon !== "terminal" || sessionColor !== "default";
+            const sTip = sessionStatusTip(s.session.attached);
             return `<tr>
-                <td><span class="status-dot ${statusClass}"></span></td>
-                <td><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
+                <td><span class="status-dot ${statusClass}" title="${ea(sTip)}"></span></td>
+                <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
                 <td>${esc(s.host_name)}</td>
                 <td class="hide-mobile">${age}</td>
                 <td>
@@ -477,10 +483,16 @@
 
             const hostName = host ? host.config.name : s.host_name;
             const showName = hostName !== hostAddr && hostName ? hostName : "";
+            const hostIcon = host ? (host.config.icon || "terminal") : "terminal";
+            const hostColor = host ? (host.config.icon_color || "default") : "default";
+            const sessionIcon = getSessionIcon(s.host_name, s.session.name) || hostIcon;
+            const sessionColor = getSessionIconColor(s.host_name, s.session.name) || hostColor;
+            const hasCustom = sessionIcon !== "terminal" || sessionColor !== "default";
+            const sTip2 = sessionStatusTip(s.session.attached);
 
             return `<tr>
-                <td><span class="status-dot ${statusClass}"></span></td>
-                <td><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
+                <td><span class="status-dot ${statusClass}" title="${ea(sTip2)}"></span></td>
+                <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
                 <td>
                     <div class="host-cell">
                         <span class="host-fqdn">${esc(hostAddr || s.host_name)}</span>
@@ -565,11 +577,17 @@
 
             const displayName = name !== addr ? name : "";
 
+            const hostIconName = h.config.icon || "terminal";
+            const hostIconColor = h.config.icon_color || "default";
+
+            const hTip = hostStatusTip(h);
+
             return `<tr>
                 <td>
                     <div class="host-cell">
                         <span class="host-fqdn">
-                            <span class="status-dot ${statusClass}" style="margin-right:8px"></span>
+                            <span class="status-dot ${statusClass}" style="margin-right:8px" title="${ea(hTip)}"></span>
+                            <span style="margin-right:6px;display:inline-flex;vertical-align:middle">${renderIcon(hostIconName, 16, hostIconColor)}</span>
                             ${esc(addr)}${esc(port)}
                         </span>
                         <span class="host-ip">${displayName ? esc(displayName) + ' &middot; ' : ''}${esc(user ? user + "@" : "")}${esc(addr)}</span>
@@ -738,6 +756,9 @@
             return `<option value="${ea(o)}" ${o === currentOS ? "selected" : ""}>${esc(label)}</option>`;
         }).join("");
 
+        const currentHostIcon = h.config.icon || "terminal";
+        const currentHostColor = h.config.icon_color || "default";
+
         modalFields.innerHTML = `
             <label for="m-addr">Host Address (FQDN)</label>
             <input type="text" id="m-addr" value="${ea(h.config.address)}" required>
@@ -750,11 +771,13 @@
             ${keypairHTML}
             <label for="m-os">Operating System</label>
             <select id="m-os">${osSelectHTML}</select>
+            ${iconSelectorHTML("m-icon", currentHostIcon, currentHostColor)}
             <hr style="border:0;border-top:1px solid var(--border);margin:16px 0 8px">
             <button type="button" class="btn btn-danger" id="m-delete-host" style="width:100%">Delete Host</button>
         `;
 
         setTimeout(() => {
+            attachIconSelector("m-icon");
             document.getElementById("m-delete-host").addEventListener("click", async () => {
                 if (!confirm('Delete host "' + hostName + '"? This cannot be undone.')) return;
                 try {
@@ -776,6 +799,8 @@
                 port: parseInt(document.getElementById("m-port").value, 10) || 22,
                 user: document.getElementById("m-user").value.trim(),
                 os: document.getElementById("m-os").value,
+                icon: document.getElementById("m-icon").value || "",
+                icon_color: document.getElementById("m-icon-color").value || "",
             };
             const kpEl = document.getElementById("m-keyname");
             if (kpEl) body.key_name = kpEl.value;
@@ -858,7 +883,10 @@
             <label for="m-user">User (leave blank for default)</label>
             <input type="text" id="m-user" placeholder="">
             ${keypairHTML}
+            ${iconSelectorHTML("m-icon", "terminal")}
         `;
+
+        setTimeout(() => attachIconSelector("m-icon"), 0);
 
         modalHandler = async () => {
             const address = document.getElementById("m-addr").value.trim();
@@ -873,6 +901,10 @@
             if (user) body.user = user;
             const kpEl = document.getElementById("m-keyname");
             if (kpEl && kpEl.value) body.key_name = kpEl.value;
+            const iconVal = document.getElementById("m-icon")?.value;
+            if (iconVal && iconVal !== "terminal") body.icon = iconVal;
+            const iconColorVal = document.getElementById("m-icon-color")?.value;
+            if (iconColorVal && iconColorVal !== "default") body.icon_color = iconColorVal;
 
             const res = await authFetch("/api/hosts", {
                 method: "POST",
@@ -892,6 +924,20 @@
 
     // Also expose add host from hosts view if needed
     window.showAddHostModal = showAddHostModal;
+
+    // ── Session icon picker ──
+    window.pickSessionIcon = function (btn, hostName, sessionName) {
+        const host = hosts.find(h => h.config.name === hostName);
+        const hostIcon = host ? (host.config.icon || "terminal") : "terminal";
+        const hostColor = host ? (host.config.icon_color || "default") : "default";
+        const currentIcon = getSessionIcon(hostName, sessionName) || hostIcon;
+        const currentColor = getSessionIconColor(hostName, sessionName) || hostColor;
+        showIconPicker(btn, currentIcon, function (iconName, colorName) {
+            setSessionIcon(hostName, sessionName, iconName);
+            setSessionIconColor(hostName, sessionName, colorName);
+            renderCurrentView();
+        }, currentColor);
+    };
 
     // ── Search ──
     window.onSearch = function () {
@@ -955,6 +1001,16 @@
         if (hours < 24) return hours + "h ago";
         const days = Math.floor(hours / 24);
         return days + "d ago";
+    }
+
+    function sessionStatusTip(attached) {
+        return attached ? "Client attached to this session" : "Session running, no client attached";
+    }
+
+    function hostStatusTip(host) {
+        if (!host.online) return "Offline — cannot reach host via SSH" + (host.error ? ": " + host.error : "");
+        if (!host.tmux_detected) return "Online but tmux not found — install tmux to manage sessions";
+        return "Online — tmux " + (host.tmux_version || "") + ", " + (host.sessions ? host.sessions.length : 0) + " session(s)";
     }
 
     function toast(msg, type) {

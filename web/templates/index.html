@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SSH-to-go</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 17 10 11 4 5'/%3E%3Cline x1='12' y1='19' x2='20' y2='19'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -93,7 +94,7 @@
                     <table class="data-table" id="dashboard-recent-table">
                         <thead>
                             <tr>
-                                <th>Status</th>
+                                <th style="width:32px"></th>
                                 <th>Session</th>
                                 <th>Host</th>
                                 <th class="hide-mobile">Uptime</th>
@@ -136,7 +137,7 @@
                     <table class="data-table" id="sessions-table">
                         <thead>
                             <tr>
-                                <th onclick="sortSessions('status')">Status</th>
+                                <th onclick="sortSessions('status')" style="width:32px"></th>
                                 <th onclick="sortSessions('name')">Session Name <span class="sort-arrow"></span></th>
                                 <th onclick="sortSessions('host')">Host <span class="sort-arrow"></span></th>
                                 <th class="hide-mobile" onclick="sortSessions('uptime')">Uptime <span class="sort-arrow"></span></th>
@@ -248,6 +249,7 @@
         }
     }
     </script>
+    <script src="/static/js/icons.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

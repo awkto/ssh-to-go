@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>{{.Host}} / {{.Session}} — ssh-to-go</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 17 10 11 4 5'/%3E%3Cline x1='12' y1='19' x2='20' y2='19'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/vendor/xterm.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -158,9 +159,56 @@
     <script src="/static/vendor/xterm.min.js"></script>
     <script src="/static/vendor/xterm-addon-fit.min.js"></script>
     <script src="/static/vendor/xterm-addon-web-links.min.js"></script>
+    <script src="/static/js/icons.js"></script>
     <script src="/static/js/terminal.js"></script>
     <script>
         initTerminal("{{.Host}}", "{{.Session}}");
+
+        // Update favicon to match session/host icon
+        (function() {
+            var host = "{{.Host}}";
+            var session = "{{.Session}}";
+
+            function setFavicon(iconName, colorName) {
+                if (!iconName || !window.APP_ICONS) return;
+                var icon = window.APP_ICONS.find(function(i) { return i.name === iconName; });
+                if (!icon) return;
+                var hex = window.colorHex ? window.colorHex(colorName || "default") : "#3b82f6";
+                var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="' + hex + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + icon.svg + '</svg>';
+                var encoded = 'data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27');
+                var link = document.querySelector('link[rel="icon"]');
+                if (link) link.href = encoded;
+            }
+
+            // Check session override in localStorage
+            var sessionIcon = window.getSessionIcon ? window.getSessionIcon(host, session) : null;
+            var sessionColor = window.getSessionIconColor ? window.getSessionIconColor(host, session) : null;
+            if (sessionIcon) {
+                setFavicon(sessionIcon, sessionColor);
+            } else {
+                // Fetch host config to get its icon/color
+                fetch('/api/hosts').then(function(r) { return r.json(); }).then(function(hosts) {
+                    var h = hosts.find(function(x) { return x.config.name === host; });
+                    if (h && (h.config.icon || h.config.icon_color)) {
+                        setFavicon(h.config.icon || "terminal", h.config.icon_color || "default");
+                    }
+                }).catch(function() {});
+            }
+
+            // Update tab title based on settings
+            fetch('/api/settings').then(function(r) { return r.json(); }).then(function(s) {
+                var fmt = s.tab_title_format || "host-session";
+                var title;
+                switch (fmt) {
+                    case "host-only":    title = host; break;
+                    case "session-only": title = session; break;
+                    case "session-host": title = session + " / " + host; break;
+                    default:             title = host + " / " + session; break;
+                }
+                document.title = title;
+                document.getElementById("session-label").textContent = title;
+            }).catch(function() {});
+        })();
     </script>
 </body>
 </html>

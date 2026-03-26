@@ -19,6 +19,8 @@ type Host struct {
 	KeyPath string `yaml:"key_path" json:"key_path,omitempty"`
 	KeyName string `yaml:"key_name" json:"key_name,omitempty"`
 	OS      string `yaml:"os"       json:"os,omitempty"`
+	Icon      string `yaml:"icon"       json:"icon,omitempty"`
+	IconColor string `yaml:"icon_color" json:"icon_color,omitempty"`
 }
 
 // DialAddress returns host:port for SSH dialing.
@@ -77,6 +79,12 @@ func AppendHost(path string, host Host) error {
 	if host.OS != "" {
 		newHost["os"] = host.OS
 	}
+	if host.Icon != "" {
+		newHost["icon"] = host.Icon
+	}
+	if host.IconColor != "" {
+		newHost["icon_color"] = host.IconColor
+	}
 	hostsList = append(hostsList, newHost)
 	raw["hosts"] = hostsList
 
@@ -127,6 +135,12 @@ func UpdateHost(path string, name string, updated Host) error {
 			}
 			if updated.OS != "" {
 				newHost["os"] = updated.OS
+			}
+			if updated.Icon != "" {
+				newHost["icon"] = updated.Icon
+			}
+			if updated.IconColor != "" {
+				newHost["icon_color"] = updated.IconColor
 			}
 			hostsList[i] = newHost
 			found = true

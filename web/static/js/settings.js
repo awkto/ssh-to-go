@@ -52,6 +52,7 @@
 
         document.getElementById("tmux-window-size").value = settings.tmux_window_size || "largest";
         document.getElementById("show-pub-key").checked = settings.show_pub_key === true;
+        document.getElementById("tab-title-format").value = settings.tab_title_format || "host-session";
 
         if (keypairs.length === 0) {
             keypairList.innerHTML = `<div class="no-sessions">No keypairs. Generate or import one.</div>`;
@@ -150,6 +151,7 @@
         const defaultKeypair = document.getElementById("default-keypair").value;
         const tmuxWindowSize = document.getElementById("tmux-window-size").value;
         const showPubKey = document.getElementById("show-pub-key").checked;
+        const tabTitleFormat = document.getElementById("tab-title-format").value;
 
         try {
             const res = await authFetch("/api/settings", {
@@ -160,6 +162,7 @@
                     default_keypair: defaultKeypair,
                     tmux_window_size: tmuxWindowSize,
                     show_pub_key: showPubKey,
+                    tab_title_format: tabTitleFormat,
                 }),
             });
             if (!res.ok) throw new Error(await res.text());

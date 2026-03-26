@@ -210,11 +210,13 @@ func (h *Handlers) ScanAll(w http.ResponseWriter, r *http.Request) {
 }
 
 type addHostReq struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	Port    int    `json:"port"`
-	User    string `json:"user"`
-	KeyName string `json:"key_name,omitempty"`
+	Name      string `json:"name"`
+	Address   string `json:"address"`
+	Port      int    `json:"port"`
+	User      string `json:"user"`
+	KeyName   string `json:"key_name,omitempty"`
+	Icon      string `json:"icon,omitempty"`
+	IconColor string `json:"icon_color,omitempty"`
 }
 
 // AddHost adds a new host at runtime and saves it to the config file.
@@ -254,11 +256,13 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host := config.Host{
-		Name:    req.Name,
-		Address: req.Address,
-		Port:    port,
-		User:    user,
-		KeyName: req.KeyName,
+		Name:      req.Name,
+		Address:   req.Address,
+		Port:      port,
+		User:      user,
+		KeyName:   req.KeyName,
+		Icon:      req.Icon,
+		IconColor: req.IconColor,
 	}
 
 	if !h.Hub.AddHost(host) {
@@ -281,11 +285,13 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateHostReq struct {
-	Address string `json:"address"`
-	Port    int    `json:"port"`
-	User    string `json:"user"`
-	KeyName string `json:"key_name"`
-	OS      string `json:"os"`
+	Address   string `json:"address"`
+	Port      int    `json:"port"`
+	User      string `json:"user"`
+	KeyName   string `json:"key_name"`
+	OS        string `json:"os"`
+	Icon      string `json:"icon"`
+	IconColor string `json:"icon_color"`
 }
 
 // UpdateHost updates a host's config at runtime and in the config file.
@@ -315,6 +321,8 @@ func (h *Handlers) UpdateHost(w http.ResponseWriter, r *http.Request) {
 	}
 	hostCfg.KeyName = req.KeyName
 	hostCfg.OS = req.OS
+	hostCfg.Icon = req.Icon
+	hostCfg.IconColor = req.IconColor
 
 	h.Hub.UpdateHost(hostCfg)
 

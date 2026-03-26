@@ -13,6 +13,7 @@ type Settings struct {
 	DefaultUsername string `json:"default_username"`
 	TmuxWindowSize  string `json:"tmux_window_size"`
 	ShowPubKey      *bool  `json:"show_pub_key,omitempty"`
+	TabTitleFormat  string `json:"tab_title_format,omitempty"`
 }
 
 type SettingsManager struct {
@@ -82,6 +83,14 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 	}
 	if s.ShowPubKey != nil {
 		sm.settings.ShowPubKey = s.ShowPubKey
+	}
+	if s.TabTitleFormat != "" {
+		switch s.TabTitleFormat {
+		case "host-session", "host-only", "session-only", "session-host":
+			sm.settings.TabTitleFormat = s.TabTitleFormat
+		default:
+			return fmt.Errorf("invalid tab_title_format %q", s.TabTitleFormat)
+		}
 	}
 
 	return sm.save()
