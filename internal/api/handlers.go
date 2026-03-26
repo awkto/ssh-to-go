@@ -21,6 +21,7 @@ type Handlers struct {
 	Tmux         *tmux.Manager
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
+	SessionIcons *keystore.SessionIconStore
 	Auth         *auth.Manager
 	ConfigPath   string
 	PollInterval time.Duration
@@ -707,4 +708,26 @@ func sessionCookie(token string) *http.Cookie {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+// ── Session Icons ──
+
+func (h *Handlers) GetSessionIcons(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, h.SessionIcons.GetAll())
+}
+
+func (h *Handlers) SetSessionIcon(w http.ResponseWriter, r *http.Request) {
+	host := r.PathValue("host")
+	session := r.PathValue("session")
+
+	var req keystore.SessionIcon
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := h.SessionIcons.Set(host, session, req); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
 }

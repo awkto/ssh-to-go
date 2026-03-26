@@ -49,6 +49,12 @@ func main() {
 		log.Fatalf("settings: %v", err)
 	}
 
+	// Initialize session icon store
+	sis, err := keystore.NewSessionIconStore(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("session icons: %v", err)
+	}
+
 	// Initialize auth
 	noAuth := os.Getenv("SSH_TO_GO_NO_AUTH") == "1"
 	am, err := auth.NewManager(cfg.DataDir, noAuth)
@@ -136,6 +142,7 @@ func main() {
 		Tmux:         tm,
 		KeyStore:     ks,
 		Settings:     sm,
+		SessionIcons: sis,
 		Auth:         am,
 		StaticFS:     http.FS(staticSub),
 		ConfigPath:   *configPath,

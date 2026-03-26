@@ -1131,7 +1131,7 @@
 
     // ── Init ──
     loadFromURL();
-    fetchAll();
+    loadSessionIcons(function() { fetchAll(); });
     fetchVersion();
     setInterval(fetchAll, 5000);
 

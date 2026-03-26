@@ -15,6 +15,7 @@ type RouterConfig struct {
 	Tmux         *tmux.Manager
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
+	SessionIcons *keystore.SessionIconStore
 	Auth         *auth.Manager
 	StaticFS     http.FileSystem
 	ConfigPath   string
@@ -30,6 +31,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 		Tmux:         rc.Tmux,
 		KeyStore:     rc.KeyStore,
 		Settings:     rc.Settings,
+		SessionIcons: rc.SessionIcons,
 		Auth:         rc.Auth,
 		ConfigPath:   rc.ConfigPath,
 		PollInterval: rc.PollInterval,
@@ -74,6 +76,10 @@ func NewRouter(rc RouterConfig) http.Handler {
 	// Settings API
 	mux.HandleFunc("GET /api/settings", handlers.GetSettings)
 	mux.HandleFunc("PUT /api/settings", handlers.UpdateSettings)
+
+	// Session icons API
+	mux.HandleFunc("GET /api/session-icons", handlers.GetSessionIcons)
+	mux.HandleFunc("PUT /api/session-icons/{host}/{session}", handlers.SetSessionIcon)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws/{host}/{session}", handlers.WebSocket)

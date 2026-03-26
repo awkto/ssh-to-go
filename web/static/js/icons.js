@@ -85,35 +85,55 @@
         return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + icon.svg + '</svg>';
     }
 
-    // Get the effective icon for a session: session override > host icon > default
-    function getSessionIcon(hostName, sessionName) {
-        var key = "session-icon:" + hostName + ":" + sessionName;
-        var override = localStorage.getItem(key);
-        if (override) return override;
-        return null; // caller should fall back to host icon
+    // In-memory cache of session icons, loaded from server API.
+    // Key format: "host:session" → { icon, color }
+    var _sessionIconCache = {};
+    var _sessionIconsLoaded = false;
+
+    function loadSessionIcons(callback) {
+        if (_sessionIconsLoaded) { if (callback) callback(); return; }
+        fetch("/api/session-icons").then(function(r) { return r.json(); }).then(function(data) {
+            _sessionIconCache = data || {};
+            _sessionIconsLoaded = true;
+            if (callback) callback();
+        }).catch(function() {
+            _sessionIconsLoaded = true;
+            if (callback) callback();
+        });
     }
 
-    function setSessionIcon(hostName, sessionName, iconName) {
-        var key = "session-icon:" + hostName + ":" + sessionName;
-        if (!iconName || iconName === "") {
-            localStorage.removeItem(key);
-        } else {
-            localStorage.setItem(key, iconName);
-        }
+    function getSessionIcon(hostName, sessionName) {
+        var entry = _sessionIconCache[hostName + ":" + sessionName];
+        return entry ? (entry.icon || null) : null;
     }
 
     function getSessionIconColor(hostName, sessionName) {
-        var key = "session-icon-color:" + hostName + ":" + sessionName;
-        return localStorage.getItem(key) || null;
+        var entry = _sessionIconCache[hostName + ":" + sessionName];
+        return entry ? (entry.color || null) : null;
+    }
+
+    function setSessionIcon(hostName, sessionName, iconName) {
+        var key = hostName + ":" + sessionName;
+        var entry = _sessionIconCache[key] || {};
+        entry.icon = iconName || "";
+        _sessionIconCache[key] = entry;
+        _syncSessionIcon(hostName, sessionName, entry);
     }
 
     function setSessionIconColor(hostName, sessionName, colorName) {
-        var key = "session-icon-color:" + hostName + ":" + sessionName;
-        if (!colorName || colorName === "" || colorName === DEFAULT_COLOR) {
-            localStorage.removeItem(key);
-        } else {
-            localStorage.setItem(key, colorName);
-        }
+        var key = hostName + ":" + sessionName;
+        var entry = _sessionIconCache[key] || {};
+        entry.color = colorName || "";
+        _sessionIconCache[key] = entry;
+        _syncSessionIcon(hostName, sessionName, entry);
+    }
+
+    function _syncSessionIcon(hostName, sessionName, entry) {
+        fetch("/api/session-icons/" + encodeURIComponent(hostName) + "/" + encodeURIComponent(sessionName), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ icon: entry.icon || "", color: entry.color || "" }),
+        }).catch(function() {});
     }
 
     // Show icon picker popup attached to an element
@@ -289,6 +309,7 @@
     window.DEFAULT_ICON = DEFAULT_ICON;
     window.DEFAULT_COLOR = DEFAULT_COLOR;
     window.colorHex = colorHex;
+    window.loadSessionIcons = loadSessionIcons;
     window.renderIcon = renderIcon;
     window.getSessionIcon = getSessionIcon;
     window.setSessionIcon = setSessionIcon;
