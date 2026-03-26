@@ -233,6 +233,42 @@ func (s *Store) Delete(name string) error {
 	return s.saveIndex()
 }
 
+// Rename renames a keypair, updating files and index.
+func (s *Store) Rename(oldName, newName string) error {
+	if !validName.MatchString(newName) {
+		return fmt.Errorf("invalid keypair name %q (must match %s)", newName, validName.String())
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i, kp := range s.index.Keypairs {
+		if kp.Name == oldName {
+			idx = i
+		}
+		if kp.Name == newName {
+			return fmt.Errorf("keypair %q already exists", newName)
+		}
+	}
+	if idx == -1 {
+		return fmt.Errorf("keypair %q not found", oldName)
+	}
+
+	// Rename key files
+	if err := os.Rename(s.privPath(oldName), s.privPath(newName)); err != nil {
+		return fmt.Errorf("rename private key: %w", err)
+	}
+	if err := os.Rename(s.pubPath(oldName), s.pubPath(newName)); err != nil {
+		// Try to roll back
+		_ = os.Rename(s.privPath(newName), s.privPath(oldName))
+		return fmt.Errorf("rename public key: %w", err)
+	}
+
+	s.index.Keypairs[idx].Name = newName
+	return s.saveIndex()
+}
+
 // PublicKey returns the public key string for a keypair.
 func (s *Store) PublicKey(name string) (string, error) {
 	s.mu.RLock()

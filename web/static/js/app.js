@@ -475,13 +475,16 @@
             const host = hosts.find(h => h.config.name === s.host_name);
             const hostAddr = host ? host.config.address : "";
 
+            const hostName = host ? host.config.name : s.host_name;
+            const showName = hostName !== hostAddr && hostName ? hostName : "";
+
             return `<tr>
                 <td><span class="status-dot ${statusClass}"></span></td>
                 <td><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
                 <td>
                     <div class="host-cell">
-                        <span class="host-fqdn">${esc(s.host_name)}</span>
-                        <span class="host-ip">${esc(hostAddr)}</span>
+                        <span class="host-fqdn">${esc(hostAddr || s.host_name)}</span>
+                        <span class="host-ip">${showName ? esc(showName) : ''}</span>
                     </div>
                 </td>
                 <td class="hide-mobile">${age}</td>
@@ -560,14 +563,16 @@
                 sessionsBadge = `<span class="badge-no-sessions">No Sessions</span>`;
             }
 
+            const displayName = name !== addr ? name : "";
+
             return `<tr>
                 <td>
                     <div class="host-cell">
                         <span class="host-fqdn">
                             <span class="status-dot ${statusClass}" style="margin-right:8px"></span>
-                            ${esc(name)}
+                            ${esc(addr)}${esc(port)}
                         </span>
-                        <span class="host-ip">${esc(user ? user + "@" : "")}${esc(addr)}${esc(port)}</span>
+                        <span class="host-ip">${displayName ? esc(displayName) + ' &middot; ' : ''}${esc(user ? user + "@" : "")}${esc(addr)}</span>
                     </div>
                 </td>
                 <td>${sessionsBadge}</td>
@@ -690,8 +695,8 @@
         }
     };
 
-    window.newSessionFor = async function (host) {
-        const name = "s-" + Date.now().toString(36);
+    window.newSessionFor = async function (host, customName) {
+        const name = customName || "s-" + Date.now().toString(36);
         try {
             const res = await authFetch(`/api/hosts/${eu(host)}/sessions`, {
                 method: "POST",
@@ -734,8 +739,10 @@
         }).join("");
 
         modalFields.innerHTML = `
-            <label for="m-addr">Host Address</label>
+            <label for="m-addr">Host Address (FQDN)</label>
             <input type="text" id="m-addr" value="${ea(h.config.address)}" required>
+            <label for="m-hname">Display Name (optional)</label>
+            <input type="text" id="m-hname" value="${ea(h.config.name !== h.config.address ? h.config.name : '')}" placeholder="Defaults to address">
             <label for="m-port">SSH Port</label>
             <input type="number" id="m-port" value="${h.config.port || 22}" min="1" max="65535">
             <label for="m-user">User</label>
@@ -811,12 +818,15 @@
         modalFields.innerHTML = `
             <label for="m-host">Host</label>
             <select id="m-host">${hostOptions}</select>
+            <label for="m-sname">Session Name (optional)</label>
+            <input type="text" id="m-sname" placeholder="auto-generated if blank">
         `;
 
         modalHandler = async () => {
             const host = document.getElementById("m-host").value;
             if (!host) return;
-            await window.newSessionFor(host);
+            const sname = document.getElementById("m-sname").value.trim();
+            await window.newSessionFor(host, sname || null);
         };
 
         modal.classList.remove("hidden");
@@ -839,14 +849,14 @@
         }
 
         modalFields.innerHTML = `
-            <label for="m-addr">Host Address</label>
+            <label for="m-addr">Host Address (FQDN)</label>
             <input type="text" id="m-addr" placeholder="myserver.example.com" required>
+            <label for="m-hname">Display Name (optional)</label>
+            <input type="text" id="m-hname" placeholder="Defaults to address">
             <label for="m-port">SSH Port</label>
             <input type="number" id="m-port" placeholder="22" min="1" max="65535">
             <label for="m-user">User (leave blank for default)</label>
             <input type="text" id="m-user" placeholder="">
-            <label for="m-hname">Name (optional, defaults to hostname)</label>
-            <input type="text" id="m-hname" placeholder="">
             ${keypairHTML}
         `;
 

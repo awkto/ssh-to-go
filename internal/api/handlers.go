@@ -452,12 +452,72 @@ func (h *Handlers) DeleteKeypair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if any hosts explicitly reference this keypair
+	var usingHosts []string
+	for _, hs := range h.Hub.AllHosts() {
+		if hs.Config.KeyName == name {
+			usingHosts = append(usingHosts, hs.Config.Name)
+		}
+	}
+
+	// If force=true query param, proceed anyway; otherwise warn
+	if len(usingHosts) > 0 && r.URL.Query().Get("force") != "true" {
+		writeJSON(w, map[string]any{
+			"warning":     "keypair is in use by hosts",
+			"hosts_using": usingHosts,
+		})
+		return
+	}
+
 	if err := h.KeyStore.Delete(name); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
 	writeJSON(w, map[string]string{"status": "deleted"})
+}
+
+// RenameKeypair renames a keypair.
+func (h *Handlers) RenameKeypair(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+
+	var req struct {
+		NewName string `json:"new_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.NewName == "" {
+		http.Error(w, "new_name is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.KeyStore.Rename(name, req.NewName); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Update any hosts referencing the old name
+	for _, hs := range h.Hub.AllHosts() {
+		if hs.Config.KeyName == name {
+			updated := hs.Config
+			updated.KeyName = req.NewName
+			h.Hub.UpdateHost(updated)
+			if err := config.UpdateHost(h.ConfigPath, hs.Config.Name, updated); err != nil {
+				log.Printf("warning: host %s keypair ref update failed: %v", hs.Config.Name, err)
+			}
+		}
+	}
+
+	// Update default keypair if it was the renamed one
+	if h.Settings.DefaultKeypairName() == name {
+		s := h.Settings.Get()
+		s.DefaultKeypair = req.NewName
+		_ = h.Settings.Update(s, h.KeyStore)
+	}
+
+	writeJSON(w, map[string]string{"status": "renamed", "new_name": req.NewName})
 }
 
 // ── Settings ──

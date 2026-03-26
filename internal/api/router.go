@@ -68,6 +68,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("POST /api/keypairs", handlers.CreateKeypair)
 	mux.HandleFunc("POST /api/keypairs/import", handlers.ImportKeypair)
 	mux.HandleFunc("GET /api/keypairs/{name}", handlers.GetKeypair)
+	mux.HandleFunc("PUT /api/keypairs/{name}", handlers.RenameKeypair)
 	mux.HandleFunc("DELETE /api/keypairs/{name}", handlers.DeleteKeypair)
 
 	// Settings API

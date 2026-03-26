@@ -69,6 +69,7 @@
                     </div>
                     <div class="action-group">
                         <button class="btn btn-sm" onclick="viewPubKey('${ea(kp.name)}')">Public Key</button>
+                        <button class="btn btn-sm" onclick="renameKeypair('${ea(kp.name)}')">Rename</button>
                         ${!isDefault ? `<button class="btn btn-sm btn-danger" onclick="deleteKeypair('${ea(kp.name)}')">Delete</button>` : ""}
                     </div>
                 </div>
@@ -105,11 +106,36 @@
         }
     };
 
+    window.renameKeypair = function (name) {
+        const newName = prompt(`Rename keypair "${name}" to:`, name);
+        if (!newName || newName === name) return;
+        authFetch(`/api/keypairs/${encodeURIComponent(name)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ new_name: newName }),
+        }).then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t); });
+            toast(`Renamed to "${newName}"`, "success");
+            fetchAll();
+        }).catch(e => toast("Rename failed: " + e.message, "error"));
+    };
+
     window.deleteKeypair = async function (name) {
-        if (!confirm(`Delete keypair "${name}"?`)) return;
         try {
+            // First check if any hosts use this key
             const res = await authFetch(`/api/keypairs/${encodeURIComponent(name)}`, { method: "DELETE" });
-            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+
+            if (data.warning && data.hosts_using) {
+                const hostList = data.hosts_using.join(", ");
+                if (!confirm(`Keypair "${name}" is used by: ${hostList}\n\nThese hosts will fall back to the default keypair. Delete anyway?`)) return;
+                // Force delete
+                const res2 = await authFetch(`/api/keypairs/${encodeURIComponent(name)}?force=true`, { method: "DELETE" });
+                if (!res2.ok) throw new Error(await res2.text());
+            } else if (!res.ok) {
+                throw new Error(JSON.stringify(data));
+            }
+
             toast("Deleted", "success");
             fetchAll();
         } catch (e) {
@@ -147,11 +173,12 @@
     // ── Generate ──
 
     document.getElementById("generate-keypair-btn").addEventListener("click", () => {
-        modalTitle.textContent = "Generate Keypair";
+        modalTitle.textContent = "Generate New Keypair";
         modalSubmit.textContent = "Generate";
         modalFields.innerHTML = `
-            <label for="m-name">Name</label>
+            <label for="m-name">Keypair Name</label>
             <input type="text" id="m-name" placeholder="my-key" required>
+            <p style="color:var(--text-muted);font-size:12px;margin-top:6px">Creates a new ed25519 keypair. Existing keys are never overwritten.</p>
         `;
         modalHandler = async () => {
             const name = document.getElementById("m-name").value.trim();
