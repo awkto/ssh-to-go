@@ -85,7 +85,7 @@
 
         /* Scroll overlay buttons — only on touch devices */
         #scroll-overlay {
-            display: flex;
+            display: none;
             position: absolute;
             right: 12px;
             bottom: 60px;
@@ -109,6 +109,14 @@
             cursor: pointer;
         }
         .scroll-btn:active { background: rgba(100, 100, 130, 0.8); color: #ccc; }
+
+        /* Show scroll buttons only on touch/mobile devices */
+        @media (pointer: coarse) {
+            #scroll-overlay { display: flex; }
+        }
+        @media (max-width: 768px) {
+            #scroll-overlay { display: flex; }
+        }
     </style>
 </head>
 <body>

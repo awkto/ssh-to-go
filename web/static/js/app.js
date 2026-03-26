@@ -64,6 +64,20 @@
         closeSidebar();
     };
 
+    // Navigate to sessions view filtered by a specific host
+    window.showSessionsForHost = function (hostName) {
+        currentView = "sessions";
+        document.querySelectorAll(".view-panel").forEach(el => el.classList.remove("active"));
+        document.getElementById("view-sessions").classList.add("active");
+        document.querySelectorAll(".nav-item[data-view]").forEach(el => {
+            el.classList.toggle("active", el.dataset.view === "sessions");
+        });
+        const filterInput = document.getElementById("session-filter");
+        if (filterInput) filterInput.value = hostName;
+        renderSessions();
+        closeSidebar();
+    };
+
     function renderCurrentView() {
         switch (currentView) {
             case "dashboard": renderDashboard(); break;
@@ -77,7 +91,7 @@
     window.setFilter = function (filter) {
         currentFilter = filter;
         document.querySelectorAll(".filter-item").forEach(el => {
-            el.classList.toggle("active-filter", el.dataset.filter === filter);
+            el.classList.toggle("active", el.dataset.filter === filter);
         });
         renderCurrentView();
     };
@@ -310,7 +324,7 @@
             let sessionsBadge;
             if (sessionCount > 0) {
                 const label = sessionCount === 1 ? "1 Session" : sessionCount + " Sessions";
-                sessionsBadge = `<span class="badge-sessions">${label}</span>`;
+                sessionsBadge = `<span class="badge-sessions badge-clickable" onclick="showSessionsForHost('${ea(name)}')">${label}</span>`;
             } else {
                 sessionsBadge = `<span class="badge-no-sessions">No Sessions</span>`;
             }
@@ -434,7 +448,7 @@
     };
 
     window.killSession = async function (host, session) {
-        if (!confirm(`Kill session "${session}" on ${host}?`)) return;
+        if (!confirm(`End session "${session}" on ${host}?`)) return;
         try {
             await authFetch(`/api/hosts/${eu(host)}/sessions/${eu(session)}`, { method: "DELETE" });
             toast("Session killed", "success");

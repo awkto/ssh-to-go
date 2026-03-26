@@ -407,6 +407,15 @@ body {
     font-size: 13px;
 }
 
+.badge-clickable {
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.badge-clickable:hover {
+    background: rgba(59, 130, 246, 0.25);
+}
+
 /* ─── Buttons ─── */
 .btn {
     padding: 7px 14px;
