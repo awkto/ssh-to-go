@@ -184,16 +184,6 @@
             }).join("");
         }
         renderColors();
-        colorRow.addEventListener("click", function(e) {
-            e.stopPropagation();
-            var btn = e.target.closest(".icon-color-swatch");
-            if (!btn) return;
-            selectedColor = btn.dataset.color;
-            colorRow.querySelectorAll(".icon-color-swatch").forEach(function(s) {
-                s.classList.toggle("selected", s.dataset.color === selectedColor);
-            });
-            renderGrid(search.value);
-        });
 
         var search = document.createElement("input");
         search.type = "text";
@@ -233,39 +223,25 @@
             grid.querySelectorAll(".icon-picker-item").forEach(function(item) {
                 item.classList.toggle("selected", item.dataset.icon === selectedIcon);
             });
-        });
-
-        // Bottom bar with Reset and OK
-        var bottomBar = document.createElement("div");
-        bottomBar.className = "icon-picker-bottom";
-
-        var resetBtn = document.createElement("button");
-        resetBtn.type = "button";
-        resetBtn.className = "icon-picker-reset";
-        resetBtn.textContent = "Reset";
-        resetBtn.addEventListener("click", function (e) {
-            e.stopPropagation();
-            onSelect("", "");
-            closeIconPicker();
-        });
-
-        var okBtn = document.createElement("button");
-        okBtn.type = "button";
-        okBtn.className = "icon-picker-ok";
-        okBtn.textContent = "OK";
-        okBtn.addEventListener("click", function (e) {
-            e.stopPropagation();
             onSelect(selectedIcon, selectedColor);
-            closeIconPicker();
         });
 
-        bottomBar.appendChild(resetBtn);
-        bottomBar.appendChild(okBtn);
+        // Color clicks also apply immediately
+        colorRow.addEventListener("click", function(e) {
+            e.stopPropagation();
+            var btn = e.target.closest(".icon-color-swatch");
+            if (!btn) return;
+            selectedColor = btn.dataset.color;
+            colorRow.querySelectorAll(".icon-color-swatch").forEach(function(s) {
+                s.classList.toggle("selected", s.dataset.color === selectedColor);
+            });
+            renderGrid(search.value);
+            onSelect(selectedIcon, selectedColor);
+        });
 
         picker.appendChild(colorRow);
         picker.appendChild(search);
         picker.appendChild(grid);
-        picker.appendChild(bottomBar);
 
         document.body.appendChild(picker);
 
