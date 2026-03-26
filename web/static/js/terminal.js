@@ -315,6 +315,26 @@ function initTerminal(host, session) {
     // disable variants (l), plus \x1b[?1005h/l
     const mouseSeqRegex = /\x1b\[\?10(00|02|03|05|06)[hl]/g;
 
+    // Since we strip mouse mode, scroll wheel won't be reported to tmux.
+    // Manually send SGR mouse scroll sequences so tmux scrollback works.
+    // tmux still expects mouse events (it set mouse mode, we just hid it from xterm).
+    // SGR encoding: \x1b[<64;col;rowM = scroll up, \x1b[<65;col;rowM = scroll down
+    container.addEventListener("wheel", function (e) {
+        if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        var lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 40));
+        var btn = e.deltaY < 0 ? 64 : 65;
+        var col = Math.floor(term.cols / 2);
+        var row = Math.floor(term.rows / 2);
+        var seq = "\x1b[<" + btn + ";" + col + ";" + row + "M";
+        for (var i = 0; i < lines; i++) {
+            activeWs.send(new TextEncoder().encode(seq));
+        }
+    }, { capture: true, passive: false });
+
     // Clipboard helper that works on HTTP (non-secure contexts)
     function clipCopy(text) {
         if (navigator.clipboard && window.isSecureContext) {
