@@ -4,6 +4,34 @@
     "use strict";
 
     const ICONS = [
+        // General symbols (most useful first)
+        { name: "home", label: "Home", svg: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>' },
+        { name: "star", label: "Star", svg: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>' },
+        { name: "heart", label: "Heart", svg: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>' },
+        { name: "bookmark", label: "Bookmark", svg: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>' },
+        { name: "flag", label: "Flag", svg: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>' },
+        { name: "tag", label: "Tag", svg: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line>' },
+        { name: "user", label: "User", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
+        { name: "users", label: "Team", svg: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>' },
+        { name: "briefcase", label: "Work", svg: '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>' },
+        { name: "calendar", label: "Calendar", svg: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>' },
+        { name: "clock", label: "Clock", svg: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>' },
+        { name: "map-pin", label: "Location", svg: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>' },
+        { name: "compass", label: "Compass", svg: '<circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>' },
+        { name: "sun", label: "Sun", svg: '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>' },
+        { name: "moon", label: "Moon", svg: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>' },
+        { name: "coffee", label: "Coffee", svg: '<path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line>' },
+        { name: "anchor", label: "Anchor", svg: '<circle cx="12" cy="5" r="3"></circle><line x1="12" y1="22" x2="12" y2="8"></line><path d="M5 12H2a10 10 0 0 0 20 0h-3"></path>' },
+        { name: "truck", label: "Truck", svg: '<rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle>' },
+        { name: "package", label: "Package", svg: '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>' },
+        { name: "crosshair", label: "Target", svg: '<circle cx="12" cy="12" r="10"></circle><line x1="22" y1="12" x2="18" y2="12"></line><line x1="6" y1="12" x2="2" y2="12"></line><line x1="12" y1="6" x2="12" y2="2"></line><line x1="12" y1="22" x2="12" y2="18"></line>' },
+        { name: "award", label: "Award", svg: '<circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>' },
+        { name: "feather", label: "Feather", svg: '<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line>' },
+        { name: "hexagon", label: "Hexagon", svg: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>' },
+        { name: "droplet", label: "Droplet", svg: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>' },
+        { name: "scissors", label: "Scissors", svg: '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>' },
+        { name: "paperclip", label: "Paperclip", svg: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>' },
+        // Computer & tech icons
         { name: "terminal", label: "Terminal", svg: '<polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>' },
         { name: "server", label: "Server", svg: '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line>' },
         { name: "database", label: "Database", svg: '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>' },
@@ -39,11 +67,6 @@
         { name: "link", label: "Link", svg: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>' },
         { name: "eye", label: "Eye", svg: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>' },
         { name: "bell", label: "Bell", svg: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>' },
-        { name: "bookmark", label: "Bookmark", svg: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>' },
-        { name: "star", label: "Star", svg: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>' },
-        { name: "heart", label: "Heart", svg: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>' },
-        { name: "flag", label: "Flag", svg: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>' },
-        { name: "tag", label: "Tag", svg: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line>' },
         { name: "send", label: "Send", svg: '<line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>' },
         { name: "download", label: "Download", svg: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>' },
         { name: "upload", label: "Upload", svg: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line>' },
@@ -145,6 +168,7 @@
         currentColor = currentColor || DEFAULT_COLOR;
 
         var selectedColor = currentColor;
+        var selectedIcon = currentIcon || DEFAULT_ICON;
         var picker = document.createElement("div");
         picker.className = "icon-picker-popup";
         picker.id = "icon-picker-popup";
@@ -187,8 +211,8 @@
                 });
             }
             grid.innerHTML = items.map(function (icon) {
-                var selected = icon.name === currentIcon ? " selected" : "";
-                return '<button type="button" class="icon-picker-item' + selected + '" data-icon="' + icon.name + '" title="' + icon.label + '">' +
+                var sel = icon.name === selectedIcon ? " selected" : "";
+                return '<button type="button" class="icon-picker-item' + sel + '" data-icon="' + icon.name + '" title="' + icon.label + '">' +
                     renderIcon(icon.name, 20, selectedColor) +
                     '</button>';
             }).join("");
@@ -201,27 +225,46 @@
         });
 
         grid.addEventListener("click", function (e) {
+            e.stopPropagation();
             var btn = e.target.closest(".icon-picker-item");
             if (!btn) return;
-            var iconName = btn.dataset.icon;
-            onSelect(iconName, selectedColor);
-            closeIconPicker();
+            selectedIcon = btn.dataset.icon;
+            grid.querySelectorAll(".icon-picker-item").forEach(function(item) {
+                item.classList.toggle("selected", item.dataset.icon === selectedIcon);
+            });
         });
 
-        // Reset button
+        // Bottom bar with Reset and OK
+        var bottomBar = document.createElement("div");
+        bottomBar.className = "icon-picker-bottom";
+
         var resetBtn = document.createElement("button");
         resetBtn.type = "button";
         resetBtn.className = "icon-picker-reset";
-        resetBtn.textContent = "Reset to default";
-        resetBtn.addEventListener("click", function () {
+        resetBtn.textContent = "Reset";
+        resetBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
             onSelect("", "");
             closeIconPicker();
         });
 
+        var okBtn = document.createElement("button");
+        okBtn.type = "button";
+        okBtn.className = "icon-picker-ok";
+        okBtn.textContent = "OK";
+        okBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            onSelect(selectedIcon, selectedColor);
+            closeIconPicker();
+        });
+
+        bottomBar.appendChild(resetBtn);
+        bottomBar.appendChild(okBtn);
+
         picker.appendChild(colorRow);
         picker.appendChild(search);
         picker.appendChild(grid);
-        picker.appendChild(resetBtn);
+        picker.appendChild(bottomBar);
 
         document.body.appendChild(picker);
 

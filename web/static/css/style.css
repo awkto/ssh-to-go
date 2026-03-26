@@ -1131,10 +1131,14 @@ header h1 { font-size: 24px; font-weight: 600; color: #fff; }
     color: var(--accent);
     background: var(--accent-glow);
 }
+.icon-picker-bottom {
+    display: flex;
+    border-top: 1px solid var(--border);
+}
 .icon-picker-reset {
+    flex: 1;
     padding: 8px;
     border: none;
-    border-top: 1px solid var(--border);
     background: none;
     color: var(--text-muted);
     font-size: 12px;
@@ -1144,6 +1148,21 @@ header h1 { font-size: 24px; font-weight: 600; color: #fff; }
 .icon-picker-reset:hover {
     color: var(--text-primary);
     background: var(--bg-hover);
+}
+.icon-picker-ok {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: none;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+}
+.icon-picker-ok:hover {
+    background: var(--accent-glow);
 }
 
 /* ─── Icon Selector (modal field) ─── */
