@@ -147,14 +147,20 @@ function initTerminal(host, session) {
 
         ws.onmessage = function (e) {
             if (e.data instanceof ArrayBuffer) {
-                term.write(new Uint8Array(e.data));
+                // Filter mouse mode sequences from binary data
+                var bytes = new Uint8Array(e.data);
+                var str = new TextDecoder().decode(bytes);
+                var filtered = str.replace(mouseSeqRegex, "");
+                if (filtered.length > 0) {
+                    term.write(filtered);
+                }
             } else {
                 // Check for control messages (resize acks, etc)
                 try {
                     const msg = JSON.parse(e.data);
                     if (msg.type === "resize") return;
                 } catch (_) {}
-                term.write(e.data);
+                term.write(e.data.replace(mouseSeqRegex, ""));
             }
         };
 
@@ -198,7 +204,7 @@ function initTerminal(host, session) {
         try {
             const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/handoff`);
             const data = await res.json();
-            await navigator.clipboard.writeText(data.command);
+            await clipCopy(data.command);
             this.textContent = "Copied!";
             setTimeout(() => { this.textContent = "Handoff"; }, 2000);
         } catch (e) {
@@ -248,13 +254,18 @@ function initTerminal(host, session) {
     // Paste button — read clipboard and send to terminal
     document.getElementById("paste-btn").addEventListener("click", async function () {
         try {
-            const text = await navigator.clipboard.readText();
+            const text = await clipPaste();
             if (text && activeWs && activeWs.readyState === WebSocket.OPEN) {
                 activeWs.send(new TextEncoder().encode(text));
             }
             term.focus();
         } catch (e) {
-            alert("Paste failed: " + e.message);
+            // Clipboard read requires HTTPS — prompt user to paste manually
+            var input = prompt("Paste text here (clipboard read requires HTTPS):");
+            if (input && activeWs && activeWs.readyState === WebSocket.OPEN) {
+                activeWs.send(new TextEncoder().encode(input));
+            }
+            term.focus();
         }
     });
 
@@ -292,33 +303,86 @@ function initTerminal(host, session) {
         copyTimer = setTimeout(function () {
             const sel = term.getSelection();
             if (sel) {
-                navigator.clipboard.writeText(sel).catch(() => {});
+                clipCopy(sel);
             }
-        }, 100);
+        }, 150);
     });
 
-    // Right-click context menu: Copy (if selected) / Paste
+    // Strip mouse mode escape sequences from incoming data so xterm.js never
+    // enters mouse reporting mode. This ensures local text selection works
+    // natively without fighting tmux's mouse handling.
+    // Matches: \x1b[?1000h, \x1b[?1002h, \x1b[?1003h, \x1b[?1006h and their
+    // disable variants (l), plus \x1b[?1005h/l
+    const mouseSeqRegex = /\x1b\[\?10(00|02|03|05|06)[hl]/g;
+
+    // Clipboard helper that works on HTTP (non-secure contexts)
+    function clipCopy(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text);
+        }
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand("copy"); } catch (_) {}
+        document.body.removeChild(ta);
+        return Promise.resolve();
+    }
+
+    function clipPaste() {
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.readText();
+        }
+        return Promise.reject(new Error("Clipboard read requires HTTPS"));
+    }
+
+    // Track the link under cursor for "Copy Link" in context menu
+    let hoveredLink = null;
+    container.addEventListener("mouseover", function (e) {
+        const linkEl = e.target.closest("a");
+        hoveredLink = linkEl ? linkEl.href : null;
+    });
+    container.addEventListener("mouseout", function (e) {
+        if (e.target.closest("a")) hoveredLink = null;
+    });
+
+    // Right-click context menu: Copy / Copy Link / Paste
     const ctxMenu = document.createElement("div");
     ctxMenu.id = "ctx-menu";
-    ctxMenu.style.cssText = "display:none;position:fixed;z-index:1000;background:#1e1e38;border:1px solid #3a3a5a;border-radius:6px;padding:4px 0;min-width:120px;font-family:sans-serif;font-size:13px;color:#e0e0e8;box-shadow:0 4px 16px rgba(0,0,0,0.4);";
+    ctxMenu.style.cssText = "display:none;position:fixed;z-index:1000;background:#1e1e38;border:1px solid #3a3a5a;border-radius:6px;padding:4px 0;min-width:140px;font-family:sans-serif;font-size:13px;color:#e0e0e8;box-shadow:0 4px 16px rgba(0,0,0,0.4);";
     document.body.appendChild(ctxMenu);
 
     function hideCtxMenu() { ctxMenu.style.display = "none"; }
     document.addEventListener("click", hideCtxMenu);
+    document.addEventListener("mousedown", function (e) {
+        if (ctxMenu.style.display !== "none" && !ctxMenu.contains(e.target)) {
+            hideCtxMenu();
+        }
+    });
     document.addEventListener("keydown", hideCtxMenu);
 
     container.addEventListener("contextmenu", function (e) {
         e.preventDefault();
+
         const sel = term.getSelection();
         let items = "";
         if (sel) {
             items += '<div class="ctx-item" data-action="copy">Copy</div>';
         }
+        if (hoveredLink) {
+            items += '<div class="ctx-item" data-action="copy-link">Copy Link</div>';
+            items += '<div class="ctx-item" data-action="open-link">Open Link</div>';
+        }
         items += '<div class="ctx-item" data-action="paste">Paste</div>';
         ctxMenu.innerHTML = items;
         ctxMenu.style.display = "block";
-        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 140) + "px";
-        ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 80) + "px";
+        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 160) + "px";
+        ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 120) + "px";
+
+        // Stash the link for the click handler
+        const linkForMenu = hoveredLink;
 
         ctxMenu.querySelectorAll(".ctx-item").forEach(function (el) {
             el.style.cssText = "padding:6px 16px;cursor:pointer;";
@@ -326,15 +390,25 @@ function initTerminal(host, session) {
             el.addEventListener("mouseleave", function () { this.style.background = "none"; });
             el.addEventListener("click", async function () {
                 hideCtxMenu();
-                if (this.dataset.action === "copy") {
-                    await navigator.clipboard.writeText(term.getSelection()).catch(() => {});
-                } else if (this.dataset.action === "paste") {
+                const action = this.dataset.action;
+                if (action === "copy") {
+                    clipCopy(term.getSelection());
+                } else if (action === "copy-link") {
+                    clipCopy(linkForMenu);
+                } else if (action === "open-link") {
+                    window.open(linkForMenu, "_blank");
+                } else if (action === "paste") {
                     try {
-                        const text = await navigator.clipboard.readText();
+                        const text = await clipPaste();
                         if (text && activeWs && activeWs.readyState === WebSocket.OPEN) {
                             activeWs.send(new TextEncoder().encode(text));
                         }
-                    } catch (_) {}
+                    } catch (_) {
+                        var input = prompt("Paste text here (clipboard read requires HTTPS):");
+                        if (input && activeWs && activeWs.readyState === WebSocket.OPEN) {
+                            activeWs.send(new TextEncoder().encode(input));
+                        }
+                    }
                 }
                 term.focus();
             });

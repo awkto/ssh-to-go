@@ -132,7 +132,6 @@
                                 <option value="detached">Detached</option>
                             </select>
                         </div>
-                        <div id="session-filter-chips" class="filter-chips"></div>
                     </div>
                     <table class="data-table" id="sessions-table">
                         <thead>
@@ -163,9 +162,11 @@
                     <div class="filter-bar" id="host-filter-bar">
                         <div class="filter-group">
                             <label>OS</label>
-                            <select id="host-os-select" onchange="renderHosts()">
-                                <option value="">All OS</option>
-                            </select>
+                            <div id="host-os-select-wrap">
+                                <select id="host-os-select" onchange="renderHosts()">
+                                    <option value="">All OS</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="filter-group">
                             <label>Status</label>
@@ -183,7 +184,6 @@
                                 <option value="without">Without Sessions</option>
                             </select>
                         </div>
-                        <div id="host-filter-chips" class="filter-chips"></div>
                     </div>
                     <table class="data-table" id="hosts-table">
                         <thead>
