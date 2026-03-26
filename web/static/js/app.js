@@ -49,36 +49,208 @@
         }
     }
 
-    // ── View switching ──
-    window.switchView = function (view) {
-        currentView = view;
+    // ── URL routing ──
+    function updateURL() {
+        const params = new URLSearchParams();
+        if (currentFilter !== "all") params.set("filter", currentFilter);
+
+        const search = document.getElementById("global-search").value.trim();
+        if (search) params.set("search", search);
+
+        if (currentView === "sessions") {
+            const host = document.getElementById("session-host-select")?.value;
+            const status = document.getElementById("session-status-select")?.value;
+            const q = document.getElementById("session-filter")?.value?.trim();
+            if (host) params.set("host", host);
+            if (status) params.set("status", status);
+            if (q) params.set("q", q);
+        } else if (currentView === "hosts") {
+            const os = document.getElementById("host-os-select")?.value;
+            const status = document.getElementById("host-status-select")?.value;
+            const sess = document.getElementById("host-sessions-select")?.value;
+            const q = document.getElementById("host-filter")?.value?.trim();
+            if (os) params.set("os", os);
+            if (status) params.set("status", status);
+            if (sess) params.set("sessions", sess);
+            if (q) params.set("q", q);
+        }
+
+        const hash = "#" + currentView + (params.toString() ? "?" + params.toString() : "");
+        history.replaceState(null, "", hash);
+    }
+
+    function loadFromURL() {
+        const hash = location.hash.replace(/^#/, "");
+        if (!hash) return;
+
+        const [path, qs] = hash.split("?");
+        const params = new URLSearchParams(qs || "");
+
+        const view = path || "dashboard";
+        if (["dashboard", "sessions", "hosts", "logs"].includes(view)) {
+            currentView = view;
+        }
+
+        if (params.has("filter")) {
+            const f = params.get("filter");
+            if (["all", "active", "favorites"].includes(f)) {
+                currentFilter = f;
+            }
+        }
+
+        // Apply view filter after DOM is ready
+        setTimeout(() => {
+            if (params.has("search")) {
+                document.getElementById("global-search").value = params.get("search");
+            }
+            if (currentView === "sessions") {
+                if (params.has("host")) {
+                    const el = document.getElementById("session-host-select");
+                    if (el) el.value = params.get("host");
+                }
+                if (params.has("status")) {
+                    const el = document.getElementById("session-status-select");
+                    if (el) el.value = params.get("status");
+                }
+                if (params.has("q")) {
+                    const el = document.getElementById("session-filter");
+                    if (el) el.value = params.get("q");
+                }
+            } else if (currentView === "hosts") {
+                if (params.has("os")) {
+                    const el = document.getElementById("host-os-select");
+                    if (el) el.value = params.get("os");
+                }
+                if (params.has("status")) {
+                    const el = document.getElementById("host-status-select");
+                    if (el) el.value = params.get("status");
+                }
+                if (params.has("sessions")) {
+                    const el = document.getElementById("host-sessions-select");
+                    if (el) el.value = params.get("sessions");
+                }
+                if (params.has("q")) {
+                    const el = document.getElementById("host-filter");
+                    if (el) el.value = params.get("q");
+                }
+            }
+            activateView();
+            updateFilterChips();
+        }, 0);
+    }
+
+    function activateView() {
         document.querySelectorAll(".view-panel").forEach(el => el.classList.remove("active"));
-        const panel = document.getElementById("view-" + view);
+        const panel = document.getElementById("view-" + currentView);
         if (panel) panel.classList.add("active");
 
         document.querySelectorAll(".nav-item[data-view]").forEach(el => {
-            el.classList.toggle("active", el.dataset.view === view);
+            el.classList.toggle("active", el.dataset.view === currentView);
         });
 
+        document.querySelectorAll(".filter-item").forEach(el => {
+            el.classList.toggle("active", el.dataset.filter === currentFilter);
+        });
+    }
+
+    // ── Filter chips ──
+    function updateFilterChips() {
+        updateFilterToggleState();
+        // Sessions view chips
+        const sessionChipArea = document.getElementById("session-filter-chips");
+        if (sessionChipArea) {
+            let chips = [];
+            const hostVal = document.getElementById("session-host-select")?.value;
+            const statusVal = document.getElementById("session-status-select")?.value;
+            const searchVal = (document.getElementById("session-filter")?.value || "").trim();
+            if (hostVal) chips.push(`<span class="filter-chip">Host: ${esc(hostVal)} <button onclick="clearFilter('session-host-select')">&times;</button></span>`);
+            if (statusVal) chips.push(`<span class="filter-chip">Status: ${esc(statusVal)} <button onclick="clearFilter('session-status-select')">&times;</button></span>`);
+            if (searchVal) chips.push(`<span class="filter-chip">Search: ${esc(searchVal)} <button onclick="clearFilter('session-filter')">&times;</button></span>`);
+            sessionChipArea.innerHTML = chips.join("");
+        }
+
+        // Hosts view chips
+        const hostChipArea = document.getElementById("host-filter-chips");
+        if (hostChipArea) {
+            let chips = [];
+            const osVal = document.getElementById("host-os-select")?.value;
+            const statusVal = document.getElementById("host-status-select")?.value;
+            const sessVal = document.getElementById("host-sessions-select")?.value;
+            const searchVal = (document.getElementById("host-filter")?.value || "").trim();
+            if (osVal) chips.push(`<span class="filter-chip">OS: ${esc(osVal)} <button onclick="clearFilter('host-os-select')">&times;</button></span>`);
+            if (statusVal) chips.push(`<span class="filter-chip">Status: ${esc(statusVal)} <button onclick="clearFilter('host-status-select')">&times;</button></span>`);
+            if (sessVal) chips.push(`<span class="filter-chip">Sessions: ${esc(sessVal)} <button onclick="clearFilter('host-sessions-select')">&times;</button></span>`);
+            if (searchVal) chips.push(`<span class="filter-chip">Search: ${esc(searchVal)} <button onclick="clearFilter('host-filter')">&times;</button></span>`);
+            hostChipArea.innerHTML = chips.join("");
+        }
+    }
+
+    window.clearFilter = function (id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = "";
         renderCurrentView();
+    };
+
+    window.toggleFilterBar = function (view) {
+        const bar = document.getElementById(view === "session" ? "session-filter-bar" : "host-filter-bar");
+        if (bar) bar.classList.toggle("open");
+    };
+
+    function updateFilterToggleState() {
+        // Session toggle
+        const sessionToggle = document.getElementById("session-filter-toggle");
+        if (sessionToggle) {
+            const hasFilters = !!(
+                document.getElementById("session-host-select")?.value ||
+                document.getElementById("session-status-select")?.value
+            );
+            sessionToggle.classList.toggle("has-filters", hasFilters);
+            // Auto-open if filters are active
+            if (hasFilters) {
+                document.getElementById("session-filter-bar")?.classList.add("open");
+            }
+        }
+
+        // Host toggle
+        const hostToggle = document.getElementById("host-filter-toggle");
+        if (hostToggle) {
+            const hasFilters = !!(
+                document.getElementById("host-os-select")?.value ||
+                document.getElementById("host-status-select")?.value ||
+                document.getElementById("host-sessions-select")?.value
+            );
+            hostToggle.classList.toggle("has-filters", hasFilters);
+            if (hasFilters) {
+                document.getElementById("host-filter-bar")?.classList.add("open");
+            }
+        }
+    }
+
+    // ── View switching ──
+    window.switchView = function (view) {
+        currentView = view;
+        activateView();
+        renderCurrentView();
+        updateURL();
         closeSidebar();
     };
 
     // Navigate to sessions view filtered by a specific host
     window.showSessionsForHost = function (hostName) {
         currentView = "sessions";
-        document.querySelectorAll(".view-panel").forEach(el => el.classList.remove("active"));
-        document.getElementById("view-sessions").classList.add("active");
-        document.querySelectorAll(".nav-item[data-view]").forEach(el => {
-            el.classList.toggle("active", el.dataset.view === "sessions");
-        });
-        const filterInput = document.getElementById("session-filter");
-        if (filterInput) filterInput.value = hostName;
+        activateView();
+        populateFilterDropdowns();
+        const hostSelect = document.getElementById("session-host-select");
+        if (hostSelect) hostSelect.value = hostName;
         renderSessions();
+        updateFilterChips();
+        updateURL();
         closeSidebar();
     };
 
     function renderCurrentView() {
+        populateFilterDropdowns();
         switch (currentView) {
             case "dashboard": renderDashboard(); break;
             case "sessions": renderSessions(); break;
@@ -94,15 +266,49 @@
             el.classList.toggle("active", el.dataset.filter === filter);
         });
         renderCurrentView();
+        updateURL();
     };
+
+    // ── Populate filter dropdowns ──
+    function populateFilterDropdowns() {
+        // Session host dropdown
+        const hostSelect = document.getElementById("session-host-select");
+        if (hostSelect) {
+            const currentVal = hostSelect.value;
+            const hostNames = [...new Set(sessions.map(s => s.host_name))].sort();
+            hostSelect.innerHTML = '<option value="">All Hosts</option>' +
+                hostNames.map(h => `<option value="${ea(h)}" ${h === currentVal ? "selected" : ""}>${esc(h)}</option>`).join("");
+        }
+
+        // Host OS dropdown
+        const osSelect = document.getElementById("host-os-select");
+        if (osSelect) {
+            const currentVal = osSelect.value;
+            const osNames = [...new Set(hosts.map(h => h.config.os || h.detected_os || "").filter(Boolean))].sort();
+            osSelect.innerHTML = '<option value="">All OS</option>' +
+                osNames.map(o => `<option value="${ea(o)}" ${o === currentVal ? "selected" : ""}>${esc(o)}</option>`).join("");
+        }
+    }
 
     function getFilteredSessions() {
         let filtered = sessions.slice();
         const search = (document.getElementById("global-search").value || "").toLowerCase();
         const viewFilter = (document.getElementById("session-filter")?.value || "").toLowerCase();
+        const hostFilter = document.getElementById("session-host-select")?.value || "";
+        const statusFilter = document.getElementById("session-status-select")?.value || "";
 
         if (currentFilter === "active") {
             filtered = filtered.filter(s => s.session.attached);
+        }
+
+        if (hostFilter) {
+            filtered = filtered.filter(s => s.host_name === hostFilter);
+        }
+
+        if (statusFilter === "attached") {
+            filtered = filtered.filter(s => s.session.attached);
+        } else if (statusFilter === "detached") {
+            filtered = filtered.filter(s => !s.session.attached);
         }
 
         if (search) {
@@ -126,12 +332,33 @@
         let filtered = hosts.slice();
         const search = (document.getElementById("global-search").value || "").toLowerCase();
         const viewFilter = (document.getElementById("host-filter")?.value || "").toLowerCase();
+        const osFilter = document.getElementById("host-os-select")?.value || "";
+        const statusFilter = document.getElementById("host-status-select")?.value || "";
+        const sessionsFilter = document.getElementById("host-sessions-select")?.value || "";
 
         if (currentFilter === "active") {
             filtered = filtered.filter(h => {
-                const hostSessions = sessions.filter(s => s.host_name === h.config.name);
-                return hostSessions.length > 0;
+                return sessions.some(s => s.host_name === h.config.name);
             });
+        }
+
+        if (osFilter) {
+            filtered = filtered.filter(h => {
+                const os = h.config.os || h.detected_os || "";
+                return os === osFilter;
+            });
+        }
+
+        if (statusFilter === "online") {
+            filtered = filtered.filter(h => h.online);
+        } else if (statusFilter === "offline") {
+            filtered = filtered.filter(h => !h.online);
+        }
+
+        if (sessionsFilter === "with") {
+            filtered = filtered.filter(h => sessions.some(s => s.host_name === h.config.name));
+        } else if (sessionsFilter === "without") {
+            filtered = filtered.filter(h => !sessions.some(s => s.host_name === h.config.name));
         }
 
         if (search) {
@@ -219,6 +446,8 @@
     };
 
     window.renderSessions = function () {
+        updateFilterChips();
+        updateURL();
         let filtered = getFilteredSessions();
 
         // Sort
@@ -279,6 +508,8 @@
     };
 
     window.renderHosts = function () {
+        updateFilterChips();
+        updateURL();
         let filtered = getFilteredHosts();
 
         // Sort
@@ -655,6 +886,7 @@
     // ── Search ──
     window.onSearch = function () {
         renderCurrentView();
+        updateURL();
     };
 
     // ── Mobile sidebar ──
@@ -737,7 +969,14 @@
     }
 
     // ── Init ──
+    loadFromURL();
     fetchAll();
     fetchVersion();
     setInterval(fetchAll, 5000);
+
+    // Handle browser back/forward
+    window.addEventListener("hashchange", () => {
+        loadFromURL();
+        renderCurrentView();
+    });
 })();

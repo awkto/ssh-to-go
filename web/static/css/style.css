@@ -152,6 +152,7 @@ body {
 .sidebar-nav {
     padding: 12px 0;
     flex: 1;
+    overflow-y: auto;
 }
 
 .nav-item {
@@ -414,6 +415,118 @@ body {
 
 .badge-clickable:hover {
     background: rgba(59, 130, 246, 0.25);
+}
+
+/* ─── Filter bar ─── */
+.filter-bar {
+    display: none;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.filter-bar.open {
+    display: flex;
+}
+
+.filter-toggle {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    transition: all 0.12s;
+}
+
+.filter-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.filter-toggle.has-filters {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-glow);
+}
+
+.filter-toggle .filter-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: none;
+}
+
+.filter-toggle.has-filters .filter-dot {
+    display: inline-block;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.filter-group label {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.filter-group select {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    min-width: 120px;
+}
+
+/* ─── Filter chips ─── */
+.filter-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--accent-glow);
+    border: 1px solid var(--accent);
+    border-radius: 16px;
+    font-size: 12px;
+    color: var(--accent);
+}
+
+.filter-chip button {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    opacity: 0.7;
+}
+
+.filter-chip button:hover {
+    opacity: 1;
 }
 
 /* ─── Buttons ─── */

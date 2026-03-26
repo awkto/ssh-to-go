@@ -42,12 +42,15 @@
                 <div class="nav-divider"></div>
                 <div class="nav-label">Filters</div>
                 <div class="nav-item filter-item active" data-filter="all" onclick="setFilter('all')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
                     All Servers
                 </div>
                 <div class="nav-item filter-item" data-filter="active" onclick="setFilter('active')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                     Active Sessions
                 </div>
                 <div class="nav-item filter-item" data-filter="favorites" onclick="setFilter('favorites')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                     Favorites
                 </div>
             </nav>
@@ -109,8 +112,29 @@
                     <div class="content-header">
                         <h2 class="content-title">Unified Session Management Table</h2>
                         <div class="content-filter">
-                            <input type="text" id="session-filter" placeholder="Filter sessions..." oninput="renderSessions()">
+                            <button class="filter-toggle" id="session-filter-toggle" onclick="toggleFilterBar('session')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                                <span class="filter-dot"></span>
+                            </button>
+                            <input type="text" id="session-filter" placeholder="Search sessions..." oninput="renderSessions()">
                         </div>
+                    </div>
+                    <div class="filter-bar" id="session-filter-bar">
+                        <div class="filter-group">
+                            <label>Host</label>
+                            <select id="session-host-select" onchange="renderSessions()">
+                                <option value="">All Hosts</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Status</label>
+                            <select id="session-status-select" onchange="renderSessions()">
+                                <option value="">All</option>
+                                <option value="attached">Attached</option>
+                                <option value="detached">Detached</option>
+                            </select>
+                        </div>
+                        <div id="session-filter-chips" class="filter-chips"></div>
                     </div>
                     <table class="data-table" id="sessions-table">
                         <thead>
@@ -131,8 +155,37 @@
                     <div class="content-header">
                         <h2 class="content-title">Hosts Management Dashboard</h2>
                         <div class="content-filter">
-                            <input type="text" id="host-filter" placeholder="Filter hosts..." oninput="renderHosts()">
+                            <button class="filter-toggle" id="host-filter-toggle" onclick="toggleFilterBar('host')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                                <span class="filter-dot"></span>
+                            </button>
+                            <input type="text" id="host-filter" placeholder="Search hosts..." oninput="renderHosts()">
                         </div>
+                    </div>
+                    <div class="filter-bar" id="host-filter-bar">
+                        <div class="filter-group">
+                            <label>OS</label>
+                            <select id="host-os-select" onchange="renderHosts()">
+                                <option value="">All OS</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Status</label>
+                            <select id="host-status-select" onchange="renderHosts()">
+                                <option value="">All</option>
+                                <option value="online">Online</option>
+                                <option value="offline">Offline</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Sessions</label>
+                            <select id="host-sessions-select" onchange="renderHosts()">
+                                <option value="">Any</option>
+                                <option value="with">With Sessions</option>
+                                <option value="without">Without Sessions</option>
+                            </select>
+                        </div>
+                        <div id="host-filter-chips" class="filter-chips"></div>
                     </div>
                     <table class="data-table" id="hosts-table">
                         <thead>
