@@ -1060,7 +1060,7 @@ header h1 { font-size: 24px; font-weight: 600; color: #fff; }
     position: fixed;
     z-index: 10000;
     width: 280px;
-    max-height: 360px;
+    max-height: 380px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 8px;

@@ -245,16 +245,29 @@
 
         document.body.appendChild(picker);
 
-        // Position near the anchor
+        // Position near the anchor, clamped to viewport
         var rect = anchorEl.getBoundingClientRect();
         var pickerW = 280;
-        var pickerH = 380;
         var left = rect.left;
         var top = rect.bottom + 4;
 
         if (left + pickerW > window.innerWidth) left = window.innerWidth - pickerW - 8;
         if (left < 8) left = 8;
-        if (top + pickerH > window.innerHeight) top = rect.top - pickerH - 4;
+
+        // If no room below, try above
+        var spaceBelow = window.innerHeight - rect.bottom - 8;
+        var spaceAbove = rect.top - 8;
+        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+            // Place above, limit height to available space
+            var maxH = Math.min(380, spaceAbove);
+            top = rect.top - maxH - 4;
+            picker.style.maxHeight = maxH + "px";
+        } else {
+            // Place below, limit height to available space
+            var maxH = Math.min(380, spaceBelow);
+            picker.style.maxHeight = maxH + "px";
+        }
+        if (top < 4) top = 4;
 
         picker.style.left = left + "px";
         picker.style.top = top + "px";

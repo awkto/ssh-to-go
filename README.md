@@ -111,3 +111,7 @@ go build -o ssh-to-go . && ./ssh-to-go
 ```
 
 The web UI is embedded in the binary via `go:embed`. No npm, no build step. xterm.js is vendored in `web/static/vendor/`.
+
+## License
+
+[AGPL-3.0](LICENSE)
