@@ -269,17 +269,29 @@ function initTerminal(host, session) {
         }
     });
 
-    // Duplicate button — create a new session on the same host, open in new tab
+    // Duplicate button — create a new session on the same host in the same working dir
     document.getElementById("duplicate-btn").addEventListener("click", async function () {
         const btn = this;
         btn.disabled = true;
         btn.textContent = "Opening…";
         try {
+            // Get the current session's working directory
+            let cwd = "";
+            try {
+                const cwdRes = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/cwd`);
+                if (cwdRes.ok) {
+                    const cwdData = await cwdRes.json();
+                    cwd = cwdData.cwd || "";
+                }
+            } catch (_) {}
+
             const newName = `${session}-dup-${Date.now()}`;
+            const body = { name: newName };
+            if (cwd) body.cwd = cwd;
             const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: newName }),
+                body: JSON.stringify(body),
             });
             if (!res.ok) {
                 throw new Error(`Server returned ${res.status}`);

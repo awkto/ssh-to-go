@@ -43,16 +43,30 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 
 // CreateSession creates a new detached tmux session on the remote host.
 // Sets window-size so multiple clients behave as configured (largest/smallest/latest).
-func (m *Manager) CreateSession(client *ssh.Client, name, windowSize string) error {
+func (m *Manager) CreateSession(client *ssh.Client, name, windowSize, cwd string) error {
 	if windowSize == "" {
 		windowSize = "largest"
 	}
-	cmd := fmt.Sprintf("tmux new-session -d -s %q \\; set-option -t %q window-size %s", name, name, windowSize)
+	var cmd string
+	if cwd != "" {
+		cmd = fmt.Sprintf("tmux new-session -d -s %q -c %q \\; set-option -t %q window-size %s", name, cwd, name, windowSize)
+	} else {
+		cmd = fmt.Sprintf("tmux new-session -d -s %q \\; set-option -t %q window-size %s", name, name, windowSize)
+	}
 	_, err := sshutil.Exec(client, cmd)
 	if err != nil {
 		return fmt.Errorf("create session %q: %w", name, err)
 	}
 	return nil
+}
+
+// SessionCwd returns the current working directory of the active pane in a session.
+func (m *Manager) SessionCwd(client *ssh.Client, name string) (string, error) {
+	out, err := sshutil.Exec(client, fmt.Sprintf("tmux display-message -t %q -p '#{pane_current_path}'", name))
+	if err != nil {
+		return "", fmt.Errorf("get cwd for %q: %w", name, err)
+	}
+	return strings.TrimSpace(out), nil
 }
 
 // KillSession kills a tmux session on the remote host.

@@ -56,6 +56,7 @@ func (h *Handlers) ListHosts(w http.ResponseWriter, r *http.Request) {
 
 type createSessionReq struct {
 	Name string `json:"name"`
+	Cwd  string `json:"cwd,omitempty"`
 }
 
 func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +84,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	if err := h.Tmux.CreateSession(client, req.Name, h.Settings.TmuxWindowSize()); err != nil {
+	if err := h.Tmux.CreateSession(client, req.Name, h.Settings.TmuxWindowSize(), req.Cwd); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -154,6 +155,32 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]string{"status": "renamed", "old_name": sessionName, "new_name": req.NewName})
+}
+
+func (h *Handlers) SessionCwd(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+	sessionName := r.PathValue("session")
+
+	hostCfg, ok := h.Hub.GetHostConfig(hostName)
+	if !ok {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer client.Close()
+
+	cwd, err := h.Tmux.SessionCwd(client, sessionName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("get cwd failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]string{"cwd": cwd})
 }
 
 func (h *Handlers) Handoff(w http.ResponseWriter, r *http.Request) {
