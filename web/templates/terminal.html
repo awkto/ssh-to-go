@@ -180,20 +180,22 @@
                 if (link) link.href = encoded;
             }
 
-            // Check session override in localStorage
-            var sessionIcon = window.getSessionIcon ? window.getSessionIcon(host, session) : null;
-            var sessionColor = window.getSessionIconColor ? window.getSessionIconColor(host, session) : null;
-            if (sessionIcon) {
-                setFavicon(sessionIcon, sessionColor);
-            } else {
-                // Fetch host config to get its icon/color
-                fetch('/api/hosts').then(function(r) { return r.json(); }).then(function(hosts) {
-                    var h = hosts.find(function(x) { return x.config.name === host; });
-                    if (h && (h.config.icon || h.config.icon_color)) {
-                        setFavicon(h.config.icon || "terminal", h.config.icon_color || "default");
-                    }
-                }).catch(function() {});
-            }
+            // Load session icons from server, then set favicon
+            window.loadSessionIcons(function() {
+                var sessionIcon = window.getSessionIcon ? window.getSessionIcon(host, session) : null;
+                var sessionColor = window.getSessionIconColor ? window.getSessionIconColor(host, session) : null;
+                if (sessionIcon) {
+                    setFavicon(sessionIcon, sessionColor);
+                } else {
+                    // Fall back to host icon
+                    fetch('/api/hosts').then(function(r) { return r.json(); }).then(function(hosts) {
+                        var h = hosts.find(function(x) { return x.config.name === host; });
+                        if (h && (h.config.icon || h.config.icon_color)) {
+                            setFavicon(h.config.icon || "terminal", h.config.icon_color || "default");
+                        }
+                    }).catch(function() {});
+                }
+            });
 
             // Update tab title based on settings
             fetch('/api/settings').then(function(r) { return r.json(); }).then(function(s) {
