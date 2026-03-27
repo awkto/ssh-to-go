@@ -9,8 +9,9 @@ import (
 )
 
 type SessionIcon struct {
-	Icon  string `json:"icon,omitempty"`
-	Color string `json:"color,omitempty"`
+	Icon    string `json:"icon,omitempty"`
+	Color   string `json:"color,omitempty"`
+	Starred bool   `json:"starred,omitempty"`
 }
 
 // SessionIconStore persists session icon/color overrides to a JSON file.

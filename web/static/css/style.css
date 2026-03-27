@@ -1284,6 +1284,27 @@ header h1 { font-size: 24px; font-weight: 600; color: #fff; }
     padding: 6px 10px;
 }
 
+.star-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color 0.15s;
+    padding: 0;
+}
+.star-btn:hover {
+    color: var(--orange);
+}
+.star-btn.starred {
+    color: var(--orange);
+}
+
 .session-icon-btn:hover {
     color: var(--accent);
     background: var(--accent-glow);

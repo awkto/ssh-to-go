@@ -152,11 +152,25 @@
         _syncSessionIcon(hostName, sessionName, entry);
     }
 
+    function isSessionStarred(hostName, sessionName) {
+        var entry = _sessionIconCache[hostName + ":" + sessionName];
+        return entry ? !!entry.starred : false;
+    }
+
+    function toggleSessionStar(hostName, sessionName) {
+        var key = hostName + ":" + sessionName;
+        var entry = _sessionIconCache[key] || {};
+        entry.starred = !entry.starred;
+        _sessionIconCache[key] = entry;
+        _syncSessionIcon(hostName, sessionName, entry);
+        return entry.starred;
+    }
+
     function _syncSessionIcon(hostName, sessionName, entry) {
         fetch("/api/session-icons/" + encodeURIComponent(hostName) + "/" + encodeURIComponent(sessionName), {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ icon: entry.icon || "", color: entry.color || "" }),
+            body: JSON.stringify({ icon: entry.icon || "", color: entry.color || "", starred: !!entry.starred }),
         }).catch(function() {});
     }
 
@@ -343,6 +357,8 @@
     window.DEFAULT_COLOR = DEFAULT_COLOR;
     window.colorHex = colorHex;
     window.loadSessionIcons = loadSessionIcons;
+    window.isSessionStarred = isSessionStarred;
+    window.toggleSessionStar = toggleSessionStar;
     window.renderIcon = renderIcon;
     window.getSessionIcon = getSessionIcon;
     window.setSessionIcon = setSessionIcon;

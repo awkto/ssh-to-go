@@ -268,6 +268,8 @@
 
         if (currentFilter === "active") {
             filtered = filtered.filter(s => s.session.attached);
+        } else if (currentFilter === "favorites") {
+            filtered = filtered.filter(s => isSessionStarred(s.host_name, s.session.name));
         }
 
         if (hostFilter) {
@@ -425,14 +427,25 @@
         updateURL();
         let filtered = getFilteredSessions();
 
-        // Sort
+        // Sort — starred sessions float to top unless explicitly sorting by another column
         filtered.sort((a, b) => {
+            // If not sorting by starred, still pin starred to top as secondary
+            if (sessionSort.key !== "starred") {
+                const sa = isSessionStarred(a.host_name, a.session.name) ? 1 : 0;
+                const sb = isSessionStarred(b.host_name, b.session.name) ? 1 : 0;
+                if (sa !== sb) return sb - sa;
+            }
+
             let va, vb;
             switch (sessionSort.key) {
                 case "name": va = a.session.name; vb = b.session.name; break;
                 case "host": va = a.host_name; vb = b.host_name; break;
                 case "uptime": va = new Date(a.session.created); vb = new Date(b.session.created); return (va - vb) * sessionSort.dir;
                 case "status": va = a.session.attached ? 1 : 0; vb = b.session.attached ? 1 : 0; return (vb - va) * sessionSort.dir;
+                case "starred":
+                    va = isSessionStarred(a.host_name, a.session.name) ? 1 : 0;
+                    vb = isSessionStarred(b.host_name, b.session.name) ? 1 : 0;
+                    return (vb - va) * sessionSort.dir;
                 default: va = a.host_name; vb = b.host_name;
             }
             return String(va).localeCompare(String(vb)) * sessionSort.dir;
@@ -459,6 +472,9 @@
             const hasCustom = sessionIcon !== "terminal" || sessionColor !== "default";
             const sTip2 = sessionStatusTip(s.session.attached);
 
+            const starred = isSessionStarred(s.host_name, s.session.name);
+            const starClass = starred ? "star-btn starred" : "star-btn";
+
             return `<tr>
                 <td><span class="status-dot ${statusClass}" title="${ea(sTip2)}"></span></td>
                 <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
@@ -471,6 +487,7 @@
                 <td class="hide-mobile">${age}</td>
                 <td>
                     <div class="action-group">
+                        <button class="${starClass}" onclick="toggleStar('${ea(s.host_name)}','${ea(s.session.name)}')" title="${starred ? 'Unstar' : 'Star'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="${starred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button>
                         <a class="btn btn-sm btn-primary" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">Web</a>
                         <button class="btn btn-sm btn-terminal hide-mobile" onclick="handoff('${ea(s.host_name)}','${ea(s.session.name)}')">Terminal</button>
                         <button class="btn btn-sm btn-danger" onclick="killSession('${ea(s.host_name)}','${ea(s.session.name)}')">End</button>
@@ -1019,6 +1036,12 @@
 
     // Also expose add host from hosts view if needed
     window.showAddHostModal = showAddHostModal;
+
+    // ── Star toggle ──
+    window.toggleStar = function (hostName, sessionName) {
+        toggleSessionStar(hostName, sessionName);
+        renderCurrentView();
+    };
 
     // ── Session icon picker ──
     window.pickSessionIcon = function (btn, hostName, sessionName) {

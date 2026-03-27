@@ -108,7 +108,7 @@
                 <!-- Sessions View -->
                 <div class="view-panel" id="view-sessions">
                     <div class="content-header">
-                        <h2 class="content-title">Unified Session Management Table</h2>
+                        <h2 class="content-title">Sessions</h2>
                         <div class="content-filter">
                             <button class="filter-toggle" id="session-filter-toggle" onclick="toggleFilterBar('session')">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
@@ -140,7 +140,7 @@
                                 <th onclick="sortSessions('name')">Session Name <span class="sort-arrow"></span></th>
                                 <th onclick="sortSessions('host')">Host <span class="sort-arrow"></span></th>
                                 <th class="hide-mobile" onclick="sortSessions('uptime')">Uptime <span class="sort-arrow"></span></th>
-                                <th>Actions</th>
+                                <th onclick="sortSessions('starred')">Actions <span class="sort-arrow"></span></th>
                             </tr>
                         </thead>
                         <tbody id="sessions-body"></tbody>
@@ -150,7 +150,7 @@
                 <!-- Hosts View -->
                 <div class="view-panel" id="view-hosts">
                     <div class="content-header">
-                        <h2 class="content-title">Hosts Management Dashboard</h2>
+                        <h2 class="content-title">Hosts</h2>
                         <div class="content-filter">
                             <button class="filter-toggle" id="host-filter-toggle" onclick="toggleFilterBar('host')">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
