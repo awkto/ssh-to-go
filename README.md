@@ -2,6 +2,11 @@
 
 A web-based terminal session manager that discovers and manages tmux sessions across multiple SSH hosts. Single binary, no agents needed on target machines.
 
+<p align="center">
+  <img src="screenshots/ssh-to-go-dark.png" alt="SSH-to-go dark theme" width="49%">
+  <img src="screenshots/ssh-to-go-lite.png" alt="SSH-to-go light theme" width="49%">
+</p>
+
 - **Web dashboard** — see all sessions across all hosts in one place
 - **Browser terminal** — attach to any session via xterm.js
 - **Session persistence** — tmux sessions live on the target, survive disconnects
