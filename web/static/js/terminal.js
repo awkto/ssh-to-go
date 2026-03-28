@@ -130,6 +130,10 @@ function initTerminal(host, session) {
     // Shared reference to the active WebSocket so button handlers can send data.
     let activeWs = null;
 
+    // Disposables for event listeners that must be cleaned up on reconnect
+    let onDataDisposable = null;
+    let onResizeDisposable = null;
+
     function sendBytes(bytes) {
         if (activeWs && activeWs.readyState === WebSocket.OPEN) {
             activeWs.send(new Uint8Array(bytes));
@@ -187,15 +191,20 @@ function initTerminal(host, session) {
             ws.close();
         };
 
+        // Dispose old listeners before registering new ones to prevent
+        // accumulating handlers across reconnects.
+        if (onDataDisposable) { onDataDisposable.dispose(); }
+        if (onResizeDisposable) { onResizeDisposable.dispose(); }
+
         // Terminal input -> WebSocket
-        term.onData(function (data) {
+        onDataDisposable = term.onData(function (data) {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(new TextEncoder().encode(data));
             }
         });
 
         // Handle resize
-        term.onResize(function (size) {
+        onResizeDisposable = term.onResize(function (size) {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: "resize",

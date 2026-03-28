@@ -55,7 +55,10 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		windowSize = "largest"
 	}
 
-	cmd := fmt.Sprintf("tmux set-option -g mouse on 2>/dev/null; tmux set-option -t %q window-size %s 2>/dev/null; tmux attach-session -t %q || tmux new-session -s %q", sessionName, windowSize, sessionName, sessionName)
+	// Use "new-session -A" which atomically attaches to an existing session
+	// or creates a new one, avoiding the race in "attach || new-session"
+	// where a concurrent reconnect could see "duplicate session".
+	cmd := fmt.Sprintf("tmux set-option -g mouse on 2>/dev/null; tmux new-session -A -s %q \\; set-option window-size %s", sessionName, windowSize)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("start tmux: %w", err)
 	}
@@ -113,8 +116,23 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		}
 	}()
 
-	// Wait for SSH command to finish
-	err = session.Wait()
+	// When the context is canceled (WebSocket dropped), close the SSH
+	// session so tmux gets SIGHUP and the PTY is released. Without this,
+	// abandoned relays leak SSH sessions and PTY devices on the remote
+	// host until it runs out ("open terminal failed: not a terminal").
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- session.Wait()
+	}()
+
+	select {
+	case err = <-waitCh:
+		// SSH command exited normally (user detached/session killed)
+	case <-ctx.Done():
+		// WebSocket dropped — force-close the SSH session to free the PTY
+		session.Close()
+		err = <-waitCh
+	}
 
 	cancel()
 	wg.Wait()
