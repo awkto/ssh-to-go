@@ -98,6 +98,8 @@ function initTerminal(host, session) {
             }
         }
 
+        // Touch swipe scrolling disabled — use scroll overlay buttons instead
+        /*
         container.addEventListener("touchstart", function (e) {
             if (e.touches.length === 1 && !e.target.closest("#scroll-overlay")) {
                 touchY = e.touches[0].clientY;
@@ -119,6 +121,7 @@ function initTerminal(host, session) {
                 if (!scrollRaf) scrollRaf = requestAnimationFrame(flushScroll);
             }
         }, { passive: false });
+        */
 
     })();
 
@@ -279,21 +282,35 @@ function initTerminal(host, session) {
         size = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size));
         term.options.fontSize = size;
         localStorage.setItem("term-font-size", size);
-        document.getElementById("zoom-level").textContent = size;
+        var el1 = document.getElementById("zoom-level");
+        var el2 = document.getElementById("zoom-level-m");
+        if (el1) el1.textContent = size;
+        if (el2) el2.textContent = size;
         fitAddon.fit();
     }
     document.getElementById("zoom-level").textContent = savedFontSize;
     document.getElementById("zoom-in-btn").addEventListener("click", function () {
-        setFontSize(term.options.fontSize + 2);
-        term.focus();
+        setFontSize(term.options.fontSize + 2); term.focus();
     });
     document.getElementById("zoom-out-btn").addEventListener("click", function () {
-        setFontSize(term.options.fontSize - 2);
-        term.focus();
+        setFontSize(term.options.fontSize - 2); term.focus();
     });
     document.getElementById("zoom-reset-btn").addEventListener("click", function () {
-        setFontSize(DEFAULT_FONT_SIZE);
-        term.focus();
+        setFontSize(DEFAULT_FONT_SIZE); term.focus();
+    });
+
+    // Burger menu toggle
+    var burgerBtn = document.getElementById("toolbar-burger");
+    var burgerMenu = document.getElementById("toolbar-menu");
+    burgerBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        burgerMenu.style.display = burgerMenu.style.display === "none" ? "block" : "none";
+    });
+    document.addEventListener("click", function () { burgerMenu.style.display = "none"; });
+    burgerMenu.addEventListener("click", function (e) {
+        if (e.target.closest(".toolbar-menu-item")) {
+            setTimeout(function () { burgerMenu.style.display = "none"; }, 50);
+        }
     });
 
     // Duplicate button — create a new session on the same host in the same working dir

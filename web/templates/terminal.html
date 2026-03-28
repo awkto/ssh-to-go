@@ -42,9 +42,8 @@
         }
         .btn-small:hover { background: #3a3a5a; }
 
-        /* Narrow/mobile: hide Ctrl-C/Ctrl-W/Ctrl-D/Paste, compact dashboard link */
+        /* Narrow/mobile: compact toolbar */
         @media (max-width: 600px) {
-            .toolbar-desktop { display: none !important; }
             .dash-text { display: none; }
             .dash-icon { display: inline; }
             #toolbar { padding: 4px 8px; }
@@ -53,6 +52,32 @@
         @media (min-width: 601px) {
             .dash-icon { display: none; }
         }
+        .toolbar-dropdown {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 4px;
+            background: #1e1e38;
+            border: 1px solid #3a3a5a;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            z-index: 1000;
+            min-width: 130px;
+            overflow: hidden;
+        }
+        .toolbar-menu-item {
+            display: block;
+            width: 100%;
+            padding: 10px 14px;
+            background: none;
+            border: none;
+            color: #e0e0e8;
+            font-size: 13px;
+            text-align: left;
+            cursor: pointer;
+        }
+        .toolbar-menu-item:active { background: #3a3a5a; }
+        .toolbar-menu-divider { height: 1px; background: #3a3a5a; margin: 4px 0; }
 
         #terminal { flex: 1; min-height: 0; overflow: hidden; }
 
@@ -128,18 +153,24 @@
             <span class="status" id="ws-status"></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
-            <button class="btn-small toolbar-desktop" id="ctrl-d-btn" title="Send Ctrl-D (EOF)">Ctrl-D</button>
-            <button class="btn-small toolbar-desktop" id="ctrl-c-btn" title="Send Ctrl-C (interrupt)">Ctrl-C</button>
-            <button class="btn-small toolbar-desktop" id="ctrl-w-btn" title="Send Ctrl-W (delete word)">Ctrl-W</button>
-            <button class="btn-small toolbar-desktop" id="paste-btn" title="Paste from clipboard">Paste</button>
-            <button class="btn-small" id="rename-btn" title="Rename this session">Rename</button>
-            <button class="btn-small toolbar-desktop" id="duplicate-btn" title="Open duplicate session in new tab">Duplicate</button>
-            <button class="btn-small" id="handoff-btn" title="Copy SSH command">Handoff</button>
-            <span style="display:flex;gap:2px;align-items:center;margin-left:4px;border-left:1px solid #3a3a5a;padding-left:8px">
+            <span style="display:flex;gap:2px;align-items:center;">
                 <button class="btn-small" id="zoom-out-btn" title="Decrease font size">A-</button>
                 <button class="btn-small" id="zoom-reset-btn" title="Reset font size" style="min-width:28px"><span id="zoom-level">14</span></button>
                 <button class="btn-small" id="zoom-in-btn" title="Increase font size">A+</button>
             </span>
+            <div style="position:relative;">
+                <button class="btn-small" id="toolbar-burger" title="More actions" style="font-size:18px;line-height:1;padding:3px 12px;">&#8942;</button>
+                <div id="toolbar-menu" class="toolbar-dropdown" style="display:none;">
+                    <button class="toolbar-menu-item" id="paste-btn">Paste</button>
+                    <button class="toolbar-menu-item" id="rename-btn">Rename</button>
+                    <button class="toolbar-menu-item" id="duplicate-btn">Duplicate</button>
+                    <button class="toolbar-menu-item" id="handoff-btn">Handoff</button>
+                    <div class="toolbar-menu-divider"></div>
+                    <button class="toolbar-menu-item" id="ctrl-c-btn">Send Ctrl-C</button>
+                    <button class="toolbar-menu-item" id="ctrl-d-btn">Send Ctrl-D</button>
+                    <button class="toolbar-menu-item" id="ctrl-w-btn">Send Ctrl-W</button>
+                </div>
+            </div>
         </div>
     </div>
     <div id="terminal" style="position:relative;">
