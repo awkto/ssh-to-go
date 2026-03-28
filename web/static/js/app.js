@@ -374,10 +374,13 @@
             </div>
         `;
 
-        // Recent sessions (last 10)
-        const recent = sessions.slice().sort((a, b) =>
-            new Date(b.session.created) - new Date(a.session.created)
-        ).slice(0, 10);
+        // Recent sessions (last 10, starred first)
+        const recent = sessions.slice().sort((a, b) => {
+            const sa = isSessionStarred(a.host_name, a.session.name) ? 1 : 0;
+            const sb = isSessionStarred(b.host_name, b.session.name) ? 1 : 0;
+            if (sa !== sb) return sb - sa;
+            return new Date(b.session.created) - new Date(a.session.created);
+        }).slice(0, 10);
 
         const body = document.getElementById("dashboard-recent-body");
         if (recent.length === 0) {
@@ -395,13 +398,16 @@
             const sessionColor = getSessionIconColor(s.host_name, s.session.name) || hostColor;
             const hasCustom = sessionIcon !== "terminal" || sessionColor !== "default";
             const sTip = sessionStatusTip(s.session.attached);
+            const starred = isSessionStarred(s.host_name, s.session.name);
+            const starClass = starred ? "star-btn starred" : "star-btn";
             return `<tr>
                 <td><span class="status-dot ${statusClass}" title="${ea(sTip)}"></span></td>
                 <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
-                <td>${esc(s.host_name)}</td>
+                <td class="hide-mobile">${esc(s.host_name)}</td>
                 <td class="hide-mobile">${age}</td>
                 <td>
                     <div class="action-group">
+                        <button class="${starClass}" onclick="toggleStar('${ea(s.host_name)}','${ea(s.session.name)}')" title="${starred ? 'Unstar' : 'Star'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="${starred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button>
                         <a class="btn btn-sm btn-primary" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">Web</a>
                         <button class="btn btn-sm btn-terminal hide-mobile" onclick="handoff('${ea(s.host_name)}','${ea(s.session.name)}')">Terminal</button>
                         <button class="btn btn-sm btn-danger" onclick="killSession('${ea(s.host_name)}','${ea(s.session.name)}')">End</button>
@@ -478,7 +484,7 @@
             return `<tr>
                 <td><span class="status-dot ${statusClass}" title="${ea(sTip2)}"></span></td>
                 <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
-                <td>
+                <td class="hide-mobile">
                     <div class="host-cell">
                         <span class="host-fqdn">${esc(hostAddr || s.host_name)}</span>
                         <span class="host-ip">${showName ? esc(showName) : ''}</span>
