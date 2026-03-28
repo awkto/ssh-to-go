@@ -1,7 +1,12 @@
 function initTerminal(host, session) {
+    const DEFAULT_FONT_SIZE = 14;
+    const MIN_FONT_SIZE = 8;
+    const MAX_FONT_SIZE = 32;
+    const savedFontSize = parseInt(localStorage.getItem("term-font-size"), 10) || DEFAULT_FONT_SIZE;
+
     const term = new Terminal({
         cursorBlink: true,
-        fontSize: 14,
+        fontSize: savedFontSize,
         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
         rightClickSelectsWord: true,
         scrollback: 5000,
@@ -267,6 +272,28 @@ function initTerminal(host, session) {
             }
             term.focus();
         }
+    });
+
+    // Zoom controls
+    function setFontSize(size) {
+        size = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size));
+        term.options.fontSize = size;
+        localStorage.setItem("term-font-size", size);
+        document.getElementById("zoom-level").textContent = size;
+        fitAddon.fit();
+    }
+    document.getElementById("zoom-level").textContent = savedFontSize;
+    document.getElementById("zoom-in-btn").addEventListener("click", function () {
+        setFontSize(term.options.fontSize + 2);
+        term.focus();
+    });
+    document.getElementById("zoom-out-btn").addEventListener("click", function () {
+        setFontSize(term.options.fontSize - 2);
+        term.focus();
+    });
+    document.getElementById("zoom-reset-btn").addEventListener("click", function () {
+        setFontSize(DEFAULT_FONT_SIZE);
+        term.focus();
     });
 
     // Duplicate button — create a new session on the same host in the same working dir
