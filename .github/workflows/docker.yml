@@ -39,6 +39,7 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ steps.meta.outputs.tag }}
           tags: |
             awkto/ssh-to-go:${{ steps.meta.outputs.tag }}
 
@@ -49,6 +50,7 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ steps.meta.outputs.tag }}
           tags: |
             awkto/ssh-to-go:${{ steps.meta.outputs.tag }}
             awkto/ssh-to-go:latest
