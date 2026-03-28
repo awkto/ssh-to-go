@@ -203,6 +203,24 @@
     // ── View switching ──
     window.switchView = function (view) {
         currentView = view;
+        // Reset filters when navigating
+        currentFilter = "all";
+        document.querySelectorAll(".filter-item").forEach(el => {
+            el.classList.toggle("active", el.dataset.filter === "all");
+        });
+        // Reset view-specific filters
+        const sf = document.getElementById("session-filter");
+        const shf = document.getElementById("session-host-select");
+        const ssf = document.getElementById("session-status-select");
+        const hf = document.getElementById("host-filter");
+        const hsf = document.getElementById("host-status-select");
+        const hssf = document.getElementById("host-sessions-select");
+        if (sf) sf.value = "";
+        if (shf) shf.value = "";
+        if (ssf) ssf.value = "";
+        if (hf) hf.value = "";
+        if (hsf) hsf.value = "";
+        if (hssf) hssf.value = "";
         activateView();
         renderCurrentView();
         updateURL();
@@ -374,8 +392,14 @@
             </div>
         `;
 
-        // Recent sessions (last 10, starred first)
-        const recent = sessions.slice().sort((a, b) => {
+        // Recent sessions (last 10, starred first, filtered by sidebar filter)
+        let dashSessions = sessions.slice();
+        if (currentFilter === "active") {
+            dashSessions = dashSessions.filter(s => s.session.attached);
+        } else if (currentFilter === "favorites") {
+            dashSessions = dashSessions.filter(s => isSessionStarred(s.host_name, s.session.name));
+        }
+        const recent = dashSessions.sort((a, b) => {
             const sa = isSessionStarred(a.host_name, a.session.name) ? 1 : 0;
             const sb = isSessionStarred(b.host_name, b.session.name) ? 1 : 0;
             if (sa !== sb) return sb - sa;

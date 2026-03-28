@@ -690,6 +690,7 @@ body {
 
 /* ─── Hidden utility ─── */
 .hidden { display: none !important; }
+.show-mobile { display: none; }
 
 /* ─── Session link ─── */
 .session-link {
@@ -971,6 +972,7 @@ header h1 { font-size: 24px; font-weight: 600; color: #fff; }
         display: block;
     }
     .hide-mobile { display: none !important; }
+    .show-mobile { display: inline !important; }
     .content { padding: 16px; }
     .content-header { flex-wrap: wrap; }
     .data-table { font-size: 13px; }
