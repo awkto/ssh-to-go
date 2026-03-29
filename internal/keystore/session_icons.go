@@ -12,6 +12,7 @@ type SessionIcon struct {
 	Icon    string `json:"icon,omitempty"`
 	Color   string `json:"color,omitempty"`
 	Starred bool   `json:"starred,omitempty"`
+	Theme   string `json:"theme,omitempty"`
 }
 
 // SessionIconStore persists session icon/color overrides to a JSON file.
@@ -75,7 +76,7 @@ func (s *SessionIconStore) Set(host, session string, icon SessionIcon) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := sessionKey(host, session)
-	if icon.Icon == "" && icon.Color == "" {
+	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && !icon.Starred {
 		delete(s.icons, key)
 	} else {
 		s.icons[key] = icon

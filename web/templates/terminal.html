@@ -42,6 +42,20 @@
         }
         .btn-small:hover { background: #3a3a5a; }
 
+        /* Host badge — only visible on wide screens */
+        .host-badge {
+            display: none;
+            font-style: italic;
+            color: #6a6a8a;
+            font-size: 12px;
+            margin-left: 6px;
+        }
+        .host-badge::before { content: "["; }
+        .host-badge::after  { content: "]"; }
+        @media (min-width: 1100px) {
+            .host-badge { display: inline; }
+        }
+
         /* Narrow/mobile: compact toolbar */
         @media (max-width: 600px) {
             .dash-text { display: none; }
@@ -78,6 +92,44 @@
         }
         .toolbar-menu-item:active { background: #3a3a5a; }
         .toolbar-menu-divider { height: 1px; background: #3a3a5a; margin: 4px 0; }
+
+        /* Theme picker */
+        .theme-dropdown {
+            right: auto; left: 0;
+            max-height: 360px;
+            overflow-y: auto;
+            min-width: 200px;
+            padding: 4px 0;
+        }
+        .theme-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 7px 12px;
+            background: none;
+            border: none;
+            color: #e0e0e8;
+            font-size: 13px;
+            text-align: left;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .theme-option:hover { background: #3a3a5a; }
+        .theme-option.active { background: #2a2a5a; }
+        .theme-option.active .theme-name { font-weight: 600; }
+        .theme-swatches {
+            display: flex;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+        .theme-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
 
         #terminal { flex: 1; min-height: 0; overflow: hidden; }
 
@@ -149,10 +201,14 @@
     <div id="toolbar">
         <div class="info">
             <a href="/"><span class="dash-icon">&#9664;</span><span class="dash-text">← dashboard</span></a>
-            <span id="session-label">{{.Host}} / {{.Session}}</span>
+            <span id="session-label">{{.Host}} / {{.Session}}</span><span class="host-badge" id="host-badge">{{.Host}}</span>
             <span class="status" id="ws-status"></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
+            <div style="position:relative;">
+                <button class="btn-small" id="theme-btn" title="Terminal theme"><span id="theme-label">Theme</span></button>
+                <div id="theme-dropdown" class="toolbar-dropdown theme-dropdown" style="display:none;"></div>
+            </div>
             <span style="display:flex;gap:2px;align-items:center;">
                 <button class="btn-small" id="zoom-out-btn" title="Decrease font size">A-</button>
                 <button class="btn-small" id="zoom-reset-btn" title="Reset font size" style="min-width:28px"><span id="zoom-level">14</span></button>

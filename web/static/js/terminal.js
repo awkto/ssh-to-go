@@ -1,8 +1,162 @@
+// ── Terminal Themes ──
+// Well-known terminal color schemes with full ANSI 16-color palettes.
+var TERMINAL_THEMES = {
+    "default": {
+        name: "Default",
+        theme: {
+            background: "#1a1a2e", foreground: "#e0e0e8", cursor: "#7c83ff",
+            selectionBackground: "#3a3a5a",
+            black: "#1a1a2e", red: "#ff5555", green: "#50fa7b", yellow: "#f1fa8c",
+            blue: "#7c83ff", magenta: "#ff79c6", cyan: "#8be9fd", white: "#e0e0e8",
+            brightBlack: "#4a4a6a", brightRed: "#ff6e6e", brightGreen: "#69ff94",
+            brightYellow: "#ffffa5", brightBlue: "#9a9fff", brightMagenta: "#ff92d0",
+            brightCyan: "#a4edff", brightWhite: "#ffffff",
+        },
+    },
+    "dracula": {
+        name: "Dracula",
+        theme: {
+            background: "#282a36", foreground: "#f8f8f2", cursor: "#f8f8f2",
+            selectionBackground: "#44475a",
+            black: "#21222c", red: "#ff5555", green: "#50fa7b", yellow: "#f1fa8c",
+            blue: "#bd93f9", magenta: "#ff79c6", cyan: "#8be9fd", white: "#f8f8f2",
+            brightBlack: "#6272a4", brightRed: "#ff6e6e", brightGreen: "#69ff94",
+            brightYellow: "#ffffa5", brightBlue: "#d6acff", brightMagenta: "#ff92df",
+            brightCyan: "#a4ffff", brightWhite: "#ffffff",
+        },
+    },
+    "monokai": {
+        name: "Monokai",
+        theme: {
+            background: "#272822", foreground: "#f8f8f2", cursor: "#f8f8f0",
+            selectionBackground: "#49483e",
+            black: "#272822", red: "#f92672", green: "#a6e22e", yellow: "#f4bf75",
+            blue: "#66d9ef", magenta: "#ae81ff", cyan: "#a1efe4", white: "#f8f8f2",
+            brightBlack: "#75715e", brightRed: "#f92672", brightGreen: "#a6e22e",
+            brightYellow: "#f4bf75", brightBlue: "#66d9ef", brightMagenta: "#ae81ff",
+            brightCyan: "#a1efe4", brightWhite: "#f9f8f5",
+        },
+    },
+    "nord": {
+        name: "Nord",
+        theme: {
+            background: "#2e3440", foreground: "#d8dee9", cursor: "#d8dee9",
+            selectionBackground: "#434c5e",
+            black: "#3b4252", red: "#bf616a", green: "#a3be8c", yellow: "#ebcb8b",
+            blue: "#81a1c1", magenta: "#b48ead", cyan: "#88c0d0", white: "#e5e9f0",
+            brightBlack: "#4c566a", brightRed: "#bf616a", brightGreen: "#a3be8c",
+            brightYellow: "#ebcb8b", brightBlue: "#81a1c1", brightMagenta: "#b48ead",
+            brightCyan: "#8fbcbb", brightWhite: "#eceff4",
+        },
+    },
+    "solarized-dark": {
+        name: "Solarized Dark",
+        theme: {
+            background: "#002b36", foreground: "#839496", cursor: "#839496",
+            selectionBackground: "#073642",
+            black: "#073642", red: "#dc322f", green: "#859900", yellow: "#b58900",
+            blue: "#268bd2", magenta: "#d33682", cyan: "#2aa198", white: "#eee8d5",
+            brightBlack: "#586e75", brightRed: "#cb4b16", brightGreen: "#586e75",
+            brightYellow: "#657b83", brightBlue: "#839496", brightMagenta: "#6c71c4",
+            brightCyan: "#93a1a1", brightWhite: "#fdf6e3",
+        },
+    },
+    "solarized-light": {
+        name: "Solarized Light",
+        theme: {
+            background: "#fdf6e3", foreground: "#657b83", cursor: "#586e75",
+            selectionBackground: "#eee8d5",
+            black: "#073642", red: "#dc322f", green: "#859900", yellow: "#b58900",
+            blue: "#268bd2", magenta: "#d33682", cyan: "#2aa198", white: "#eee8d5",
+            brightBlack: "#002b36", brightRed: "#cb4b16", brightGreen: "#586e75",
+            brightYellow: "#657b83", brightBlue: "#839496", brightMagenta: "#6c71c4",
+            brightCyan: "#93a1a1", brightWhite: "#fdf6e3",
+        },
+    },
+    "one-dark": {
+        name: "One Dark",
+        theme: {
+            background: "#282c34", foreground: "#abb2bf", cursor: "#528bff",
+            selectionBackground: "#3e4451",
+            black: "#282c34", red: "#e06c75", green: "#98c379", yellow: "#e5c07b",
+            blue: "#61afef", magenta: "#c678dd", cyan: "#56b6c2", white: "#abb2bf",
+            brightBlack: "#5c6370", brightRed: "#e06c75", brightGreen: "#98c379",
+            brightYellow: "#e5c07b", brightBlue: "#61afef", brightMagenta: "#c678dd",
+            brightCyan: "#56b6c2", brightWhite: "#ffffff",
+        },
+    },
+    "gruvbox-dark": {
+        name: "Gruvbox Dark",
+        theme: {
+            background: "#282828", foreground: "#ebdbb2", cursor: "#ebdbb2",
+            selectionBackground: "#3c3836",
+            black: "#282828", red: "#cc241d", green: "#98971a", yellow: "#d79921",
+            blue: "#458588", magenta: "#b16286", cyan: "#689d6a", white: "#a89984",
+            brightBlack: "#928374", brightRed: "#fb4934", brightGreen: "#b8bb26",
+            brightYellow: "#fabd2f", brightBlue: "#83a598", brightMagenta: "#d3869b",
+            brightCyan: "#8ec07c", brightWhite: "#ebdbb2",
+        },
+    },
+    "tokyo-night": {
+        name: "Tokyo Night",
+        theme: {
+            background: "#1a1b26", foreground: "#a9b1d6", cursor: "#c0caf5",
+            selectionBackground: "#33467c",
+            black: "#15161e", red: "#f7768e", green: "#9ece6a", yellow: "#e0af68",
+            blue: "#7aa2f7", magenta: "#bb9af7", cyan: "#7dcfff", white: "#a9b1d6",
+            brightBlack: "#414868", brightRed: "#f7768e", brightGreen: "#9ece6a",
+            brightYellow: "#e0af68", brightBlue: "#7aa2f7", brightMagenta: "#bb9af7",
+            brightCyan: "#7dcfff", brightWhite: "#c0caf5",
+        },
+    },
+    "catppuccin-mocha": {
+        name: "Catppuccin Mocha",
+        theme: {
+            background: "#1e1e2e", foreground: "#cdd6f4", cursor: "#f5e0dc",
+            selectionBackground: "#45475a",
+            black: "#45475a", red: "#f38ba8", green: "#a6e3a1", yellow: "#f9e2af",
+            blue: "#89b4fa", magenta: "#f5c2e7", cyan: "#94e2d5", white: "#bac2de",
+            brightBlack: "#585b70", brightRed: "#f38ba8", brightGreen: "#a6e3a1",
+            brightYellow: "#f9e2af", brightBlue: "#89b4fa", brightMagenta: "#f5c2e7",
+            brightCyan: "#94e2d5", brightWhite: "#a6adc8",
+        },
+    },
+    "rose-pine": {
+        name: "Rose Pine",
+        theme: {
+            background: "#191724", foreground: "#e0def4", cursor: "#524f67",
+            selectionBackground: "#2a283e",
+            black: "#26233a", red: "#eb6f92", green: "#31748f", yellow: "#f6c177",
+            blue: "#9ccfd8", magenta: "#c4a7e7", cyan: "#ebbcba", white: "#e0def4",
+            brightBlack: "#6e6a86", brightRed: "#eb6f92", brightGreen: "#31748f",
+            brightYellow: "#f6c177", brightBlue: "#9ccfd8", brightMagenta: "#c4a7e7",
+            brightCyan: "#ebbcba", brightWhite: "#e0def4",
+        },
+    },
+    "github-dark": {
+        name: "GitHub Dark",
+        theme: {
+            background: "#0d1117", foreground: "#c9d1d9", cursor: "#c9d1d9",
+            selectionBackground: "#264f78",
+            black: "#484f58", red: "#ff7b72", green: "#3fb950", yellow: "#d29922",
+            blue: "#58a6ff", magenta: "#bc8cff", cyan: "#39c5cf", white: "#b1bac4",
+            brightBlack: "#6e7681", brightRed: "#ffa198", brightGreen: "#56d364",
+            brightYellow: "#e3b341", brightBlue: "#79c0ff", brightMagenta: "#d2a8ff",
+            brightCyan: "#56d4dd", brightWhite: "#f0f6fc",
+        },
+    },
+};
+
 function initTerminal(host, session) {
     const DEFAULT_FONT_SIZE = 14;
     const MIN_FONT_SIZE = 8;
     const MAX_FONT_SIZE = 32;
     const savedFontSize = parseInt(localStorage.getItem("term-font-size"), 10) || DEFAULT_FONT_SIZE;
+
+    // Determine initial theme — check localStorage for a session-specific override,
+    // then fall back to "default". The server-saved theme is applied asynchronously.
+    var currentThemeId = localStorage.getItem("term-theme:" + host + ":" + session) || "default";
+    var initialTheme = (TERMINAL_THEMES[currentThemeId] || TERMINAL_THEMES["default"]).theme;
 
     const term = new Terminal({
         cursorBlink: true,
@@ -10,12 +164,7 @@ function initTerminal(host, session) {
         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
         rightClickSelectsWord: true,
         scrollback: 5000,
-        theme: {
-            background: "#1a1a2e",
-            foreground: "#e0e0e8",
-            cursor: "#7c83ff",
-            selectionBackground: "#3a3a5a",
-        },
+        theme: initialTheme,
     });
 
     const fitAddon = new FitAddon.FitAddon();
@@ -307,6 +456,121 @@ function initTerminal(host, session) {
     document.getElementById("zoom-reset-btn").addEventListener("click", function () {
         setFontSize(DEFAULT_FONT_SIZE); term.focus();
     });
+
+    // ── Theme switching ──
+    function applyTheme(themeId) {
+        var entry = TERMINAL_THEMES[themeId] || TERMINAL_THEMES["default"];
+        term.options.theme = entry.theme;
+        currentThemeId = themeId;
+        // Sync page background & toolbar with terminal background
+        document.body.style.background = entry.theme.background;
+        var toolbar = document.getElementById("toolbar");
+        if (toolbar) {
+            // Darken the background slightly for toolbar contrast
+            toolbar.style.background = darkenColor(entry.theme.background, 0.15);
+        }
+        var mobileBar = document.getElementById("mobile-bar");
+        if (mobileBar) {
+            mobileBar.style.background = darkenColor(entry.theme.background, 0.15);
+        }
+        // Update the theme label in toolbar
+        var themeLabel = document.getElementById("theme-label");
+        if (themeLabel) themeLabel.textContent = entry.name;
+        // Persist locally for instant load next time
+        localStorage.setItem("term-theme:" + host + ":" + session, themeId);
+    }
+
+    function darkenColor(hex, amount) {
+        hex = hex.replace("#", "");
+        var r = parseInt(hex.substring(0, 2), 16);
+        var g = parseInt(hex.substring(2, 4), 16);
+        var b = parseInt(hex.substring(4, 6), 16);
+        r = Math.max(0, Math.round(r * (1 - amount)));
+        g = Math.max(0, Math.round(g * (1 - amount)));
+        b = Math.max(0, Math.round(b * (1 - amount)));
+        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+
+    function saveThemeToServer(themeId) {
+        // Fetch existing session icon data first, then merge theme
+        fetch("/api/session-icons").then(function (r) { return r.json(); }).then(function (all) {
+            var key = host + ":" + session;
+            var existing = all[key] || {};
+            existing.theme = themeId;
+            return fetch("/api/session-icons/" + encodeURIComponent(host) + "/" + encodeURIComponent(session), {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(existing),
+            });
+        }).catch(function () {});
+    }
+
+    // Apply initial theme (sets page background etc.)
+    applyTheme(currentThemeId);
+
+    // Theme picker dropdown
+    (function () {
+        var themeBtn = document.getElementById("theme-btn");
+        var themeDropdown = document.getElementById("theme-dropdown");
+        if (!themeBtn || !themeDropdown) return;
+
+        // Populate theme options
+        var html = "";
+        Object.keys(TERMINAL_THEMES).forEach(function (id) {
+            var t = TERMINAL_THEMES[id];
+            var colors = [t.theme.background, t.theme.foreground, t.theme.red || "#f00",
+                t.theme.green || "#0f0", t.theme.blue || "#00f", t.theme.yellow || "#ff0"];
+            html += '<button class="theme-option' + (id === currentThemeId ? ' active' : '') + '" data-theme-id="' + id + '">';
+            html += '<span class="theme-swatches">';
+            colors.forEach(function (c) {
+                html += '<span class="theme-swatch" style="background:' + c + '"></span>';
+            });
+            html += '</span>';
+            html += '<span class="theme-name">' + t.name + '</span>';
+            html += '</button>';
+        });
+        themeDropdown.innerHTML = html;
+
+        themeBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var isOpen = themeDropdown.style.display !== "none";
+            themeDropdown.style.display = isOpen ? "none" : "block";
+        });
+
+        themeDropdown.addEventListener("click", function (e) {
+            var opt = e.target.closest(".theme-option");
+            if (!opt) return;
+            var id = opt.dataset.themeId;
+            applyTheme(id);
+            saveThemeToServer(id);
+            // Update active state
+            themeDropdown.querySelectorAll(".theme-option").forEach(function (el) {
+                el.classList.toggle("active", el.dataset.themeId === id);
+            });
+            themeDropdown.style.display = "none";
+            term.focus();
+        });
+
+        document.addEventListener("click", function () { themeDropdown.style.display = "none"; });
+    })();
+
+    // Load server-saved theme (overrides localStorage if different)
+    (function () {
+        fetch("/api/session-icons").then(function (r) { return r.json(); }).then(function (all) {
+            var key = host + ":" + session;
+            var data = all[key];
+            if (data && data.theme && data.theme !== currentThemeId && TERMINAL_THEMES[data.theme]) {
+                applyTheme(data.theme);
+                // Update active state in dropdown
+                var dd = document.getElementById("theme-dropdown");
+                if (dd) {
+                    dd.querySelectorAll(".theme-option").forEach(function (el) {
+                        el.classList.toggle("active", el.dataset.themeId === data.theme);
+                    });
+                }
+            }
+        }).catch(function () {});
+    })();
 
     // Burger menu toggle
     var burgerBtn = document.getElementById("toolbar-burger");
