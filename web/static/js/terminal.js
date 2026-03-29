@@ -217,6 +217,66 @@ var TERMINAL_THEMES = {
             brightCyan: "#0f4b6e", brightWhite: "#343b58",
         },
     },
+    "sepia": {
+        name: "Sepia",
+        theme: {
+            background: "#f4ecd8", foreground: "#5b4636", cursor: "#5b4636",
+            selectionBackground: "#d6c9a8",
+            black: "#5b4636", red: "#a03b2e", green: "#5a7e3e", yellow: "#9b7721",
+            blue: "#4a6fa5", magenta: "#8b5e83", cyan: "#3e8a75", white: "#c4b59a",
+            brightBlack: "#7a6652", brightRed: "#c05040", brightGreen: "#6f9a4e",
+            brightYellow: "#b5912e", brightBlue: "#5c85bf", brightMagenta: "#a57199",
+            brightCyan: "#4ea38c", brightWhite: "#f4ecd8",
+        },
+    },
+    "everforest-light": {
+        name: "Everforest Light",
+        theme: {
+            background: "#fdf6e3", foreground: "#5c6a72", cursor: "#5c6a72",
+            selectionBackground: "#e0dcc7",
+            black: "#5c6a72", red: "#f85552", green: "#8da101", yellow: "#dfa000",
+            blue: "#3a94c5", magenta: "#df69ba", cyan: "#35a77c", white: "#ddd8be",
+            brightBlack: "#708089", brightRed: "#f85552", brightGreen: "#8da101",
+            brightYellow: "#dfa000", brightBlue: "#3a94c5", brightMagenta: "#df69ba",
+            brightCyan: "#35a77c", brightWhite: "#fdf6e3",
+        },
+    },
+    "kanagawa-lotus": {
+        name: "Kanagawa Lotus",
+        theme: {
+            background: "#f2ecbc", foreground: "#545464", cursor: "#43436c",
+            selectionBackground: "#d5cea3",
+            black: "#545464", red: "#c84053", green: "#6f894e", yellow: "#a07a30",
+            blue: "#4d699b", magenta: "#b35b79", cyan: "#597b75", white: "#dcd7ba",
+            brightBlack: "#706e61", brightRed: "#d7474b", brightGreen: "#87a764",
+            brightYellow: "#c4a83f", brightBlue: "#6693bf", brightMagenta: "#c87b9d",
+            brightCyan: "#6e9a8d", brightWhite: "#f2ecbc",
+        },
+    },
+    "ayu-light": {
+        name: "Ayu Light",
+        theme: {
+            background: "#fafafa", foreground: "#575f66", cursor: "#ff6a00",
+            selectionBackground: "#d1e4f4",
+            black: "#000000", red: "#f51818", green: "#86b300", yellow: "#f2ae49",
+            blue: "#36a3d9", magenta: "#a37acc", cyan: "#4dbf99", white: "#828c99",
+            brightBlack: "#575f66", brightRed: "#f07171", brightGreen: "#99c425",
+            brightYellow: "#f2ae49", brightBlue: "#55b4d4", brightMagenta: "#c47ade",
+            brightCyan: "#6cbf8b", brightWhite: "#fafafa",
+        },
+    },
+    "alabaster": {
+        name: "Alabaster",
+        theme: {
+            background: "#f7f7f7", foreground: "#434343", cursor: "#007acc",
+            selectionBackground: "#bfdbfe",
+            black: "#000000", red: "#aa3731", green: "#448c27", yellow: "#cb9000",
+            blue: "#325cc0", magenta: "#7a3e9d", cyan: "#0083b2", white: "#bbbbbb",
+            brightBlack: "#777777", brightRed: "#f05050", brightGreen: "#60cb00",
+            brightYellow: "#ffbc5d", brightBlue: "#007acc", brightMagenta: "#e64ce6",
+            brightCyan: "#00aacb", brightWhite: "#f7f7f7",
+        },
+    },
 };
 
 function initTerminal(host, session) {
