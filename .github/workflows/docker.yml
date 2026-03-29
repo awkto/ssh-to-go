@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v1.6.3)'
+        required: true
+      multiarch:
+        description: 'Build ARM64 too'
+        type: boolean
+        default: true
 
 jobs:
   docker:
@@ -18,12 +27,22 @@ jobs:
       - name: Extract tag metadata
         id: meta
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           if [[ "$TAG" == *-beta* ]]; then
             echo "is_beta=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_beta=false" >> "$GITHUB_OUTPUT"
+          fi
+          # ARM64 only on manual trigger with multiarch enabled
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.multiarch }}" == "true" ]]; then
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+          else
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Login to Docker Hub
@@ -38,7 +57,7 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.meta.outputs.platforms }}
           build-args: VERSION=${{ steps.meta.outputs.tag }}
           tags: |
             awkto/ssh-to-go:${{ steps.meta.outputs.tag }}
@@ -49,7 +68,7 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.meta.outputs.platforms }}
           build-args: VERSION=${{ steps.meta.outputs.tag }}
           tags: |
             awkto/ssh-to-go:${{ steps.meta.outputs.tag }}
