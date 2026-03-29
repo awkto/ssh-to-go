@@ -145,6 +145,78 @@ var TERMINAL_THEMES = {
             brightCyan: "#56d4dd", brightWhite: "#f0f6fc",
         },
     },
+    "github-light": {
+        name: "GitHub Light",
+        theme: {
+            background: "#ffffff", foreground: "#24292f", cursor: "#044289",
+            selectionBackground: "#accef7",
+            black: "#24292f", red: "#cf222e", green: "#116329", yellow: "#4d2d00",
+            blue: "#0969da", magenta: "#8250df", cyan: "#1b7c83", white: "#6e7781",
+            brightBlack: "#57606a", brightRed: "#a40e26", brightGreen: "#1a7f37",
+            brightYellow: "#633c01", brightBlue: "#218bff", brightMagenta: "#a475f9",
+            brightCyan: "#3192aa", brightWhite: "#8c959f",
+        },
+    },
+    "one-light": {
+        name: "One Light",
+        theme: {
+            background: "#fafafa", foreground: "#383a42", cursor: "#526fff",
+            selectionBackground: "#e5e5e6",
+            black: "#383a42", red: "#e45649", green: "#50a14f", yellow: "#c18401",
+            blue: "#4078f2", magenta: "#a626a4", cyan: "#0184bc", white: "#a0a1a7",
+            brightBlack: "#696c77", brightRed: "#e06c75", brightGreen: "#98c379",
+            brightYellow: "#e5c07b", brightBlue: "#61afef", brightMagenta: "#c678dd",
+            brightCyan: "#56b6c2", brightWhite: "#ffffff",
+        },
+    },
+    "catppuccin-latte": {
+        name: "Catppuccin Latte",
+        theme: {
+            background: "#eff1f5", foreground: "#4c4f69", cursor: "#dc8a78",
+            selectionBackground: "#ccd0da",
+            black: "#5c5f77", red: "#d20f39", green: "#40a02b", yellow: "#df8e1d",
+            blue: "#1e66f5", magenta: "#ea76cb", cyan: "#179299", white: "#acb0be",
+            brightBlack: "#6c6f85", brightRed: "#d20f39", brightGreen: "#40a02b",
+            brightYellow: "#df8e1d", brightBlue: "#1e66f5", brightMagenta: "#ea76cb",
+            brightCyan: "#179299", brightWhite: "#bcc0cc",
+        },
+    },
+    "gruvbox-light": {
+        name: "Gruvbox Light",
+        theme: {
+            background: "#fbf1c7", foreground: "#3c3836", cursor: "#3c3836",
+            selectionBackground: "#ebdbb2",
+            black: "#fbf1c7", red: "#cc241d", green: "#98971a", yellow: "#d79921",
+            blue: "#458588", magenta: "#b16286", cyan: "#689d6a", white: "#7c6f64",
+            brightBlack: "#928374", brightRed: "#9d0006", brightGreen: "#79740e",
+            brightYellow: "#b57614", brightBlue: "#076678", brightMagenta: "#8f3f71",
+            brightCyan: "#427b58", brightWhite: "#3c3836",
+        },
+    },
+    "rose-pine-dawn": {
+        name: "Rose Pine Dawn",
+        theme: {
+            background: "#faf4ed", foreground: "#575279", cursor: "#9893a5",
+            selectionBackground: "#dfdad9",
+            black: "#f2e9e1", red: "#b4637a", green: "#286983", yellow: "#ea9d34",
+            blue: "#56949f", magenta: "#907aa9", cyan: "#d7827e", white: "#575279",
+            brightBlack: "#9893a5", brightRed: "#b4637a", brightGreen: "#286983",
+            brightYellow: "#ea9d34", brightBlue: "#56949f", brightMagenta: "#907aa9",
+            brightCyan: "#d7827e", brightWhite: "#575279",
+        },
+    },
+    "tokyo-night-light": {
+        name: "Tokyo Night Light",
+        theme: {
+            background: "#d5d6db", foreground: "#343b58", cursor: "#343b58",
+            selectionBackground: "#c4c8da",
+            black: "#0f0f14", red: "#8c4351", green: "#33635c", yellow: "#8f5e15",
+            blue: "#34548a", magenta: "#5a4a78", cyan: "#0f4b6e", white: "#343b58",
+            brightBlack: "#9699a3", brightRed: "#8c4351", brightGreen: "#33635c",
+            brightYellow: "#8f5e15", brightBlue: "#34548a", brightMagenta: "#5a4a78",
+            brightCyan: "#0f4b6e", brightWhite: "#343b58",
+        },
+    },
 };
 
 function initTerminal(host, session) {
