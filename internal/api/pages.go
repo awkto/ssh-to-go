@@ -44,10 +44,14 @@ type terminalData struct {
 }
 
 func (h *Handlers) TerminalPage(w http.ResponseWriter, r *http.Request) {
+	host := r.PathValue("host")
+	session := r.PathValue("session")
 	data := terminalData{
-		Host:    r.PathValue("host"),
-		Session: r.PathValue("session"),
+		Host:    host,
+		Session: session,
 	}
+	// Record last-accessed timestamp (best-effort).
+	_ = h.SessionIcons.Touch(host, session)
 	if err := terminalTmpl.Execute(w, data); err != nil {
 		log.Printf("render terminal: %v", err)
 		http.Error(w, "render error", http.StatusInternalServerError)

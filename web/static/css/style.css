@@ -954,6 +954,12 @@ header h1 { font-size: 24px; font-weight: 600; color: #fff; }
     z-index: 45;
 }
 
+/* ─── Wide-only columns (hidden by default, shown on wide screens) ─── */
+.hide-wide { display: none !important; }
+@media (min-width: 1200px) {
+    .hide-wide { display: table-cell !important; }
+}
+
 /* ─── Mobile responsive ─── */
 @media (max-width: 768px) {
     .sidebar {

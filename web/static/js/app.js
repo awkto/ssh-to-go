@@ -9,7 +9,7 @@
     let activityLog = [];
     let currentView = "dashboard";
     let currentFilter = "all";
-    let sessionSort = { key: "host", dir: 1 };
+    let sessionSort = { key: "accessed", dir: -1 };
     let hostSort = { key: "name", dir: 1 };
     let modalHandler = null;
 
@@ -403,6 +403,13 @@
             const sa = isSessionStarred(a.host_name, a.session.name) ? 1 : 0;
             const sb = isSessionStarred(b.host_name, b.session.name) ? 1 : 0;
             if (sa !== sb) return sb - sa;
+            const la = getSessionLastAccessed(a.host_name, a.session.name);
+            const lb = getSessionLastAccessed(b.host_name, b.session.name);
+            if (la || lb) {
+                const da = la ? new Date(la) : new Date(0);
+                const db = lb ? new Date(lb) : new Date(0);
+                return db - da;
+            }
             return new Date(b.session.created) - new Date(a.session.created);
         }).slice(0, 10);
 
@@ -471,6 +478,12 @@
                 case "name": va = a.session.name; vb = b.session.name; break;
                 case "host": va = a.host_name; vb = b.host_name; break;
                 case "uptime": va = new Date(a.session.created); vb = new Date(b.session.created); return (va - vb) * sessionSort.dir;
+                case "accessed":
+                    va = getSessionLastAccessed(a.host_name, a.session.name);
+                    vb = getSessionLastAccessed(b.host_name, b.session.name);
+                    va = va ? new Date(va) : new Date(0);
+                    vb = vb ? new Date(vb) : new Date(0);
+                    return (va - vb) * sessionSort.dir;
                 case "status": va = a.session.attached ? 1 : 0; vb = b.session.attached ? 1 : 0; return (vb - va) * sessionSort.dir;
                 case "starred":
                     va = isSessionStarred(a.host_name, a.session.name) ? 1 : 0;
@@ -483,7 +496,7 @@
 
         const body = document.getElementById("sessions-body");
         if (filtered.length === 0) {
-            body.innerHTML = `<tr><td colspan="5" class="empty-state">No sessions found</td></tr>`;
+            body.innerHTML = `<tr><td colspan="6" class="empty-state">No sessions found</td></tr>`;
             return;
         }
 
@@ -515,6 +528,7 @@
                     </div>
                 </td>
                 <td class="hide-mobile">${age}</td>
+                <td class="hide-wide">${(() => { const la = getSessionLastAccessed(s.host_name, s.session.name); return la ? timeAgo(new Date(la)) : '\u2014'; })()}</td>
                 <td>
                     <div class="action-group">
                         <button class="${starClass}" onclick="toggleStar('${ea(s.host_name)}','${ea(s.session.name)}')" title="${starred ? 'Unstar' : 'Star'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="${starred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button>

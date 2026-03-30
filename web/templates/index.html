@@ -98,7 +98,7 @@
                                 <th>Session</th>
                                 <th class="hide-mobile">Host</th>
                                 <th class="hide-mobile">Uptime</th>
-                                <th>Actions</th>
+                                <th style="text-align:center">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="dashboard-recent-body"></tbody>
@@ -140,7 +140,8 @@
                                 <th onclick="sortSessions('name')">Session Name <span class="sort-arrow"></span></th>
                                 <th class="hide-mobile" onclick="sortSessions('host')">Host <span class="sort-arrow"></span></th>
                                 <th class="hide-mobile" onclick="sortSessions('uptime')">Uptime <span class="sort-arrow"></span></th>
-                                <th onclick="sortSessions('starred')">Actions <span class="sort-arrow"></span></th>
+                                <th class="hide-wide" onclick="sortSessions('accessed')">Last Accessed <span class="sort-arrow"></span></th>
+                                <th onclick="sortSessions('starred')" style="text-align:center">Actions <span class="sort-arrow"></span></th>
                             </tr>
                         </thead>
                         <tbody id="sessions-body"></tbody>

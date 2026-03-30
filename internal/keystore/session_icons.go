@@ -6,13 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type SessionIcon struct {
-	Icon    string `json:"icon,omitempty"`
-	Color   string `json:"color,omitempty"`
-	Starred bool   `json:"starred,omitempty"`
-	Theme   string `json:"theme,omitempty"`
+	Icon         string `json:"icon,omitempty"`
+	Color        string `json:"color,omitempty"`
+	Starred      bool   `json:"starred,omitempty"`
+	Theme        string `json:"theme,omitempty"`
+	LastAccessed string `json:"last_accessed,omitempty"`
 }
 
 // SessionIconStore persists session icon/color overrides to a JSON file.
@@ -76,10 +78,21 @@ func (s *SessionIconStore) Set(host, session string, icon SessionIcon) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := sessionKey(host, session)
-	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && !icon.Starred {
+	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && icon.LastAccessed == "" && !icon.Starred {
 		delete(s.icons, key)
 	} else {
 		s.icons[key] = icon
 	}
+	return s.save()
+}
+
+// Touch updates the last-accessed timestamp for a session.
+func (s *SessionIconStore) Touch(host, session string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := sessionKey(host, session)
+	entry := s.icons[key]
+	entry.LastAccessed = time.Now().UTC().Format(time.RFC3339)
+	s.icons[key] = entry
 	return s.save()
 }
