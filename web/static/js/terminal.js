@@ -521,10 +521,11 @@ function initTerminal(host, session) {
                 body: JSON.stringify({ new_name: newName }),
             });
             if (!res.ok) throw new Error(await res.text());
-            // Update the page title and label
+            // Update the page title, label, and URL
             session = newName;
             document.getElementById("session-label").textContent = host + " / " + newName;
             document.title = host + " / " + newName + " — ssh-to-go";
+            window.history.replaceState(null, "", `/terminal/${encodeURIComponent(host)}/${encodeURIComponent(newName)}`);
             term.focus();
         } catch (e) {
             alert("Rename failed: " + e.message);
