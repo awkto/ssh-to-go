@@ -963,16 +963,18 @@ function initTerminal(host, session) {
         // Use visualViewport to refit terminal when keyboard opens/closes
         if (window.visualViewport) {
             window.visualViewport.addEventListener("resize", function () {
+                var atBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
                 fitAddon.fit();
-                term.scrollToBottom();
+                if (atBottom) term.scrollToBottom();
             });
         }
     }
 
     // On any viewport resize (including mobile keyboard), refit and scroll to cursor
     window.addEventListener("resize", function () {
+        var atBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
         fitAddon.fit();
-        term.scrollToBottom();
+        if (atBottom) term.scrollToBottom();
     });
 
     connect();
