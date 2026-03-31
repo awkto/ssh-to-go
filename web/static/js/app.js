@@ -449,6 +449,20 @@
     }
 
     // ── Sessions rendering ──
+    function updateSortArrows(tableId, sortState) {
+        const table = document.getElementById(tableId);
+        if (!table) return;
+        table.querySelectorAll("thead th .sort-arrow").forEach(el => el.textContent = "");
+        table.querySelectorAll("thead th").forEach(th => {
+            const onclick = th.getAttribute("onclick") || "";
+            const m = onclick.match(/sort\w+\('(\w+)'\)/);
+            if (m && m[1] === sortState.key) {
+                const arrow = th.querySelector(".sort-arrow");
+                if (arrow) arrow.textContent = sortState.dir === 1 ? " ▲" : " ▼";
+            }
+        });
+    }
+
     window.sortSessions = function (key) {
         if (sessionSort.key === key) {
             sessionSort.dir *= -1;
@@ -464,15 +478,8 @@
         updateURL();
         let filtered = getFilteredSessions();
 
-        // Sort — starred sessions float to top unless explicitly sorting by another column
+        // Sort
         filtered.sort((a, b) => {
-            // If not sorting by starred, still pin starred to top as secondary
-            if (sessionSort.key !== "starred") {
-                const sa = isSessionStarred(a.host_name, a.session.name) ? 1 : 0;
-                const sb = isSessionStarred(b.host_name, b.session.name) ? 1 : 0;
-                if (sa !== sb) return sb - sa;
-            }
-
             let va, vb;
             switch (sessionSort.key) {
                 case "name": va = a.session.name; vb = b.session.name; break;
@@ -493,6 +500,8 @@
             }
             return String(va).localeCompare(String(vb)) * sessionSort.dir;
         });
+
+        updateSortArrows("sessions-table", sessionSort);
 
         const body = document.getElementById("sessions-body");
         if (filtered.length === 0) {
@@ -574,6 +583,8 @@
             }
             return String(va).localeCompare(String(vb)) * hostSort.dir;
         });
+
+        updateSortArrows("hosts-table", hostSort);
 
         const body = document.getElementById("hosts-body");
         if (filtered.length === 0) {
