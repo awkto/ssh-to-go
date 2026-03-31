@@ -39,16 +39,22 @@ func (h *Handlers) DashboardPage(w http.ResponseWriter, r *http.Request) {
 }
 
 type terminalData struct {
-	Host    string
-	Session string
+	Host           string
+	Session        string
+	TabTitleFormat string
 }
 
 func (h *Handlers) TerminalPage(w http.ResponseWriter, r *http.Request) {
 	host := r.PathValue("host")
 	session := r.PathValue("session")
+	titleFmt := h.Settings.Get().TabTitleFormat
+	if titleFmt == "" {
+		titleFmt = "host-session"
+	}
 	data := terminalData{
-		Host:    host,
-		Session: session,
+		Host:           host,
+		Session:        session,
+		TabTitleFormat: titleFmt,
 	}
 	// Record last-accessed timestamp (best-effort).
 	_ = h.SessionIcons.Touch(host, session)

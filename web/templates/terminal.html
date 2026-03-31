@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <title>{{.Host}} / {{.Session}} — ssh-to-go</title>
+    <title>{{if eq .TabTitleFormat "host-only"}}{{.Host}}{{else if eq .TabTitleFormat "session-only"}}{{.Session}}{{else if eq .TabTitleFormat "session-host"}}{{.Session}} / {{.Host}}{{else}}{{.Host}} / {{.Session}}{{end}}</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 17 10 11 4 5'/%3E%3Cline x1='12' y1='19' x2='20' y2='19'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/vendor/xterm.css">
     <style>
@@ -201,7 +201,7 @@
     <div id="toolbar">
         <div class="info">
             <a href="/"><span class="dash-icon">&#9664;</span><span class="dash-text">← dashboard</span></a>
-            <span id="session-label">{{.Host}} / {{.Session}}</span><span class="host-badge" id="host-badge">{{.Host}}</span>
+            <span id="session-label">{{if eq .TabTitleFormat "host-only"}}{{.Host}}{{else if eq .TabTitleFormat "session-only"}}{{.Session}}{{else if eq .TabTitleFormat "session-host"}}{{.Session}} / {{.Host}}{{else}}{{.Host}} / {{.Session}}{{end}}</span><span class="host-badge" id="host-badge">{{.Host}}</span>
             <span class="status" id="ws-status"></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
@@ -254,6 +254,7 @@
     <script src="/static/js/icons.js"></script>
     <script src="/static/js/terminal.js"></script>
     <script>
+        window._tabTitleFormat = "{{.TabTitleFormat}}";
         initTerminal("{{.Host}}", "{{.Session}}");
 
         // Update favicon to match session/host icon
@@ -291,14 +292,8 @@
 
             // Update tab title based on settings
             fetch('/api/settings').then(function(r) { return r.json(); }).then(function(s) {
-                var fmt = s.tab_title_format || "host-session";
-                var title;
-                switch (fmt) {
-                    case "host-only":    title = host; break;
-                    case "session-only": title = session; break;
-                    case "session-host": title = session + " / " + host; break;
-                    default:             title = host + " / " + session; break;
-                }
+                window._tabTitleFormat = s.tab_title_format || "host-session";
+                var title = window.formatTabTitle(host, session);
                 document.title = title;
                 document.getElementById("session-label").textContent = title;
             }).catch(function() {});

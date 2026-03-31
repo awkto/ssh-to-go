@@ -1,3 +1,15 @@
+// ── Tab Title Formatting ──
+// Shared by initial page load (template) and rename handler.
+window._tabTitleFormat = "host-session";
+window.formatTabTitle = function(host, session) {
+    switch (window._tabTitleFormat) {
+        case "host-only":    return host;
+        case "session-only": return session;
+        case "session-host": return session + " / " + host;
+        default:             return host + " / " + session;
+    }
+};
+
 // ── Terminal Themes ──
 // Well-known terminal color schemes with full ANSI 16-color palettes.
 var TERMINAL_THEMES = {
@@ -523,8 +535,9 @@ function initTerminal(host, session) {
             if (!res.ok) throw new Error(await res.text());
             // Update the page title, label, and URL
             session = newName;
-            document.getElementById("session-label").textContent = host + " / " + newName;
-            document.title = host + " / " + newName + " — ssh-to-go";
+            var title = window.formatTabTitle(host, newName);
+            document.getElementById("session-label").textContent = title;
+            document.title = title;
             window.history.replaceState(null, "", `/terminal/${encodeURIComponent(host)}/${encodeURIComponent(newName)}`);
             term.focus();
         } catch (e) {
