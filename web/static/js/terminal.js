@@ -800,7 +800,17 @@ function initTerminal(host, session) {
         e.stopPropagation();
         e.stopImmediatePropagation();
 
-        var lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 40));
+        // Clear any text selection so it doesn't shift/drift as the terminal scrolls
+        term.clearSelection();
+
+        // Use deltaMode to normalize: LINE mode sends 1 line per notch, PIXEL mode
+        // divides by a larger value (120px ≈ one scroll notch on most mice).
+        var lines;
+        if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+            lines = Math.max(1, Math.round(Math.abs(e.deltaY)));
+        } else {
+            lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 120));
+        }
         var btn = e.deltaY < 0 ? 64 : 65;
         var col = Math.floor(term.cols / 2);
         var row = Math.floor(term.rows / 2);
