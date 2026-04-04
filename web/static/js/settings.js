@@ -262,8 +262,8 @@
         e.preventDefault();
         if (!modalHandler) return;
         try {
-            await modalHandler();
-            modal.classList.add("hidden");
+            const keepOpen = await modalHandler();
+            if (!keepOpen) modal.classList.add("hidden");
         } catch (err) {
             toast("Error: " + err.message, "error");
         }
@@ -378,7 +378,7 @@
                 if (!res.ok) throw new Error(await res.text());
                 const data = await res.json();
 
-                // Show the token once
+                // Show the token once — keep modal open
                 modalTitle.textContent = "Token Created";
                 modalFields.innerHTML = `
                     <p style="color:#888;font-size:13px;margin-bottom:12px">Copy this token now — it won't be shown again.</p>
@@ -389,6 +389,7 @@
                 modalHandler = async () => {
                     fetchTokens();
                 };
+                return true; // keep modal open to show token
             };
             modal.classList.remove("hidden");
         });
