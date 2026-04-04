@@ -410,6 +410,38 @@
         setTimeout(() => el.remove(), 3000);
     }
 
+    // ── MCP toggle ──
+
+    const mcpToggle = document.getElementById("enable-mcp");
+    const mcpdocsLink = document.getElementById("mcpdocs-link");
+
+    async function fetchMcpConfig() {
+        try {
+            const res = await authFetch("/api/settings/mcp");
+            const data = await res.json();
+            mcpToggle.checked = data.enabled;
+            mcpdocsLink.style.display = data.enabled ? "inline" : "none";
+        } catch (e) { /* ignore */ }
+    }
+
+    mcpToggle.addEventListener("change", async () => {
+        try {
+            const res = await authFetch("/api/settings/mcp", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled: mcpToggle.checked }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            mcpdocsLink.style.display = mcpToggle.checked ? "inline" : "none";
+            toast(mcpToggle.checked ? "MCP enabled" : "MCP disabled", "success");
+        } catch (e) {
+            mcpToggle.checked = !mcpToggle.checked;
+            toast("Error: " + e.message, "error");
+        }
+    });
+
+    fetchMcpConfig();
+
     // ── Init ──
     fetchAll();
 })();

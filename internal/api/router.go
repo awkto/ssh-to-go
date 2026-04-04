@@ -7,6 +7,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/auth"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
+	"github.com/awkto/ssh-to-go/internal/mcp"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 )
 
@@ -81,6 +82,14 @@ func NewRouter(rc RouterConfig) http.Handler {
 	// Session icons API
 	mux.HandleFunc("GET /api/session-icons", handlers.GetSessionIcons)
 	mux.HandleFunc("PUT /api/session-icons/{host}/{session}", handlers.SetSessionIcon)
+
+	// MCP (Model Context Protocol)
+	mcpServer := mcp.NewServer(rc.Hub, rc.Tmux, rc.KeyStore, rc.Settings, rc.Auth, rc.Version)
+	mux.HandleFunc("GET /mcp/sse", mcpServer.HandleSSE)
+	mux.HandleFunc("POST /mcp/messages", mcpServer.HandleMessages)
+	mux.HandleFunc("GET /mcpdocs", mcpServer.HandleDocs)
+	mux.HandleFunc("GET /api/settings/mcp", mcpServer.HandleGetConfig)
+	mux.HandleFunc("PUT /api/settings/mcp", mcpServer.HandleSetConfig)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws/{host}/{session}", handlers.WebSocket)

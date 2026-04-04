@@ -14,6 +14,7 @@ type Settings struct {
 	TmuxWindowSize  string `json:"tmux_window_size"`
 	ShowPubKey      *bool  `json:"show_pub_key,omitempty"`
 	TabTitleFormat  string `json:"tab_title_format,omitempty"`
+	EnableMCP       bool   `json:"enable_mcp,omitempty"`
 }
 
 type SettingsManager struct {
@@ -118,4 +119,17 @@ func (sm *SettingsManager) TmuxWindowSize() string {
 		return "largest"
 	}
 	return sm.settings.TmuxWindowSize
+}
+
+func (sm *SettingsManager) MCPEnabled() bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.settings.EnableMCP
+}
+
+func (sm *SettingsManager) SetMCPEnabled(enabled bool) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.settings.EnableMCP = enabled
+	return sm.save()
 }

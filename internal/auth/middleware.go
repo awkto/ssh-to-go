@@ -16,8 +16,9 @@ func Middleware(am *Manager, next http.Handler) http.Handler {
 
 		path := r.URL.Path
 
-		// Always allow static assets
-		if strings.HasPrefix(path, "/static/") {
+		// Always allow static assets and MCP endpoints (MCP has its own auth)
+		if strings.HasPrefix(path, "/static/") || path == "/mcpdocs" ||
+			strings.HasPrefix(path, "/mcp/") {
 			next.ServeHTTP(w, r)
 			return
 		}

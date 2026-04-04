@@ -101,6 +101,24 @@
                         </div>
                     </section>
 
+                    <!-- Integrations -->
+                    <section class="settings-section">
+                        <h2>Integrations</h2>
+                        <div class="settings-form">
+                            <div class="form-row">
+                                <label for="enable-mcp" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                                    <input type="checkbox" id="enable-mcp" style="width:auto;margin:0">
+                                    Enable MCP (Model Context Protocol)
+                                </label>
+                                <p style="color:var(--text-muted);font-size:13px;margin-top:4px">
+                                    Exposes an MCP server at <code style="color:var(--purple)">/mcp/sse</code> for AI tool integrations (e.g. Claude Code).
+                                    Uses the same API token authentication.
+                                    <a href="/mcpdocs" target="_blank" id="mcpdocs-link" style="display:none">View MCP Tools</a>
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
                     <!-- Keypairs -->
                     <section class="settings-section">
                         <div class="section-header">
