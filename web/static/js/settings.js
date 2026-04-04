@@ -12,6 +12,7 @@
     let keypairs = [];
     let settings = {};
     let modalHandler = null;
+    let fetchTokens = () => {};
 
     // ── Auth-aware fetch ──
 
@@ -318,13 +319,15 @@
 
         const tokenList = document.getElementById("token-list");
 
-        async function fetchTokens() {
+        fetchTokens = async function() {
             try {
                 const res = await authFetch("/api/auth/tokens");
                 const tokens = await res.json();
                 renderTokens(tokens);
-            } catch (e) { /* ignore */ }
-        }
+            } catch (e) {
+                console.error("fetchTokens failed:", e);
+            }
+        };
 
         function renderTokens(tokens) {
             if (!tokens || tokens.length === 0) {
