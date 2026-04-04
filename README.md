@@ -1,36 +1,100 @@
 # ssh-to-go
 
-A web-based terminal session manager that discovers and manages tmux sessions across multiple SSH hosts. Single binary, no agents needed on target machines.
+**Your terminal sessions, anywhere.** A web-based tmux session manager that lets you access persistent terminal sessions from any device with a browser — no agents, no plugins, single binary.
 
-![SSH-to-go dark theme](screenshots/ssh-to-go-dark.png)
+> Tired of having your Claude Code or Codex session interrupted every time your PC reboots or updates? Switching between your home PC and work laptop and losing your flow? Don't want to be glued to your desk while vibe coding?
+>
+> **ssh-to-go** keeps your sessions alive on the server. Pick up exactly where you left off — from another computer, your phone on the bus, or anywhere with a web browser.
 
-![SSH-to-go light theme](screenshots/ssh-to-go-lite.png)
+<!-- TODO: Replace with GitHub-hosted video URL (upload via GitHub issue to get embed link) -->
+<!-- https://github.com/user-attachments/assets/REPLACE_WITH_VIDEO_URL -->
 
-- **Web dashboard** — see all sessions across all hosts in one place
-- **Browser terminal** — attach to any session via xterm.js
-- **Session persistence** — tmux sessions live on the target, survive disconnects
-- **Handoff** — copy an SSH command to resume from your terminal
-- **Multi-client** — multiple browsers can attach to the same session
-- **Key management** — generate, import, and manage SSH keypairs from the UI
+![Dashboard - Dark Theme](screenshots/dashboard-dark.png)
 
-See [PURPOSE.md](PURPOSE.md) for the full motivation and architecture vision.
+---
+
+## Why ssh-to-go?
+
+- **Never lose a session again** — tmux sessions live on the target machine and survive reboots, network drops, and browser closes
+- **Work from anywhere** — attach from your desktop, laptop, tablet, or phone — all you need is a browser
+- **AI coding sessions that don't quit** — run Claude Code, Codex, or any long-running terminal process in tmux and check in from wherever you are
+- **Multi-device, multi-user** — multiple browsers can attach to the same session simultaneously
+- **Zero setup on targets** — no agents or daemons to install, just SSH + tmux
+
+---
+
+## Features
+
+### Web Terminal
+Full terminal emulation in the browser via xterm.js with WebSocket relay.
+
+<p align="center">
+  <img src="screenshots/terminal-solarized.png" width="48%" alt="Terminal - Solarized Dark" />
+  <img src="screenshots/terminal-default.png" width="48%" alt="Terminal - Default Theme" />
+</p>
+
+- 8+ built-in color themes (Dracula, Nord, Monokai, Solarized, Gruvbox, and more)
+- Automatic terminal resize
+- Binary data streaming for responsive I/O
+- SSH keepalive prevents idle timeouts
+
+<p align="center">
+  <img src="screenshots/theme-selector.png" width="200" alt="Theme Selector" />
+</p>
+
+### Dashboard
+See all tmux sessions across all your hosts at a glance.
+
+<p align="center">
+  <img src="screenshots/dashboard-dark.png" width="48%" alt="Dashboard - Dark" />
+  <img src="screenshots/dashboard-light.png" width="48%" alt="Dashboard - Light" />
+</p>
+
+- Real-time host status (online/offline) with OS detection
+- Session search and filtering by host, status, favorites
+- Star/favorite sessions for quick access
+- Customizable icons and colors per session
+- Dark and light themes
+
+<p align="center">
+  <img src="screenshots/icon-selector.png" width="200" alt="Icon Selector" />
+</p>
+
+### Session Management
+- **Create** new tmux sessions with optional working directory
+- **Rename** sessions without interrupting running processes
+- **Kill** sessions from the UI
+- **Handoff** — copy a direct `ssh ... tmux attach` command to your clipboard
+
+### Host Management
+- Add, edit, and remove hosts at runtime from the web UI
+- Per-host SSH port, username, and keypair assignment
+- Manual or automatic polling (configurable interval)
+
+### SSH Key Management
+- Generate ed25519 keypairs or import existing keys
+- Multiple keypairs with default and per-host assignment
+- Public key display for easy `authorized_keys` setup
+
+### Authentication
+- Password-based login with bcrypt hashing
+- 7-day browser sessions
+- Named API tokens for programmatic access
+- First-run setup wizard
+- Optional auth bypass for trusted networks
+
+---
 
 ## Quick Start
 
 ### Binary
 
 ```bash
-# Build
 go build -o ssh-to-go .
-
-# Run (no config needed — setup wizard on first visit)
 ./ssh-to-go
-
-# Or with a config file
-./ssh-to-go -config config.yaml
 ```
 
-Open `http://localhost:8080`. On first run you'll be prompted to generate or import an SSH keypair.
+Open `http://localhost:8080`. The setup wizard walks you through password and SSH key setup on first run.
 
 ### Docker
 
@@ -40,32 +104,27 @@ docker run -p 8080:8080 awkto/ssh-to-go
 
 #### Volume Mounts
 
-Two independent mount points for persistence:
-
 | Mount Point | Contents | Purpose |
 |---|---|---|
 | `/etc/ssh-to-go/` | `config.yaml` | Host list, listen address, poll interval |
 | `/data/` | `keys/`, `settings.json` | SSH keypairs, default username/keypair |
 
 ```bash
-# Persist everything (config + keys)
+# Persist everything
 docker run -p 8080:8080 \
   -v ./config:/etc/ssh-to-go \
-  -v ./keys:/data \
-  awkto/ssh-to-go
-
-# Persist config only (keys regenerated on restart)
-docker run -p 8080:8080 \
-  -v ./config:/etc/ssh-to-go \
+  -v ./data:/data \
   awkto/ssh-to-go
 
 # Fully ephemeral
 docker run -p 8080:8080 awkto/ssh-to-go
 ```
 
+---
+
 ## Configuration
 
-Config file is optional. Hosts can be added from the web UI.
+Config file is optional — hosts can be added entirely from the web UI.
 
 ```yaml
 listen_addr: "127.0.0.1:8080"
@@ -83,30 +142,45 @@ hosts:
     key_name: my-deploy-key  # optional, uses default keypair if omitted
 ```
 
+---
+
 ## How It Works
 
 ```
-Browser / Terminal
-    ↕ attach/detach
-ssh-to-go server (discovers sessions, relays terminal)
+Browser (any device)
+    ↕ WebSocket
+ssh-to-go server (discovers sessions, relays terminal I/O)
     ↕ SSH
-Target machines (tmux sessions live here)
+Target machines (tmux sessions live here — persistent, always running)
 ```
 
-1. The server SSHes into your hosts and runs `tmux list-sessions` to discover sessions
-2. The web dashboard shows all sessions grouped by host
-3. Click to attach — xterm.js in the browser connects via WebSocket to an SSH relay
-4. Sessions live on the target machines, so you can always `ssh` in directly and `tmux attach`
-5. The "Handoff" button copies the direct SSH command to your clipboard
+1. The server SSHes into your hosts and polls `tmux list-sessions`
+2. The dashboard shows all sessions grouped by host with live status
+3. Click a session to attach — xterm.js connects via WebSocket to an SSH relay
+4. Sessions live on the target, so they survive anything — reboots, network changes, browser crashes
+5. **Handoff** copies the direct SSH command so you can attach from a native terminal anytime
 
-## SSH Keys
+---
 
-On first run, the setup wizard lets you either:
+## Use Case: Uninterrupted AI Coding
 
-- **Generate** a new ed25519 keypair (add the public key to `~/.ssh/authorized_keys` on your targets)
-- **Import** an existing private key (paste PEM or point to a file path on the server)
+Run Claude Code (or any AI coding tool) inside a tmux session on a server:
 
-Manage multiple keypairs from the Settings page. Set a default keypair and default username globally, or assign specific keypairs per host.
+```bash
+# On your server, start a tmux session
+tmux new -s claude-code
+claude  # start Claude Code
+```
+
+Now attach via ssh-to-go from any browser. Your AI session keeps running even when you:
+- Reboot your PC for updates
+- Switch from your home desktop to your work laptop
+- Check progress on your phone while commuting
+- Close your browser and come back hours later
+
+The session never stops. You just reconnect.
+
+---
 
 ## Development
 
@@ -115,6 +189,8 @@ go build -o ssh-to-go . && ./ssh-to-go
 ```
 
 The web UI is embedded in the binary via `go:embed`. No npm, no build step. xterm.js is vendored in `web/static/vendor/`.
+
+---
 
 ## License
 
