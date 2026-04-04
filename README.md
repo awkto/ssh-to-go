@@ -6,10 +6,7 @@
 >
 > **ssh-to-go** keeps your sessions alive on the server. Pick up exactly where you left off — from another computer, your phone on the bus, or anywhere with a web browser.
 
-<!-- TODO: Replace with GitHub-hosted video URL (upload via GitHub issue to get embed link) -->
-<!-- https://github.com/user-attachments/assets/REPLACE_WITH_VIDEO_URL -->
-
-![Dashboard - Dark Theme](screenshots/dashboard-dark.png)
+<video src="screenshots/demo.mp4" autoplay loop muted playsinline width="100%"></video>
 
 ---
 
@@ -40,6 +37,7 @@ Full terminal emulation in the browser via xterm.js with WebSocket relay.
 
 <p align="center">
   <img src="screenshots/theme-selector.png" width="200" alt="Theme Selector" />
+  <img src="screenshots/icon-selector.png" width="200" alt="Icon Selector" />
 </p>
 
 ### Dashboard
@@ -55,10 +53,6 @@ See all tmux sessions across all your hosts at a glance.
 - Star/favorite sessions for quick access
 - Customizable icons and colors per session
 - Dark and light themes
-
-<p align="center">
-  <img src="screenshots/icon-selector.png" width="200" alt="Icon Selector" />
-</p>
 
 ### Session Management
 - **Create** new tmux sessions with optional working directory
