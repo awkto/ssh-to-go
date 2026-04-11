@@ -86,6 +86,20 @@ func (s *SessionIconStore) Set(host, session string, icon SessionIcon) error {
 	return s.save()
 }
 
+// Rename migrates icon data from one session name to another.
+func (s *SessionIconStore) Rename(host, oldSession, newSession string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	oldKey := sessionKey(host, oldSession)
+	entry, ok := s.icons[oldKey]
+	if !ok {
+		return nil
+	}
+	delete(s.icons, oldKey)
+	s.icons[sessionKey(host, newSession)] = entry
+	return s.save()
+}
+
 // Touch updates the last-accessed timestamp for a session.
 func (s *SessionIconStore) Touch(host, session string) error {
 	s.mu.Lock()

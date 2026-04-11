@@ -433,7 +433,7 @@
             const starClass = starred ? "star-btn starred" : "star-btn";
             return `<tr>
                 <td><span class="status-dot ${statusClass}" title="${ea(sTip)}"></span></td>
-                <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
+                <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a><button class="rename-btn hide-mobile" onclick="renameSession('${ea(s.host_name)}','${ea(s.session.name)}')" title="Rename"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button></td>
                 <td class="hide-mobile">${esc(s.host_name)}</td>
                 <td class="hide-mobile">${age}</td>
                 <td>
@@ -529,7 +529,7 @@
 
             return `<tr>
                 <td><span class="status-dot ${statusClass}" title="${ea(sTip2)}"></span></td>
-                <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a></td>
+                <td><button class="session-icon-btn${hasCustom ? ' has-icon' : ''}" onclick="pickSessionIcon(this,'${ea(s.host_name)}','${ea(s.session.name)}')" title="Change icon">${renderIcon(sessionIcon, 16, sessionColor)}</button><a class="session-link" href="/terminal/${eu(s.host_name)}/${eu(s.session.name)}" target="_blank">${esc(s.session.name)}</a><button class="rename-btn hide-mobile" onclick="renameSession('${ea(s.host_name)}','${ea(s.session.name)}')" title="Rename"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button></td>
                 <td class="hide-mobile">
                     <div class="host-cell">
                         <span class="host-fqdn">${esc(hostAddr || s.host_name)}</span>
@@ -754,6 +754,25 @@
             addLog("info", `Copied handoff command for ${session}@${host}`);
         } catch (e) {
             toast("Failed to copy handoff command: " + e.message, "error");
+        }
+    };
+
+    window.renameSession = async function (host, session) {
+        const newName = prompt(`Rename session "${session}":`, session);
+        if (!newName || newName === session) return;
+        try {
+            const res = await authFetch(`/api/hosts/${eu(host)}/sessions/${eu(session)}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ new_name: newName }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            if (window.renameSessionIcon) window.renameSessionIcon(host, session, newName);
+            toast("Session renamed", "success");
+            addLog("info", `Renamed session ${session} → ${newName}@${host}`);
+            fetchAll();
+        } catch (e) {
+            toast("Rename failed: " + e.message, "error");
         }
     };
 

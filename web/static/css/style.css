@@ -1320,3 +1320,25 @@ header h1 { font-size: 24px; font-weight: 600; color: #fff; }
 .session-icon-btn.has-icon {
     color: var(--text-secondary);
 }
+.rename-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    vertical-align: middle;
+}
+tr:hover .rename-btn { opacity: 1; }
+.rename-btn:hover {
+    color: var(--accent);
+    background: var(--accent-glow);
+}

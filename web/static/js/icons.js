@@ -355,6 +355,16 @@
         });
     }
 
+    function renameSessionIcon(hostName, oldSession, newSession) {
+        var oldKey = hostName + ":" + oldSession;
+        var newKey = hostName + ":" + newSession;
+        var entry = _sessionIconCache[oldKey];
+        if (entry) {
+            _sessionIconCache[newKey] = entry;
+            delete _sessionIconCache[oldKey];
+        }
+    }
+
     // Expose globally
     window.APP_ICONS = ICONS;
     window.ICON_COLORS = ICON_COLORS;
@@ -374,4 +384,5 @@
     window.closeIconPicker = closeIconPicker;
     window.iconSelectorHTML = iconSelectorHTML;
     window.attachIconSelector = attachIconSelector;
+    window.renameSessionIcon = renameSessionIcon;
 })();

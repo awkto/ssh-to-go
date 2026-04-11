@@ -533,6 +533,8 @@ function initTerminal(host, session) {
                 body: JSON.stringify({ new_name: newName }),
             });
             if (!res.ok) throw new Error(await res.text());
+            // Migrate icon cache entry to new name
+            if (window.renameSessionIcon) window.renameSessionIcon(host, session, newName);
             // Update the page title, label, and URL
             session = newName;
             var title = window.formatTabTitle(host, newName);

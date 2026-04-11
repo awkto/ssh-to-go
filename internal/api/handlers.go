@@ -154,6 +154,9 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Migrate session icon/color/star data to the new name
+	_ = h.SessionIcons.Rename(hostName, sessionName, req.NewName)
+
 	writeJSON(w, map[string]string{"status": "renamed", "old_name": sessionName, "new_name": req.NewName})
 }
 
