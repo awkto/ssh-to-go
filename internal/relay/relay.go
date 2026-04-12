@@ -169,22 +169,12 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		log.Printf("relay session ended: %v", err)
 	}
 
-	// Determine close code: check if the session still exists to distinguish
-	// "kicked/detached" (session alive, we were removed) from "session ended"
-	// (session destroyed). Both prevent reconnect but show different messages.
+	// Check if this client was explicitly kicked via the API
 	closeCode := websocket.StatusCode(4000) // session ended
 	closeMsg := "session ended"
-	if err == nil {
-		// Clean exit — tmux detached us. Check if the session still exists.
-		checkClient, checkErr := sshutil.Dial(address, user, keyPath)
-		if checkErr == nil {
-			out, _ := sshutil.Exec(checkClient, fmt.Sprintf("tmux has-session -t %q 2>/dev/null && echo yes", sessionName))
-			checkClient.Close()
-			if strings.TrimSpace(out) == "yes" {
-				closeCode = 4001 // kicked/detached
-				closeMsg = "detached by another client"
-			}
-		}
+	if ttyPath != "" && WasKicked(ttyPath) {
+		closeCode = 4001
+		closeMsg = "detached by another client"
 	}
 
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)

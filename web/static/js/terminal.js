@@ -754,9 +754,22 @@ function initTerminal(host, session) {
     // Burger menu toggle
     var burgerBtn = document.getElementById("toolbar-burger");
     var burgerMenu = document.getElementById("toolbar-menu");
-    burgerBtn.addEventListener("click", function (e) {
+    var detachBtn = document.getElementById("detach-btn");
+    detachBtn.style.display = "none"; // hidden by default until we know there are other clients
+    burgerBtn.addEventListener("click", async function (e) {
         e.stopPropagation();
-        burgerMenu.style.display = burgerMenu.style.display === "none" ? "block" : "none";
+        var opening = burgerMenu.style.display === "none";
+        burgerMenu.style.display = opening ? "block" : "none";
+        if (opening) {
+            // Check how many clients are attached to decide whether to show kick button
+            try {
+                const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/clients`);
+                if (res.ok) {
+                    const clients = await res.json();
+                    detachBtn.style.display = clients.length > 1 ? "" : "none";
+                }
+            } catch (_) {}
+        }
     });
     document.addEventListener("click", function () { burgerMenu.style.display = "none"; });
     burgerMenu.addEventListener("click", function (e) {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/awkto/ssh-to-go/internal/relay"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"golang.org/x/crypto/ssh"
 )
@@ -132,6 +133,12 @@ func (m *Manager) DetachClients(client *ssh.Client, sessionName, excludeTTY stri
 	clients, err := m.ListClients(client, sessionName)
 	if err != nil {
 		return 0, err
+	}
+	// Mark TTYs as kicked before detaching so the relay can send the right close code
+	for _, c := range clients {
+		if c.TTY != excludeTTY {
+			relay.MarkKicked(c.TTY)
+		}
 	}
 	detached := 0
 	for _, c := range clients {
