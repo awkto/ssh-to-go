@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,12 +56,39 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		windowSize = "largest"
 	}
 
-	// Use "new-session -A" which atomically attaches to an existing session
-	// or creates a new one, avoiding the race in "attach || new-session"
-	// where a concurrent reconnect could see "duplicate session".
-	cmd := fmt.Sprintf("tmux set-option -g mouse on 2>/dev/null; tmux new-session -A -s %q \\; set-option window-size %s", sessionName, windowSize)
+	// Discover our PTY path before attaching to tmux, so the client can
+	// pass it to the detach-clients endpoint to exclude itself.
+	// We print the tty on a single line followed by a NUL byte delimiter,
+	// then exec into tmux. The NUL byte ensures we can split cleanly even
+	// if tmux output arrives in the same read buffer.
+	cmd := fmt.Sprintf(
+		`printf '%%s\x00' "$(tty)"; exec tmux set-option -g mouse on 2>/dev/null \; new-session -A -s %q \; set-option window-size %s`,
+		sessionName, windowSize,
+	)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("start tmux: %w", err)
+	}
+
+	// Read the TTY path from stdout (everything before the NUL delimiter).
+	ttyBuf := make([]byte, 256)
+	ttyPath := ""
+	n, err := stdout.Read(ttyBuf)
+	if err == nil && n > 0 {
+		chunk := string(ttyBuf[:n])
+		if idx := strings.IndexByte(chunk, 0); idx >= 0 {
+			ttyPath = chunk[:idx]
+			// Forward any remaining bytes after the NUL to the WebSocket
+			remainder := chunk[idx+1:]
+			if len(remainder) > 0 {
+				_ = ws.Write(ctx, websocket.MessageBinary, []byte(remainder))
+			}
+		}
+	}
+
+	// Send the TTY path to the client as a control message
+	if ttyPath != "" {
+		ttyMsg, _ := json.Marshal(map[string]string{"type": "tty", "tty": ttyPath})
+		_ = ws.Write(ctx, websocket.MessageText, ttyMsg)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -141,11 +169,27 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		log.Printf("relay session ended: %v", err)
 	}
 
-	// Use a custom close code (4000) to signal "session ended normally"
-	// This is checked by the client to decide whether to reconnect
+	// Determine close code: check if the session still exists to distinguish
+	// "kicked/detached" (session alive, we were removed) from "session ended"
+	// (session destroyed). Both prevent reconnect but show different messages.
+	closeCode := websocket.StatusCode(4000) // session ended
+	closeMsg := "session ended"
+	if err == nil {
+		// Clean exit — tmux detached us. Check if the session still exists.
+		checkClient, checkErr := sshutil.Dial(address, user, keyPath)
+		if checkErr == nil {
+			out, _ := sshutil.Exec(checkClient, fmt.Sprintf("tmux has-session -t %q 2>/dev/null && echo yes", sessionName))
+			checkClient.Close()
+			if strings.TrimSpace(out) == "yes" {
+				closeCode = 4001 // kicked/detached
+				closeMsg = "detached by another client"
+			}
+		}
+	}
+
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer closeCancel()
-	ws.Close(websocket.StatusCode(4000), "session ended")
+	ws.Close(closeCode, closeMsg)
 	// Block briefly so the close frame is sent before the defer ws.CloseNow() in the caller
 	<-closeCtx.Done()
 

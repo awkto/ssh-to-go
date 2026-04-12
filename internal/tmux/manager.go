@@ -127,18 +127,17 @@ func (m *Manager) ListClients(client *ssh.Client, sessionName string) ([]Client,
 	return clients, nil
 }
 
-// DetachOtherClients detaches all clients from a session except the most recent one.
-func (m *Manager) DetachOtherClients(client *ssh.Client, sessionName string) (int, error) {
+// DetachClients detaches all clients from a session, optionally excluding a specific TTY.
+func (m *Manager) DetachClients(client *ssh.Client, sessionName, excludeTTY string) (int, error) {
 	clients, err := m.ListClients(client, sessionName)
 	if err != nil {
 		return 0, err
 	}
-	if len(clients) <= 1 {
-		return 0, nil
-	}
-	// Detach all except the last (most recent) client
 	detached := 0
-	for _, c := range clients[:len(clients)-1] {
+	for _, c := range clients {
+		if c.TTY == excludeTTY {
+			continue
+		}
 		_, err := sshutil.Exec(client, fmt.Sprintf("tmux detach-client -t %q", c.TTY))
 		if err == nil {
 			detached++

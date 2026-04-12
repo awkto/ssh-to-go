@@ -90,7 +90,7 @@ var tools = []Tool{
 	},
 	{
 		Name:        "detach_clients",
-		Description: "Detach all other tmux clients from a session, keeping only the most recent one attached.",
+		Description: "Detach all tmux clients from a session. The caller's WebSocket relay will auto-reconnect.",
 		InputSchema: InputSchema{
 			Type: "object",
 			Properties: map[string]PropertySchema{
@@ -421,7 +421,7 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 			return toolError("SSH connect failed: " + err.Error())
 		}
 		defer client.Close()
-		detached, err := s.Tmux.DetachOtherClients(client, session)
+		detached, err := s.Tmux.DetachClients(client, session, "")
 		if err != nil {
 			return toolError("detach clients failed: " + err.Error())
 		}

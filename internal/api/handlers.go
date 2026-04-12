@@ -188,9 +188,16 @@ func (h *Handlers) ListClients(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, clients)
 }
 
+type detachClientsReq struct {
+	ExcludeTTY string `json:"exclude_tty,omitempty"`
+}
+
 func (h *Handlers) DetachClients(w http.ResponseWriter, r *http.Request) {
 	hostName := r.PathValue("host")
 	sessionName := r.PathValue("session")
+
+	var req detachClientsReq
+	_ = json.NewDecoder(r.Body).Decode(&req) // body is optional
 
 	hostCfg, ok := h.Hub.GetHostConfig(hostName)
 	if !ok {
@@ -205,7 +212,7 @@ func (h *Handlers) DetachClients(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	detached, err := h.Tmux.DetachOtherClients(client, sessionName)
+	detached, err := h.Tmux.DetachClients(client, sessionName, req.ExcludeTTY)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("detach clients failed: %v", err), http.StatusInternalServerError)
 		return

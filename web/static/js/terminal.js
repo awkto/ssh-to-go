@@ -427,6 +427,9 @@ function initTerminal(host, session) {
     let onDataDisposable = null;
     let onResizeDisposable = null;
 
+    // TTY path of our relay's tmux client, used to exclude ourselves when kicking others
+    let myTTY = "";
+
     function sendBytes(bytes) {
         if (activeWs && activeWs.readyState === WebSocket.OPEN) {
             activeWs.send(new Uint8Array(bytes));
@@ -460,10 +463,11 @@ function initTerminal(host, session) {
                     term.write(filtered);
                 }
             } else {
-                // Check for control messages (resize acks, etc)
+                // Check for control messages (resize acks, tty, etc)
                 try {
                     const msg = JSON.parse(e.data);
                     if (msg.type === "resize") return;
+                    if (msg.type === "tty") { myTTY = msg.tty; return; }
                 } catch (_) {}
                 term.write(e.data.replace(mouseSeqRegex, ""));
             }
@@ -471,9 +475,14 @@ function initTerminal(host, session) {
 
         ws.onclose = function (e) {
             statusEl.className = "status disconnected";
-            // Code 4000 = session ended normally (server-side signal)
+            // Code 4000 = session ended normally (killed/destroyed)
             if (e.code === 4000) {
                 term.write("\r\n\x1b[93m--- session ended ---\x1b[0m\r\n");
+                return;
+            }
+            // Code 4001 = kicked/detached by another client
+            if (e.code === 4001) {
+                term.write("\r\n\x1b[93m--- disconnected by another client ---\x1b[0m\r\n");
                 return;
             }
             term.write("\r\n\x1b[90m--- disconnected, reconnecting in 3s ---\x1b[0m\r\n");
@@ -527,8 +536,11 @@ function initTerminal(host, session) {
         const btn = this;
         btn.disabled = true;
         try {
+            const body = myTTY ? JSON.stringify({ exclude_tty: myTTY }) : "{}";
             const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/detach-clients`, {
                 method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: body,
             });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
