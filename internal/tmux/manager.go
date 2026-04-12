@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/awkto/ssh-to-go/internal/relay"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
@@ -136,12 +137,17 @@ func (m *Manager) DetachClients(client *ssh.Client, sessionName, excludeTTY stri
 		return 0, err
 	}
 	log.Printf("detach: session=%q exclude=%q clients=%v", sessionName, excludeTTY, clients)
-	// Mark TTYs as kicked before detaching so the relay can send the right close code
+
+	// Signal each relay before detaching so it can send a "kicked" message
+	// to the browser while the WebSocket is still healthy.
 	for _, c := range clients {
 		if c.TTY != excludeTTY {
-			relay.MarkKicked(c.TTY)
+			relay.SignalKick(c.TTY)
 		}
 	}
+	// Brief pause to let the kicked message reach browsers before we detach
+	time.Sleep(100 * time.Millisecond)
+
 	detached := 0
 	for _, c := range clients {
 		if c.TTY == excludeTTY {

@@ -5,20 +5,45 @@ import (
 	"sync"
 )
 
-// kicked tracks TTY paths that have been explicitly detached via the API.
-// The relay checks this set when its SSH session ends to decide whether
-// to send close code 4001 (kicked) instead of the default 4000 (session ended).
-var kicked sync.Map
+// kickChannels maps TTY path -> channel. Each active relay registers its
+// TTY so the detach handler can signal it before tmux detaches the client.
+// This lets the relay send a "kicked" message to the browser while the
+// WebSocket is still healthy, avoiding close-code delivery races.
+var (
+	mu       sync.Mutex
+	channels = map[string]chan struct{}{}
+)
 
-// MarkKicked registers a TTY as having been kicked.
-func MarkKicked(tty string) {
-	log.Printf("kick registry: marking %q", tty)
-	kicked.Store(tty, struct{}{})
+// RegisterKickCh registers a kick channel for a TTY. Returns the channel.
+func RegisterKickCh(tty string) chan struct{} {
+	ch := make(chan struct{}, 1)
+	mu.Lock()
+	channels[tty] = ch
+	mu.Unlock()
+	log.Printf("kick: registered %q", tty)
+	return ch
 }
 
-// WasKicked checks and clears the kicked flag for a TTY.
-func WasKicked(tty string) bool {
-	_, loaded := kicked.LoadAndDelete(tty)
-	log.Printf("kick registry: check %q -> %v", tty, loaded)
-	return loaded
+// UnregisterKickCh removes a TTY from the registry.
+func UnregisterKickCh(tty string) {
+	mu.Lock()
+	delete(channels, tty)
+	mu.Unlock()
+}
+
+// SignalKick sends the kick signal for a TTY. Returns true if the TTY
+// was found (i.e. a relay is actively connected on that TTY).
+func SignalKick(tty string) bool {
+	mu.Lock()
+	ch, ok := channels[tty]
+	mu.Unlock()
+	if ok {
+		select {
+		case ch <- struct{}{}:
+			log.Printf("kick: signalled %q", tty)
+		default:
+			// already signalled
+		}
+	}
+	return ok
 }

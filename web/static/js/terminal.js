@@ -429,6 +429,8 @@ function initTerminal(host, session) {
 
     // TTY path of our relay's tmux client, used to exclude ourselves when kicking others
     let myTTY = "";
+    // Set to true when server sends a "kicked" message — prevents auto-reconnect
+    let kicked = false;
 
     function sendBytes(bytes) {
         if (activeWs && activeWs.readyState === WebSocket.OPEN) {
@@ -468,6 +470,7 @@ function initTerminal(host, session) {
                     const msg = JSON.parse(e.data);
                     if (msg.type === "resize") return;
                     if (msg.type === "tty") { myTTY = msg.tty; return; }
+                    if (msg.type === "kicked") { kicked = true; return; }
                 } catch (_) {}
                 term.write(e.data.replace(mouseSeqRegex, ""));
             }
@@ -480,8 +483,9 @@ function initTerminal(host, session) {
                 term.write("\r\n\x1b[93m--- session ended ---\x1b[0m\r\n");
                 return;
             }
-            // Code 4001 = kicked/detached by another client
-            if (e.code === 4001) {
+            // Kicked by another client (via control message or close code 4001)
+            if (kicked || e.code === 4001) {
+                kicked = false;
                 term.write("\r\n\x1b[93m--- disconnected by another client ---\x1b[0m\r\n");
                 return;
             }

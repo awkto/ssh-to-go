@@ -94,10 +94,36 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		log.Printf("relay tty discovery failed (session=%s)", sessionName)
 	}
 
+	// Register a kick channel so the detach handler can signal us before
+	// tmux detaches the client. This lets us send a control message to
+	// the browser while the WebSocket is still healthy.
+	wasKicked := false
+	var kickCh chan struct{}
+	if ttyPath != "" {
+		kickCh = RegisterKickCh(ttyPath)
+		defer UnregisterKickCh(ttyPath)
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	var wg sync.WaitGroup
+
+	// Watch for kick signal — send control message to browser before tmux detaches us
+	if kickCh != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case <-kickCh:
+				wasKicked = true
+				log.Printf("relay kick signal received: tty=%s session=%s", ttyPath, sessionName)
+				kickMsg, _ := json.Marshal(map[string]string{"type": "kicked"})
+				_ = ws.Write(ctx, websocket.MessageText, kickMsg)
+			case <-ctx.Done():
+			}
+		}()
+	}
 
 	// SSH stdout -> WebSocket
 	wg.Add(1)
@@ -172,15 +198,13 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		log.Printf("relay session ended: %v", err)
 	}
 
-	// Check if this client was explicitly kicked via the API
 	closeCode := websocket.StatusCode(4000) // session ended
 	closeMsg := "session ended"
-	kicked := ttyPath != "" && WasKicked(ttyPath)
-	log.Printf("relay closing: tty=%q kicked=%v err=%v (session=%s)", ttyPath, kicked, err, sessionName)
-	if kicked {
+	if wasKicked {
 		closeCode = 4001
 		closeMsg = "detached by another client"
 	}
+	log.Printf("relay closing: tty=%q kicked=%v code=%d (session=%s)", ttyPath, wasKicked, closeCode, sessionName)
 
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer closeCancel()
