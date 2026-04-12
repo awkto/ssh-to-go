@@ -160,6 +160,60 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "renamed", "old_name": sessionName, "new_name": req.NewName})
 }
 
+func (h *Handlers) ListClients(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+	sessionName := r.PathValue("session")
+
+	hostCfg, ok := h.Hub.GetHostConfig(hostName)
+	if !ok {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer client.Close()
+
+	clients, err := h.Tmux.ListClients(client, sessionName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("list clients failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if clients == nil {
+		clients = []tmux.Client{}
+	}
+	writeJSON(w, clients)
+}
+
+func (h *Handlers) DetachClients(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+	sessionName := r.PathValue("session")
+
+	hostCfg, ok := h.Hub.GetHostConfig(hostName)
+	if !ok {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer client.Close()
+
+	detached, err := h.Tmux.DetachOtherClients(client, sessionName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("detach clients failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{"status": "ok", "detached": detached})
+}
+
 func (h *Handlers) SessionCwd(w http.ResponseWriter, r *http.Request) {
 	hostName := r.PathValue("host")
 	sessionName := r.PathValue("session")

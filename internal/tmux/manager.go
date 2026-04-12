@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/awkto/ssh-to-go/internal/sshutil"
@@ -85,6 +86,65 @@ func (m *Manager) RenameSession(client *ssh.Client, oldName, newName string) err
 		return fmt.Errorf("rename session %q -> %q: %w", oldName, newName, err)
 	}
 	return nil
+}
+
+// Client represents a tmux client attached to a session.
+type Client struct {
+	TTY     string `json:"tty"`
+	Session string `json:"session"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+}
+
+// ListClients returns all tmux clients attached to a session on the remote host.
+func (m *Manager) ListClients(client *ssh.Client, sessionName string) ([]Client, error) {
+	out, err := sshutil.Exec(client, fmt.Sprintf("tmux list-clients -t %q -F '#{client_tty}\t#{client_session}\t#{client_width}\t#{client_height}'", sessionName))
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "no clients") || strings.Contains(errStr, "no server running") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list clients for %q: %w", sessionName, err)
+	}
+	var clients []Client
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		w, _ := strconv.Atoi(parts[2])
+		h, _ := strconv.Atoi(parts[3])
+		clients = append(clients, Client{
+			TTY:     parts[0],
+			Session: parts[1],
+			Width:   w,
+			Height:  h,
+		})
+	}
+	return clients, nil
+}
+
+// DetachOtherClients detaches all clients from a session except the most recent one.
+func (m *Manager) DetachOtherClients(client *ssh.Client, sessionName string) (int, error) {
+	clients, err := m.ListClients(client, sessionName)
+	if err != nil {
+		return 0, err
+	}
+	if len(clients) <= 1 {
+		return 0, nil
+	}
+	// Detach all except the last (most recent) client
+	detached := 0
+	for _, c := range clients[:len(clients)-1] {
+		_, err := sshutil.Exec(client, fmt.Sprintf("tmux detach-client -t %q", c.TTY))
+		if err == nil {
+			detached++
+		}
+	}
+	return detached, nil
 }
 
 // HandoffCommand returns the SSH command to directly attach to a session.

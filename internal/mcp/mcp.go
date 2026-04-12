@@ -89,6 +89,18 @@ var tools = []Tool{
 		},
 	},
 	{
+		Name:        "detach_clients",
+		Description: "Detach all other tmux clients from a session, keeping only the most recent one attached.",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"host":    {Type: "string", Description: "Host name"},
+				"session": {Type: "string", Description: "Session name"},
+			},
+			Required: []string{"host", "session"},
+		},
+	},
+	{
 		Name:        "scan_host",
 		Description: "Force an immediate poll of a specific host to refresh its session list.",
 		InputSchema: InputSchema{
@@ -392,6 +404,28 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 			return toolError("rename failed: " + err.Error())
 		}
 		return toolText(fmt.Sprintf("Session renamed from '%s' to '%s' on %s.", session, newName, host))
+
+	case "detach_clients":
+		host, _ := args["host"].(string)
+		session, _ := args["session"].(string)
+		if host == "" || session == "" {
+			return toolError("host and session are required")
+		}
+		hostCfg, ok := s.Hub.GetHostConfig(host)
+		if !ok {
+			return toolError("host not found: " + host)
+		}
+		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
+		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
+		if err != nil {
+			return toolError("SSH connect failed: " + err.Error())
+		}
+		defer client.Close()
+		detached, err := s.Tmux.DetachOtherClients(client, session)
+		if err != nil {
+			return toolError("detach clients failed: " + err.Error())
+		}
+		return toolText(fmt.Sprintf("Detached %d client(s) from session '%s' on %s.", detached, session, host))
 
 	case "scan_host":
 		host, _ := args["host"].(string)

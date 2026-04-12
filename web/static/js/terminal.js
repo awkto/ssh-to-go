@@ -522,6 +522,25 @@ function initTerminal(host, session) {
         }
     });
 
+    // Detach/kick other clients
+    document.getElementById("detach-btn").addEventListener("click", async function () {
+        const btn = this;
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/detach-clients`, {
+                method: "POST",
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            btn.textContent = data.detached > 0 ? `Kicked ${data.detached}` : "No others";
+            setTimeout(() => { btn.textContent = "Kick Other Clients"; btn.disabled = false; }, 2000);
+        } catch (e) {
+            alert("Detach failed: " + e.message);
+            btn.textContent = "Kick Other Clients";
+            btn.disabled = false;
+        }
+    });
+
     // Rename button
     document.getElementById("rename-btn").addEventListener("click", async function () {
         const newName = prompt(`Rename session "${session}":`, session);

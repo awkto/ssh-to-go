@@ -7,10 +7,11 @@ import (
 )
 
 type Session struct {
-	Name     string    `json:"name"`
-	Windows  int       `json:"windows"`
-	Created  time.Time `json:"created"`
-	Attached bool      `json:"attached"`
+	Name            string    `json:"name"`
+	Windows         int       `json:"windows"`
+	Created         time.Time `json:"created"`
+	Attached        bool      `json:"attached"`
+	AttachedClients int       `json:"attached_clients"`
 }
 
 // Format string for tmux list-sessions -F
@@ -33,10 +34,11 @@ func ParseSessions(output string) []Session {
 		attachedCount, _ := strconv.Atoi(parts[3])
 
 		sessions = append(sessions, Session{
-			Name:     parts[0],
-			Windows:  windows,
-			Created:  time.Unix(createdUnix, 0),
-			Attached: attachedCount > 0,
+			Name:            parts[0],
+			Windows:         windows,
+			Created:         time.Unix(createdUnix, 0),
+			Attached:        attachedCount > 0,
+			AttachedClients: attachedCount,
 		})
 	}
 	return sessions
