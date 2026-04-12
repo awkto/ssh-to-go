@@ -1,9 +1,6 @@
 package relay
 
-import (
-	"log"
-	"sync"
-)
+import "sync"
 
 // kickChannels maps TTY path -> channel. Each active relay registers its
 // TTY so the detach handler can signal it before tmux detaches the client.
@@ -20,7 +17,6 @@ func RegisterKickCh(tty string) chan struct{} {
 	mu.Lock()
 	channels[tty] = ch
 	mu.Unlock()
-	log.Printf("kick: registered %q", tty)
 	return ch
 }
 
@@ -40,9 +36,7 @@ func SignalKick(tty string) bool {
 	if ok {
 		select {
 		case ch <- struct{}{}:
-			log.Printf("kick: signalled %q", tty)
 		default:
-			// already signalled
 		}
 	}
 	return ok

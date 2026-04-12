@@ -87,11 +87,8 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 
 	// Send the TTY path to the client as a control message
 	if ttyPath != "" {
-		log.Printf("relay tty discovered: %s (session=%s)", ttyPath, sessionName)
 		ttyMsg, _ := json.Marshal(map[string]string{"type": "tty", "tty": ttyPath})
 		_ = ws.Write(ctx, websocket.MessageText, ttyMsg)
-	} else {
-		log.Printf("relay tty discovery failed (session=%s)", sessionName)
 	}
 
 	// Register a kick channel so the detach handler can signal us before
@@ -117,8 +114,7 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 			select {
 			case <-kickCh:
 				wasKicked = true
-				log.Printf("relay kick signal received: tty=%s session=%s", ttyPath, sessionName)
-				kickMsg, _ := json.Marshal(map[string]string{"type": "kicked"})
+					kickMsg, _ := json.Marshal(map[string]string{"type": "kicked"})
 				_ = ws.Write(ctx, websocket.MessageText, kickMsg)
 			case <-ctx.Done():
 			}
@@ -204,8 +200,6 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 		closeCode = 4001
 		closeMsg = "detached by another client"
 	}
-	log.Printf("relay closing: tty=%q kicked=%v code=%d (session=%s)", ttyPath, wasKicked, closeCode, sessionName)
-
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer closeCancel()
 	ws.Close(closeCode, closeMsg)

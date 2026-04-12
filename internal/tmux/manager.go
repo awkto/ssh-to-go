@@ -2,7 +2,6 @@ package tmux
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -136,8 +135,6 @@ func (m *Manager) DetachClients(client *ssh.Client, sessionName, excludeTTY stri
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("detach: session=%q exclude=%q clients=%v", sessionName, excludeTTY, clients)
-
 	// Signal each relay before detaching so it can send a "kicked" message
 	// to the browser while the WebSocket is still healthy.
 	for _, c := range clients {
