@@ -87,8 +87,11 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 
 	// Send the TTY path to the client as a control message
 	if ttyPath != "" {
+		log.Printf("relay tty discovered: %s (session=%s)", ttyPath, sessionName)
 		ttyMsg, _ := json.Marshal(map[string]string{"type": "tty", "tty": ttyPath})
 		_ = ws.Write(ctx, websocket.MessageText, ttyMsg)
+	} else {
+		log.Printf("relay tty discovery failed (session=%s)", sessionName)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -172,7 +175,9 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 	// Check if this client was explicitly kicked via the API
 	closeCode := websocket.StatusCode(4000) // session ended
 	closeMsg := "session ended"
-	if ttyPath != "" && WasKicked(ttyPath) {
+	kicked := ttyPath != "" && WasKicked(ttyPath)
+	log.Printf("relay closing: tty=%q kicked=%v err=%v (session=%s)", ttyPath, kicked, err, sessionName)
+	if kicked {
 		closeCode = 4001
 		closeMsg = "detached by another client"
 	}
