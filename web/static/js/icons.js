@@ -81,7 +81,10 @@
         { name: "camera", label: "Camera", svg: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>' },
     ];
 
+    // 32 colors in 4 pages of 8. First page preserves prior defaults
+    // (existing session colors keep rendering unchanged).
     const ICON_COLORS = [
+        // Page 1 — primary palette (original 8)
         { name: "default", label: "Default", hex: "#3b82f6" },
         { name: "green",   label: "Green",   hex: "#22c55e" },
         { name: "red",     label: "Red",     hex: "#ef4444" },
@@ -90,7 +93,36 @@
         { name: "pink",    label: "Pink",    hex: "#ec4899" },
         { name: "cyan",    label: "Cyan",    hex: "#06b6d4" },
         { name: "gray",    label: "Gray",    hex: "#94a3b8" },
+        // Page 2 — warmer / earthy
+        { name: "amber",    label: "Amber",    hex: "#fbbf24" },
+        { name: "yellow",   label: "Yellow",   hex: "#eab308" },
+        { name: "lime",     label: "Lime",     hex: "#84cc16" },
+        { name: "emerald",  label: "Emerald",  hex: "#10b981" },
+        { name: "rose",     label: "Rose",     hex: "#f43f5e" },
+        { name: "crimson",  label: "Crimson",  hex: "#dc2626" },
+        { name: "coral",    label: "Coral",    hex: "#fb7185" },
+        { name: "bronze",   label: "Bronze",   hex: "#b45309" },
+        // Page 3 — cool / deep
+        { name: "teal",     label: "Teal",     hex: "#14b8a6" },
+        { name: "sky",      label: "Sky",      hex: "#0ea5e9" },
+        { name: "indigo",   label: "Indigo",   hex: "#6366f1" },
+        { name: "violet",   label: "Violet",   hex: "#8b5cf6" },
+        { name: "fuchsia",  label: "Fuchsia",  hex: "#d946ef" },
+        { name: "magenta",  label: "Magenta",  hex: "#c026d3" },
+        { name: "midnight", label: "Midnight", hex: "#1e3a8a" },
+        { name: "forest",   label: "Forest",   hex: "#166534" },
+        // Page 4 — pastel / neutral
+        { name: "mint",     label: "Mint",     hex: "#6ee7b7" },
+        { name: "peach",    label: "Peach",    hex: "#fdba74" },
+        { name: "lavender", label: "Lavender", hex: "#c4b5fd" },
+        { name: "blush",    label: "Blush",    hex: "#fda4af" },
+        { name: "sand",     label: "Sand",     hex: "#d6d3d1" },
+        { name: "slate",    label: "Slate",    hex: "#64748b" },
+        { name: "charcoal", label: "Charcoal", hex: "#334155" },
+        { name: "white",    label: "White",    hex: "#f8fafc" },
     ];
+    const COLORS_PER_PAGE = 8;
+    const COLOR_PAGE_COUNT = Math.ceil(ICON_COLORS.length / COLORS_PER_PAGE);
 
     const DEFAULT_ICON = "terminal";
     const DEFAULT_COLOR = "default";
@@ -193,14 +225,29 @@
         picker.className = "icon-picker-popup";
         picker.id = "icon-picker-popup";
 
-        // Color row
+        // Color row with pagination (32 colors across 4 pages of 8).
+        // Start on the page that contains the currently-selected color.
+        var colorPage = (function() {
+            var i = ICON_COLORS.findIndex(function(c) { return c.name === selectedColor; });
+            return Math.max(0, Math.floor((i < 0 ? 0 : i) / COLORS_PER_PAGE));
+        })();
         var colorRow = document.createElement("div");
         colorRow.className = "icon-picker-colors";
         function renderColors() {
-            colorRow.innerHTML = ICON_COLORS.map(function(c) {
+            var start = colorPage * COLORS_PER_PAGE;
+            var page = ICON_COLORS.slice(start, start + COLORS_PER_PAGE);
+            var swatches = page.map(function(c) {
                 var sel = c.name === selectedColor ? " selected" : "";
                 return '<button type="button" class="icon-color-swatch' + sel + '" data-color="' + c.name + '" title="' + c.label + '" style="background:' + c.hex + '"></button>';
             }).join("");
+            colorRow.innerHTML =
+                '<button type="button" class="icon-color-nav" data-dir="prev" title="Previous colors" aria-label="Previous colors">' +
+                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>' +
+                '</button>' +
+                '<div class="icon-color-swatches">' + swatches + '</div>' +
+                '<button type="button" class="icon-color-nav" data-dir="next" title="More colors (page ' + (colorPage + 1) + ' / ' + COLOR_PAGE_COUNT + ')" aria-label="Next colors">' +
+                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+                '</button>';
         }
         renderColors();
 
@@ -245,9 +292,15 @@
             onSelect(selectedIcon, selectedColor);
         });
 
-        // Color clicks also apply immediately
+        // Color clicks + page-nav arrows. Arrows wrap; swatch click applies immediately.
         colorRow.addEventListener("click", function(e) {
             e.stopPropagation();
+            var nav = e.target.closest(".icon-color-nav");
+            if (nav) {
+                colorPage = (nav.dataset.dir === "next" ? colorPage + 1 : colorPage - 1 + COLOR_PAGE_COUNT) % COLOR_PAGE_COUNT;
+                renderColors();
+                return;
+            }
             var btn = e.target.closest(".icon-color-swatch");
             if (!btn) return;
             selectedColor = btn.dataset.color;
