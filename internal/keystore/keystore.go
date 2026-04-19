@@ -181,7 +181,7 @@ func (s *Store) Import(name string, privateKeyPEM []byte) (*KeypairMeta, error) 
 	// Derive and write public key
 	pubKey := signer.PublicKey()
 	authorizedKey := ssh.MarshalAuthorizedKey(pubKey)
-	pubLine := fmt.Sprintf("%sssh-to-go:%s\n", string(authorizedKey[:len(authorizedKey)-1]), name)
+	pubLine := fmt.Sprintf("%s ssh-to-go:%s\n", string(authorizedKey[:len(authorizedKey)-1]), name)
 	if err := os.WriteFile(s.pubPath(name), []byte(pubLine), 0644); err != nil {
 		return nil, fmt.Errorf("write public key: %w", err)
 	}
@@ -353,7 +353,7 @@ func (s *Store) writeKeyFiles(name string, priv ed25519.PrivateKey, pub ed25519.
 
 	sshPub, _ := ssh.NewPublicKey(pub)
 	authorizedKey := ssh.MarshalAuthorizedKey(sshPub)
-	pubLine := fmt.Sprintf("%sssh-to-go:%s\n", string(authorizedKey[:len(authorizedKey)-1]), name)
+	pubLine := fmt.Sprintf("%s ssh-to-go:%s\n", string(authorizedKey[:len(authorizedKey)-1]), name)
 	if err := os.WriteFile(s.pubPath(name), []byte(pubLine), 0644); err != nil {
 		return fmt.Errorf("write public key: %w", err)
 	}
