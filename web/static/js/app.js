@@ -588,7 +588,7 @@
 
         const body = document.getElementById("hosts-body");
         if (filtered.length === 0) {
-            body.innerHTML = `<tr><td colspan="5" class="empty-state">No hosts found. Add a host to get started.</td></tr>`;
+            body.innerHTML = `<tr><td colspan="5" class="empty-state">No hosts found. <a href="#" onclick="showAddHostModal();return false;">Add a host</a> to get started.</td></tr>`;
             return;
         }
 
