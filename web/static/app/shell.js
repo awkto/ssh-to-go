@@ -68,7 +68,7 @@ const Sidebar = ({
       height: 6,
       boxShadow: 'none'
     }
-  }), React.createElement("span", null, version ? `v${version}` : 'ssh-to-go')));
+  }), React.createElement("span", null, version ? version.startsWith('v') ? version : `v${version}` : 'ssh-to-go')));
 };
 const NavItem = ({
   icon: Icon,

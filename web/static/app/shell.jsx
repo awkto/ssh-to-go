@@ -26,7 +26,7 @@ const Sidebar = ({ view, setView, openPalette, sessionCount, hostCount, activeCo
 
       <div className="sidebar-footer">
         <span className="dot ok" style={{width:6, height:6, boxShadow:'none'}}></span>
-        <span>{version ? `v${version}` : 'ssh-to-go'}</span>
+        <span>{version ? (version.startsWith('v') ? version : `v${version}`) : 'ssh-to-go'}</span>
       </div>
     </aside>
   );
