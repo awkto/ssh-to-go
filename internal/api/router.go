@@ -100,7 +100,9 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.Handle("GET /static/", http.FileServer(rc.StaticFS))
 	mux.HandleFunc("GET /login", handlers.LoginPage)
 	mux.HandleFunc("GET /terminal/{host}/{session}", handlers.TerminalPage)
-	mux.HandleFunc("GET /settings", handlers.SettingsPage)
+	mux.HandleFunc("GET /settings", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/#settings", http.StatusTemporaryRedirect)
+	})
 	mux.HandleFunc("GET /setup", handlers.SetupPage)
 	mux.HandleFunc("GET /", handlers.DashboardPage)
 

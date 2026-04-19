@@ -88,10 +88,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("parse terminal template: %v", err)
 	}
-	settingsTmpl, err := template.ParseFS(web.TemplateFS, "templates/settings.html")
-	if err != nil {
-		log.Fatalf("parse settings template: %v", err)
-	}
 	setupTmpl, err := template.ParseFS(web.TemplateFS, "templates/setup.html")
 	if err != nil {
 		log.Fatalf("parse setup template: %v", err)
@@ -100,7 +96,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("parse login template: %v", err)
 	}
-	api.SetTemplates(dashboardTmpl, terminalTmpl, settingsTmpl, setupTmpl, loginTmpl)
+	api.SetTemplates(dashboardTmpl, terminalTmpl, setupTmpl, loginTmpl)
 
 	// Set up hub and pollers
 	h := hub.New(cfg.Hosts)

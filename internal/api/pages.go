@@ -9,15 +9,13 @@ import (
 var (
 	dashboardTmpl *template.Template
 	terminalTmpl  *template.Template
-	settingsTmpl  *template.Template
 	setupTmpl     *template.Template
 	loginTmpl     *template.Template
 )
 
-func SetTemplates(dashboard, terminal, settings, setup, login *template.Template) {
+func SetTemplates(dashboard, terminal, setup, login *template.Template) {
 	dashboardTmpl = dashboard
 	terminalTmpl = terminal
-	settingsTmpl = settings
 	setupTmpl = setup
 	loginTmpl = login
 }
@@ -60,17 +58,6 @@ func (h *Handlers) TerminalPage(w http.ResponseWriter, r *http.Request) {
 	_ = h.SessionIcons.Touch(host, session)
 	if err := terminalTmpl.Execute(w, data); err != nil {
 		log.Printf("render terminal: %v", err)
-		http.Error(w, "render error", http.StatusInternalServerError)
-	}
-}
-
-func (h *Handlers) SettingsPage(w http.ResponseWriter, r *http.Request) {
-	type settingsData struct {
-		AuthEnabled bool
-	}
-	data := settingsData{AuthEnabled: !h.Auth.NoAuth()}
-	if err := settingsTmpl.Execute(w, data); err != nil {
-		log.Printf("render settings: %v", err)
 		http.Error(w, "render error", http.StatusInternalServerError)
 	}
 }

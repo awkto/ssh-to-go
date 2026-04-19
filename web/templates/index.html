@@ -1,259 +1,42 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SSH-to-go</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 17 10 11 4 5'/%3E%3Cline x1='12' y1='19' x2='20' y2='19'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/static/css/style.css">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SSH-to-go</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='5 7 10 12 5 17'/%3E%3Cline x1='13' y1='17' x2='19' y2='17'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app/app.css" />
+<script>
+  // Apply saved theme/accent/density before React boots to avoid a flash.
+  (function(){
+    var t = localStorage.getItem('sshtogo.theme') || 'dark';
+    var a = localStorage.getItem('sshtogo.accent') || 'indigo';
+    var d = localStorage.getItem('sshtogo.density') || 'balanced';
+    var r = document.documentElement;
+    r.dataset.theme = t; r.dataset.accent = a; r.dataset.density = d;
+  })();
+</script>
 </head>
 <body>
-    <div class="app-layout">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <a href="/" class="sidebar-brand">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="4 17 10 11 4 5"></polyline>
-                    <line x1="12" y1="19" x2="20" y2="19"></line>
-                </svg>
-                <span>SSH-to-go</span>
-            </a>
-            <nav class="sidebar-nav">
-                <div class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                    Dashboard
-                </div>
-                <div class="nav-item" data-view="sessions" onclick="switchView('sessions')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                    Sessions
-                </div>
-                <div class="nav-item" data-view="hosts" onclick="switchView('hosts')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
-                    Hosts
-                </div>
-                <a href="/settings" class="nav-item">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                    Settings
-                </a>
-                <!-- Logs nav hidden until backend logging is implemented (issue #10) -->
+<div id="root"></div>
 
-                <div class="nav-divider"></div>
-                <div class="nav-label">Filters</div>
-                <div class="nav-item filter-item active" data-filter="all" onclick="setFilter('all')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                    All Servers
-                </div>
-                <div class="nav-item filter-item" data-filter="active" onclick="setFilter('active')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                    Active Sessions
-                </div>
-                <div class="nav-item filter-item" data-filter="favorites" onclick="setFilter('favorites')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                    Favorites
-                </div>
-            </nav>
-            <div class="sidebar-footer" id="version-footer"></div>
-        </aside>
+<script src="/static/vendor/react.production.min.js"></script>
+<script src="/static/vendor/react-dom.production.min.js"></script>
 
-        <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
-
-        <!-- Main Area -->
-        <main class="main-area">
-            <div class="top-bar">
-                <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                </button>
-                <div class="search-box">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" id="global-search" placeholder="Search..." oninput="onSearch()">
-                </div>
-                <div class="top-bar-actions">
-                    <button class="btn-icon" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
-                        <svg id="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                        <svg id="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                    </button>
-                    <a href="/settings" class="btn-icon" title="Settings">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                    </a>
-                    <button class="btn btn-primary" id="new-session-btn" onclick="showNewSessionModal()">
-                        + <span class="hide-mobile">New Session</span><span class="show-mobile">New</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="content">
-                <!-- Dashboard View -->
-                <div class="view-panel active" id="view-dashboard">
-                    <div class="content-header">
-                        <h2 class="content-title">Dashboard</h2>
-                    </div>
-                    <div class="dashboard-cards" id="dashboard-cards"></div>
-                    <div class="content-header">
-                        <h3>Recent Sessions</h3>
-                    </div>
-                    <table class="data-table" id="dashboard-recent-table">
-                        <thead>
-                            <tr>
-                                <th style="width:32px"></th>
-                                <th>Session</th>
-                                <th class="hide-mobile">Host</th>
-                                <th class="hide-mobile">Uptime</th>
-                                <th style="text-align:center">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dashboard-recent-body"></tbody>
-                    </table>
-                </div>
-
-                <!-- Sessions View -->
-                <div class="view-panel" id="view-sessions">
-                    <div class="content-header">
-                        <h2 class="content-title">Sessions</h2>
-                        <div class="content-filter">
-                            <button class="filter-toggle" id="session-filter-toggle" onclick="toggleFilterBar('session')">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                                <span class="filter-dot"></span>
-                            </button>
-                            <input type="text" id="session-filter" placeholder="Search sessions..." oninput="renderSessions()">
-                        </div>
-                    </div>
-                    <div class="filter-bar" id="session-filter-bar">
-                        <div class="filter-group">
-                            <label>Host</label>
-                            <select id="session-host-select" onchange="renderSessions()">
-                                <option value="">All Hosts</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Status</label>
-                            <select id="session-status-select" onchange="renderSessions()">
-                                <option value="">All</option>
-                                <option value="attached">Attached</option>
-                                <option value="detached">Detached</option>
-                            </select>
-                        </div>
-                    </div>
-                    <table class="data-table" id="sessions-table">
-                        <thead>
-                            <tr>
-                                <th onclick="sortSessions('status')" style="width:32px"></th>
-                                <th onclick="sortSessions('name')">Session Name <span class="sort-arrow"></span></th>
-                                <th class="hide-mobile" onclick="sortSessions('host')">Host <span class="sort-arrow"></span></th>
-                                <th class="hide-mobile" onclick="sortSessions('uptime')">Uptime <span class="sort-arrow"></span></th>
-                                <th class="hide-wide" onclick="sortSessions('accessed')">Last Accessed <span class="sort-arrow"></span></th>
-                                <th onclick="sortSessions('starred')" style="text-align:center">Actions <span class="sort-arrow"></span></th>
-                            </tr>
-                        </thead>
-                        <tbody id="sessions-body"></tbody>
-                    </table>
-                </div>
-
-                <!-- Hosts View -->
-                <div class="view-panel" id="view-hosts">
-                    <div class="content-header">
-                        <h2 class="content-title">Hosts</h2>
-                        <div class="content-filter">
-                            <button class="filter-toggle" id="host-filter-toggle" onclick="toggleFilterBar('host')">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                                <span class="filter-dot"></span>
-                            </button>
-                            <input type="text" id="host-filter" placeholder="Search hosts..." oninput="renderHosts()">
-                            <button class="btn btn-primary" onclick="showAddHostModal()">
-                                + <span class="hide-mobile">Add Host</span><span class="show-mobile">Add</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="filter-bar" id="host-filter-bar">
-                        <div class="filter-group">
-                            <label>OS</label>
-                            <div id="host-os-select-wrap">
-                                <select id="host-os-select" onchange="renderHosts()">
-                                    <option value="">All OS</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="filter-group">
-                            <label>Status</label>
-                            <select id="host-status-select" onchange="renderHosts()">
-                                <option value="">All</option>
-                                <option value="online">Online</option>
-                                <option value="offline">Offline</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Sessions</label>
-                            <select id="host-sessions-select" onchange="renderHosts()">
-                                <option value="">Any</option>
-                                <option value="with">With Sessions</option>
-                                <option value="without">Without Sessions</option>
-                            </select>
-                        </div>
-                    </div>
-                    <table class="data-table" id="hosts-table">
-                        <thead>
-                            <tr>
-                                <th onclick="sortHosts('name')">Host (FQDN) <span class="sort-arrow"></span></th>
-                                <th onclick="sortHosts('sessions')">Sessions <span class="sort-arrow"></span></th>
-                                <th class="hide-mobile" onclick="sortHosts('os')">Operating System <span class="sort-arrow"></span></th>
-                                <th class="hide-mobile" onclick="sortHosts('sync')">Last Sync <span class="sort-arrow"></span></th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="hosts-body"></tbody>
-                    </table>
-                </div>
-
-                <!-- Logs View -->
-                <div class="view-panel" id="view-logs">
-                    <div class="content-header">
-                        <h2 class="content-title">Activity Log</h2>
-                    </div>
-                    <div class="log-entries" id="log-entries">
-                        <div class="empty-state">Activity logging will appear here as you interact with sessions and hosts.</div>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Modal -->
-    <div id="modal-overlay" class="modal-overlay hidden">
-        <div class="modal">
-            <h3 id="modal-title">New Session</h3>
-            <form id="modal-form">
-                <div id="modal-fields"></div>
-                <div class="modal-actions">
-                    <button type="button" id="modal-cancel" class="btn">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="modal-submit">Create</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-    // Theme init (before app.js to prevent flash)
-    (function() {
-        var t = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', t);
-        updateThemeIcon(t);
-    })();
-    function toggleTheme() {
-        var current = document.documentElement.getAttribute('data-theme') || 'dark';
-        var next = current === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
-        updateThemeIcon(next);
-    }
-    function updateThemeIcon(theme) {
-        var sun = document.getElementById('theme-icon-sun');
-        var moon = document.getElementById('theme-icon-moon');
-        if (sun && moon) {
-            sun.style.display = theme === 'light' ? 'block' : 'none';
-            moon.style.display = theme === 'dark' ? 'block' : 'none';
-        }
-    }
-    </script>
-    <script src="/static/js/icons.js"></script>
-    <script src="/static/js/app.js"></script>
+<script src="/static/app/data.js"></script>
+<script src="/static/app/icons.js"></script>
+<script src="/static/app/primitives.js"></script>
+<script src="/static/app/shell.js"></script>
+<script src="/static/app/dashboard.js"></script>
+<script src="/static/app/sessions.js"></script>
+<script src="/static/app/hosts.js"></script>
+<script src="/static/app/settings.js"></script>
+<script src="/static/app/palette.js"></script>
+<script src="/static/app/newsession.js"></script>
+<script src="/static/app/tweaks.js"></script>
+<script src="/static/app/app.js"></script>
 </body>
 </html>
