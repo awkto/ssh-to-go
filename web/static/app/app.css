@@ -70,6 +70,21 @@
   --shadow-lg: 0 12px 40px oklch(0 0 0 / 0.12);
 }
 
+/* Sidebar keeps a dark navy chrome even on the light theme — breaks up the
+   all-white canvas and matches the classic SSH-to-go look. */
+[data-theme="light"] .sidebar {
+  --bg-sidebar: oklch(0.3 0.015 265);
+  --fg: oklch(0.94 0.005 265);
+  --fg-muted: oklch(0.76 0.01 265);
+  --fg-subtle: oklch(0.62 0.012 265);
+  --fg-faint: oklch(0.52 0.01 265);
+  --hairline: oklch(0.38 0.012 265);
+  --row-hover: oklch(0.36 0.012 265);
+  --panel-border: oklch(0.42 0.012 265);
+  --accent-soft: oklch(0.68 0.16 270 / 0.22);
+  color: var(--fg);
+}
+
 /* Accent variants */
 [data-accent="violet"] {
   --accent: oklch(0.58 0.2 300);
@@ -171,9 +186,12 @@ a { color: inherit; text-decoration: none; }
 .brand-mark {
   width: 30px;
   height: 30px;
+  border-radius: 8px;
+  background: #0a0e1a;
   display: grid;
   place-items: center;
-  color: var(--fg);
+  color: #fff;
+  box-shadow: 0 1px 0 oklch(1 0 0 / 0.1) inset, 0 1px 2px oklch(0 0 0 / 0.3);
   position: relative;
 }
 .brand-mark svg { display: block; }
