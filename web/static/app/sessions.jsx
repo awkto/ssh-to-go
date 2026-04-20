@@ -80,14 +80,28 @@ const FullSessionRow = ({ session: s, onOpen }) => {
     if (!confirm(`End session "${s.id}"?`)) return;
     try { await killSession(s.hostName, s.id); } catch(err) { alert('end failed: ' + err.message); }
   };
+  const onPickIcon = (e) => {
+    e.stopPropagation();
+    if (!window.showIconPicker) return;
+    window.showIconPicker(e.currentTarget, s.iconKind || 'terminal', (iconName, colorName) => {
+      setSessionIconPatch(s.hostName, s.id, { icon: iconName, color: colorName });
+    }, s.iconColor || 'default');
+  };
+  const onRename = async (e) => {
+    e.stopPropagation();
+    const next = prompt(`Rename session "${s.id}" to:`, s.id);
+    if (!next || next === s.id) return;
+    try { await renameSession(s.hostName, s.id, next); } catch(err) { alert('rename failed: ' + err.message); }
+  };
   return (
     <tr>
       <td>
-        <div className="cell-session" onClick={onOpen} style={{cursor:'pointer'}}>
-          <SessIcon kind={s.iconKind} color={s.iconColor} />
-          <div>
-            <div className="mono name">{s.id}</div>
-          </div>
+        <div className="cell-session">
+          <button className="sess-icon-btn" onClick={onPickIcon} title="Change icon">
+            <SessIcon kind={s.iconKind} color={s.iconColor} />
+          </button>
+          <span className="mono name" onClick={onOpen} style={{cursor:'pointer'}}>{s.id}</span>
+          <button className="rename-btn" onClick={onRename} title="Rename"><IconEdit size={12}/></button>
         </div>
       </td>
       <td className="muted mono" style={{fontSize:12.5}}>{s.host}</td>

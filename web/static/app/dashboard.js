@@ -251,18 +251,48 @@ const SessionRow = ({
       alert('end failed: ' + err.message);
     }
   };
+  const onPickIcon = e => {
+    e.stopPropagation();
+    if (!window.showIconPicker) return;
+    window.showIconPicker(e.currentTarget, s.iconKind || 'terminal', (iconName, colorName) => {
+      setSessionIconPatch(s.hostName, s.id, {
+        icon: iconName,
+        color: colorName
+      });
+    }, s.iconColor || 'default');
+  };
+  const onRename = async e => {
+    e.stopPropagation();
+    const next = prompt(`Rename session "${s.id}" to:`, s.id);
+    if (!next || next === s.id) return;
+    try {
+      await renameSession(s.hostName, s.id, next);
+    } catch (err) {
+      alert('rename failed: ' + err.message);
+    }
+  };
   return React.createElement("tr", null, React.createElement("td", null, React.createElement("div", {
-    className: "cell-session",
+    className: "cell-session"
+  }, React.createElement("button", {
+    className: "sess-icon-btn",
+    onClick: onPickIcon,
+    title: "Change icon"
+  }, React.createElement(SessIcon, {
+    kind: s.iconKind,
+    color: s.iconColor
+  })), React.createElement("span", {
+    className: "mono name",
     onClick: onOpen,
     style: {
       cursor: 'pointer'
     }
-  }, React.createElement(SessIcon, {
-    kind: s.iconKind,
-    color: s.iconColor
-  }), React.createElement("span", {
-    className: "mono name"
-  }, s.id))), React.createElement("td", {
+  }, s.id), React.createElement("button", {
+    className: "rename-btn",
+    onClick: onRename,
+    title: "Rename"
+  }, React.createElement(IconEdit, {
+    size: 12
+  })))), React.createElement("td", {
     className: "muted mono",
     style: {
       fontSize: 12.5

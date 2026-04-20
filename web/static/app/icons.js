@@ -424,51 +424,22 @@ const IconSend = p => ic(React.createElement(React.Fragment, null, React.createE
 })), p);
 const SessIcon = ({
   kind,
-  color
+  color,
+  size = 14
 }) => {
-  const colors = {
-    violet: {
-      bg: 'oklch(0.58 0.2 300 / 0.14)',
-      fg: 'oklch(0.7 0.18 300)'
-    },
-    teal: {
-      bg: 'oklch(0.62 0.12 195 / 0.14)',
-      fg: 'oklch(0.72 0.12 195)'
-    },
-    indigo: {
-      bg: 'oklch(0.58 0.18 270 / 0.14)',
-      fg: 'oklch(0.7 0.18 270)'
-    },
-    amber: {
-      bg: 'oklch(0.78 0.14 75 / 0.14)',
-      fg: 'oklch(0.78 0.14 75)'
-    },
-    rose: {
-      bg: 'oklch(0.68 0.2 25 / 0.14)',
-      fg: 'oklch(0.72 0.18 25)'
-    }
-  };
-  const c = colors[color] || colors.indigo;
-  const glyphs = {
-    chevron: '>_',
-    stack: '§',
-    cloud: '☁',
-    git: 'ᚵ',
-    lock: '◉',
-    heart: '♥',
-    fox: 'ƒ',
-    key: '⌘',
-    folder: '▣',
-    node: '◈',
-    terminal: '>_'
-  };
+  const hex = typeof window !== 'undefined' && window.colorHex ? window.colorHex(color || 'default') : '#6366f1';
+  const bg = hex + '26';
+  const svg = typeof window !== 'undefined' && window.renderIcon ? window.renderIcon(kind || 'terminal', size, color || 'default') : '';
   return React.createElement("span", {
     className: "sess-icon",
     style: {
-      background: c.bg,
-      color: c.fg
+      background: bg,
+      color: hex
+    },
+    dangerouslySetInnerHTML: {
+      __html: svg || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>'
     }
-  }, glyphs[kind] || '>_');
+  });
 };
 const Sparkline = ({
   data,
