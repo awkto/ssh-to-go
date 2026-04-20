@@ -1152,7 +1152,7 @@ a { color: inherit; text-decoration: none; }
 .icon-picker-popup {
   position: fixed;
   z-index: 10000;
-  width: 280px;
+  width: 304px;
   max-height: 380px;
   background: var(--panel);
   border: 1px solid var(--panel-border);

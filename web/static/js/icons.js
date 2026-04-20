@@ -319,7 +319,7 @@
 
         // Position near the anchor, clamped to viewport
         var rect = anchorEl.getBoundingClientRect();
-        var pickerW = 280;
+        var pickerW = 304;
         var left = rect.left;
         var top = rect.bottom + 4;
 
