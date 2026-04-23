@@ -132,7 +132,7 @@ const Dashboard = ({
     size: 12
   }))), React.createElement("div", {
     style: {
-      maxHeight: 440,
+      maxHeight: 640,
       overflowY: 'auto'
     }
   }, React.createElement("table", {
@@ -145,8 +145,12 @@ const Dashboard = ({
     style: {
       textAlign: 'right'
     }
-  }, "Actions"))), React.createElement("tbody", null, SESSIONS.slice(0, 8).map(s => React.createElement(SessionRow, {
-    key: s.id,
+  }, "Actions"))), React.createElement("tbody", null, SESSIONS.slice().sort((a, b) => {
+    if (a.starred !== b.starred) return a.starred ? -1 : 1;
+    if (b.lastAccessedMs !== a.lastAccessedMs) return b.lastAccessedMs - a.lastAccessedMs;
+    return b.createdMs - a.createdMs;
+  }).slice(0, 20).map(s => React.createElement(SessionRow, {
+    key: `${s.hostName}:${s.id}`,
     session: s,
     onOpen: () => openSession(s)
   })))))), React.createElement("div", {

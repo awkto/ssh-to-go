@@ -73,7 +73,7 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
               View all <IconArrowRight size={12} />
             </button>
           </div>
-          <div style={{maxHeight: 440, overflowY:'auto'}}>
+          <div style={{maxHeight: 640, overflowY:'auto'}}>
             <table className="tbl">
               <thead>
                 <tr>
@@ -86,8 +86,13 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
                 </tr>
               </thead>
               <tbody>
-                {SESSIONS.slice(0, 8).map(s => (
-                  <SessionRow key={s.id} session={s} onOpen={() => openSession(s)} />
+                {SESSIONS.slice().sort((a, b) => {
+                  // Starred pinned to top, then most-recently-accessed, then newest-created.
+                  if (a.starred !== b.starred) return a.starred ? -1 : 1;
+                  if (b.lastAccessedMs !== a.lastAccessedMs) return b.lastAccessedMs - a.lastAccessedMs;
+                  return b.createdMs - a.createdMs;
+                }).slice(0, 20).map(s => (
+                  <SessionRow key={`${s.hostName}:${s.id}`} session={s} onOpen={() => openSession(s)} />
                 ))}
               </tbody>
             </table>

@@ -101,6 +101,7 @@ function adaptSessions() {
     for (let i = 0; i < (s.attached_clients || 0); i++) {
       clients.push({ name: '··', color: 'indigo' });
     }
+    const lastAccessedMs = icon.last_accessed ? new Date(icon.last_accessed).getTime() : 0;
     return {
       id: s.name,
       host: hostAddress,
@@ -115,6 +116,8 @@ function adaptSessions() {
       iconKind: icon.icon || 'terminal',
       iconColor: icon.color || 'indigo',
       starred: !!icon.starred,
+      createdMs,
+      lastAccessedMs,
       _raw: entry,
     };
   });

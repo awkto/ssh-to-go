@@ -102,6 +102,7 @@ function adaptSessions() {
         color: 'indigo'
       });
     }
+    const lastAccessedMs = icon.last_accessed ? new Date(icon.last_accessed).getTime() : 0;
     return {
       id: s.name,
       host: hostAddress,
@@ -116,6 +117,8 @@ function adaptSessions() {
       iconKind: icon.icon || 'terminal',
       iconColor: icon.color || 'indigo',
       starred: !!icon.starred,
+      createdMs,
+      lastAccessedMs,
       _raw: entry
     };
   });
