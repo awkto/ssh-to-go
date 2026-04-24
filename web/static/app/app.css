@@ -1145,6 +1145,75 @@ a { color: inherit; text-decoration: none; }
 .flex-1 { flex: 1; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Hamburger button — hidden on desktop, shown on mobile. */
+.mobile-menu-btn {
+  display: none;
+  width: 36px; height: 36px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.mobile-menu-btn:hover { background: var(--row-hover); color: var(--fg); }
+
+/* Sidebar overlay (mobile only) — hidden on desktop. */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: oklch(0 0 0 / 0.45);
+  z-index: 55;
+  animation: fade 140ms ease;
+}
+.sidebar-overlay.open { display: block; }
+
+/* ==========================================================================
+   Responsive — mobile / narrow
+   ========================================================================== */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 260px;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+    box-shadow: 0 8px 40px oklch(0 0 0 / 0.35);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .mobile-menu-btn { display: grid; }
+  .topbar { padding: 0 12px; gap: 8px; }
+  .content { padding: 16px 12px 48px; }
+  .page-head { flex-wrap: wrap; gap: 12px; }
+  .page-title-block h1 { font-size: 20px; }
+
+  /* Stat cards collapse from 4 across to 2. */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Dashboard's 2-col layout becomes single column. */
+  .grid-2 { grid-template-columns: 1fr; }
+
+  /* Tables: hide secondary columns so the essentials read cleanly. */
+  .tbl th.hide-mobile, .tbl td.hide-mobile { display: none; }
+
+  /* Search box in topbar shrinks. */
+  .search { max-width: none; }
+  .search-placeholder { font-size: 12px; }
+
+  /* New-session / add-host modals use more of the viewport. */
+  .modal { width: calc(100vw - 24px); }
+}
+
+@media (max-width: 560px) {
+  /* On very narrow phones, hide the search box entirely — palette still via ⌘K / menu. */
+  .topbar .search { display: none; }
+  .stats-grid { grid-template-columns: 1fr; }
+  /* Reduce tight actions row: drop the star + secondary actions text. */
+  .action-btn { padding: 3px 7px; font-size: 11.5px; }
+}
+
 /* ==========================================================================
    Legacy icon picker popup (opened from Dashboard / Sessions row icons)
    Class names come from /static/js/icons.js; var names here use the SPA tokens.

@@ -1,8 +1,8 @@
 // Shell: sidebar + topbar
 
-const Sidebar = ({ view, setView, openPalette, sessionCount, hostCount, activeCount, favCount, version }) => {
+const Sidebar = ({ view, setView, openPalette, sessionCount, hostCount, activeCount, favCount, version, open }) => {
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="brand">
         <BrandMark size={30} />
         <span className="brand-name">SSH-to-go</span>
@@ -57,9 +57,12 @@ const NavItem = ({ icon: Icon, label, active, onClick, badge, tag, color }) => {
   );
 };
 
-const Topbar = ({ openPalette, theme, toggleTheme, openNewSession, openTweaks }) => {
+const Topbar = ({ openPalette, theme, toggleTheme, openNewSession, openTweaks, toggleSidebar }) => {
   return (
     <header className="topbar">
+      <button className="mobile-menu-btn" onClick={toggleSidebar} title="Menu" aria-label="Toggle sidebar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
       <div className="search" onClick={openPalette}>
         <IconSearch size={14} />
         <span className="search-placeholder">Search sessions, hosts, commands…</span>

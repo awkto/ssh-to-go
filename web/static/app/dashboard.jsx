@@ -78,10 +78,10 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
               <thead>
                 <tr>
                   <th style={{width: '30%'}}>Session</th>
-                  <th>Host</th>
-                  <th>Activity</th>
-                  <th>Clients</th>
-                  <th>Uptime</th>
+                  <th className="hide-mobile">Host</th>
+                  <th className="hide-mobile">Activity</th>
+                  <th className="hide-mobile">Clients</th>
+                  <th className="hide-mobile">Uptime</th>
                   <th style={{textAlign:'right'}}>Actions</th>
                 </tr>
               </thead>
@@ -193,10 +193,10 @@ const SessionRow = ({ session: s, onOpen }) => {
           <button className="rename-btn" onClick={onRename} title="Rename"><IconEdit size={12}/></button>
         </div>
       </td>
-      <td className="muted mono" style={{fontSize:12.5}}>{s.host}</td>
-      <td><ActivityCell session={s} /></td>
-      <td><Presence clients={s.clients} /></td>
-      <td className="muted num">{s.uptime}</td>
+      <td className="muted mono hide-mobile" style={{fontSize:12.5}}>{s.host}</td>
+      <td className="hide-mobile"><ActivityCell session={s} /></td>
+      <td className="hide-mobile"><Presence clients={s.clients} /></td>
+      <td className="muted num hide-mobile">{s.uptime}</td>
       <td>
         <div className="actions-cell">
           <button className={`action-btn star ${starred ? 'starred' : ''}`} onClick={toggleStar}>

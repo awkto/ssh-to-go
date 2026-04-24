@@ -82,7 +82,19 @@ const Sessions = ({
     style: {
       width: '26%'
     }
-  }, "Session"), React.createElement("th", null, "Host"), React.createElement("th", null, "Activity"), React.createElement("th", null, "Clients"), React.createElement("th", null, "Window"), React.createElement("th", null, "PID"), React.createElement("th", null, "Uptime"), React.createElement("th", {
+  }, "Session"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Host"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Activity"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Clients"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Window"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "PID"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Uptime"), React.createElement("th", {
     style: {
       textAlign: 'right'
     }
@@ -165,26 +177,30 @@ const FullSessionRow = ({
   }, React.createElement(IconEdit, {
     size: 12
   })))), React.createElement("td", {
-    className: "muted mono",
+    className: "muted mono hide-mobile",
     style: {
       fontSize: 12.5
     }
-  }, s.host), React.createElement("td", null, React.createElement(ActivityCell, {
+  }, s.host), React.createElement("td", {
+    className: "hide-mobile"
+  }, React.createElement(ActivityCell, {
     session: s
-  })), React.createElement("td", null, React.createElement(Presence, {
+  })), React.createElement("td", {
+    className: "hide-mobile"
+  }, React.createElement(Presence, {
     clients: s.clients
   })), React.createElement("td", {
-    className: "mono num muted",
+    className: "mono num muted hide-mobile",
     style: {
       fontSize: 12
     }
   }, s.win), React.createElement("td", {
-    className: "mono num muted",
+    className: "mono num muted hide-mobile",
     style: {
       fontSize: 12
     }
   }, s.pid), React.createElement("td", {
-    className: "muted num"
+    className: "muted num hide-mobile"
   }, s.uptime), React.createElement("td", null, React.createElement("div", {
     className: "actions-cell"
   }, React.createElement("button", {

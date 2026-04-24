@@ -36,10 +36,10 @@ const Hosts = ({ store, openNewSession }) => {
             <tr>
               <th style={{width:'28%'}}>Host (FQDN)</th>
               <th>Sessions</th>
-              <th>Operating system</th>
-              <th>Load (60s)</th>
-              <th>CPU / MEM</th>
-              <th>Last sync</th>
+              <th className="hide-mobile">Operating system</th>
+              <th className="hide-mobile">Load (60s)</th>
+              <th className="hide-mobile">CPU / MEM</th>
+              <th className="hide-mobile">Last sync</th>
               <th style={{textAlign:'right'}}>Actions</th>
             </tr>
           </thead>
@@ -60,9 +60,9 @@ const Hosts = ({ store, openNewSession }) => {
                     ? <Pill variant="accent">{h.sessions} sessions</Pill>
                     : <span className="muted" style={{fontSize:12.5}}>No sessions</span>}
                 </td>
-                <td><OsChip os={h.os} kind={h.osKind} /></td>
-                <td>{h.cpu != null ? <Sparkline data={h.load} width={100} height={22} /> : <span className="subtle mono" style={{fontSize:11}}>—</span>}</td>
-                <td className="mono num" style={{fontSize:12}}>
+                <td className="hide-mobile"><OsChip os={h.os} kind={h.osKind} /></td>
+                <td className="hide-mobile">{h.cpu != null ? <Sparkline data={h.load} width={100} height={22} /> : <span className="subtle mono" style={{fontSize:11}}>—</span>}</td>
+                <td className="mono num hide-mobile" style={{fontSize:12}}>
                   {h.cpu != null ? (
                     <>
                       <span style={{color: h.cpu > 60 ? 'var(--warn)' : 'var(--fg-muted)'}}>{h.cpu}%</span>
@@ -71,7 +71,7 @@ const Hosts = ({ store, openNewSession }) => {
                     </>
                   ) : <span className="subtle" style={{fontSize:11}}>—</span>}
                 </td>
-                <td className="muted mono" style={{fontSize:12}}>{h.lastSync}</td>
+                <td className="muted mono hide-mobile" style={{fontSize:12}}>{h.lastSync}</td>
                 <td>
                   <div className="actions-cell">
                     <button className="action-btn primary" onClick={openNewSession}>

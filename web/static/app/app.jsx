@@ -11,10 +11,12 @@ const App = () => {
   const [newSessOpen, setNewSessOpen] = React.useState(false);
   const [tweaksOpen, setTweaksOpen] = React.useState(false);
   const [sessionFilter, setSessionFilter] = React.useState('all');
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   const navigate = (nextView, filter) => {
     setView(nextView);
     if (nextView === 'sessions') setSessionFilter(filter || 'all');
+    setSidebarOpen(false); // auto-dismiss on mobile after navigation
   };
 
   const [theme, setTheme] = React.useState(() => localStorage.getItem('sshtogo.theme') || 'dark');
@@ -71,14 +73,16 @@ const App = () => {
       <Sidebar
         view={view}
         setView={navigate}
-        openPalette={() => setPaletteOpen(true)}
+        openPalette={() => { setPaletteOpen(true); setSidebarOpen(false); }}
         openTweaks={() => setTweaksOpen(true)}
         sessionCount={store.sessions.length}
         hostCount={store.hosts.length}
         activeCount={store.activeSessionCount}
         favCount={favCount}
         version={store.raw.version}
+        open={sidebarOpen}
       />
+      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <div className="main">
         <Topbar
           openPalette={() => setPaletteOpen(true)}
@@ -86,6 +90,7 @@ const App = () => {
           toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           openNewSession={() => setNewSessOpen(true)}
           openTweaks={() => setTweaksOpen(true)}
+          toggleSidebar={() => setSidebarOpen(o => !o)}
         />
         <div className="content">
           {renderView()}

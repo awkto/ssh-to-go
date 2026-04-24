@@ -54,7 +54,15 @@ const Hosts = ({
     style: {
       width: '28%'
     }
-  }, "Host (FQDN)"), React.createElement("th", null, "Sessions"), React.createElement("th", null, "Operating system"), React.createElement("th", null, "Load (60s)"), React.createElement("th", null, "CPU / MEM"), React.createElement("th", null, "Last sync"), React.createElement("th", {
+  }, "Host (FQDN)"), React.createElement("th", null, "Sessions"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Operating system"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Load (60s)"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "CPU / MEM"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Last sync"), React.createElement("th", {
     style: {
       textAlign: 'right'
     }
@@ -77,10 +85,14 @@ const Hosts = ({
     style: {
       fontSize: 12.5
     }
-  }, "No sessions")), React.createElement("td", null, React.createElement(OsChip, {
+  }, "No sessions")), React.createElement("td", {
+    className: "hide-mobile"
+  }, React.createElement(OsChip, {
     os: h.os,
     kind: h.osKind
-  })), React.createElement("td", null, h.cpu != null ? React.createElement(Sparkline, {
+  })), React.createElement("td", {
+    className: "hide-mobile"
+  }, h.cpu != null ? React.createElement(Sparkline, {
     data: h.load,
     width: 100,
     height: 22
@@ -90,7 +102,7 @@ const Hosts = ({
       fontSize: 11
     }
   }, "\u2014")), React.createElement("td", {
-    className: "mono num",
+    className: "mono num hide-mobile",
     style: {
       fontSize: 12
     }
@@ -108,7 +120,7 @@ const Hosts = ({
       fontSize: 11
     }
   }, "\u2014")), React.createElement("td", {
-    className: "muted mono",
+    className: "muted mono hide-mobile",
     style: {
       fontSize: 12
     }

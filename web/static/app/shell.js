@@ -6,10 +6,11 @@ const Sidebar = ({
   hostCount,
   activeCount,
   favCount,
-  version
+  version,
+  open
 }) => {
   return React.createElement("aside", {
-    className: "sidebar"
+    className: `sidebar${open ? ' open' : ''}`
   }, React.createElement("div", {
     className: "brand"
   }, React.createElement(BrandMark, {
@@ -122,11 +123,41 @@ const Topbar = ({
   theme,
   toggleTheme,
   openNewSession,
-  openTweaks
+  openTweaks,
+  toggleSidebar
 }) => {
   return React.createElement("header", {
     className: "topbar"
-  }, React.createElement("div", {
+  }, React.createElement("button", {
+    className: "mobile-menu-btn",
+    onClick: toggleSidebar,
+    title: "Menu",
+    "aria-label": "Toggle sidebar"
+  }, React.createElement("svg", {
+    width: "20",
+    height: "20",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, React.createElement("line", {
+    x1: "3",
+    y1: "6",
+    x2: "21",
+    y2: "6"
+  }), React.createElement("line", {
+    x1: "3",
+    y1: "12",
+    x2: "21",
+    y2: "12"
+  }), React.createElement("line", {
+    x1: "3",
+    y1: "18",
+    x2: "21",
+    y2: "18"
+  }))), React.createElement("div", {
     className: "search",
     onClick: openPalette
   }, React.createElement(IconSearch, {

@@ -9,9 +9,11 @@ const App = () => {
   const [newSessOpen, setNewSessOpen] = React.useState(false);
   const [tweaksOpen, setTweaksOpen] = React.useState(false);
   const [sessionFilter, setSessionFilter] = React.useState('all');
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const navigate = (nextView, filter) => {
     setView(nextView);
     if (nextView === 'sessions') setSessionFilter(filter || 'all');
+    setSidebarOpen(false);
   };
   const [theme, setTheme] = React.useState(() => localStorage.getItem('sshtogo.theme') || 'dark');
   const [accent, setAccent] = React.useState(() => localStorage.getItem('sshtogo.accent') || 'indigo');
@@ -85,13 +87,20 @@ const App = () => {
   }, React.createElement(Sidebar, {
     view: view,
     setView: navigate,
-    openPalette: () => setPaletteOpen(true),
+    openPalette: () => {
+      setPaletteOpen(true);
+      setSidebarOpen(false);
+    },
     openTweaks: () => setTweaksOpen(true),
     sessionCount: store.sessions.length,
     hostCount: store.hosts.length,
     activeCount: store.activeSessionCount,
     favCount: favCount,
-    version: store.raw.version
+    version: store.raw.version,
+    open: sidebarOpen
+  }), React.createElement("div", {
+    className: `sidebar-overlay${sidebarOpen ? ' open' : ''}`,
+    onClick: () => setSidebarOpen(false)
   }), React.createElement("div", {
     className: "main"
   }, React.createElement(Topbar, {
@@ -99,7 +108,8 @@ const App = () => {
     theme: theme,
     toggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     openNewSession: () => setNewSessOpen(true),
-    openTweaks: () => setTweaksOpen(true)
+    openTweaks: () => setTweaksOpen(true),
+    toggleSidebar: () => setSidebarOpen(o => !o)
   }), React.createElement("div", {
     className: "content"
   }, renderView())), paletteOpen && React.createElement(Palette, {
