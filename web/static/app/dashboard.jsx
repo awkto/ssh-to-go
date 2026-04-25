@@ -104,7 +104,7 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
           <div className="panel">
             <div className="panel-head">
               <h2>Host load</h2>
-              <span className="muted" style={{fontSize:11.5, fontFamily:'var(--font-mono)'}}>last 60s</span>
+              <span className="muted" style={{fontSize:11.5, fontFamily:'var(--font-mono)'}}>cpu · mem</span>
             </div>
             <div className="host-mini-grid">
               {HOSTS.map(h => (
@@ -113,10 +113,9 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
                     <StatusDot status={h.status === 'online' ? 'active' : 'offline'} />
                     <span className="host-mini-name truncate">{h.fqdn}</span>
                   </div>
-                  <Sparkline data={h.load} width={120} height={28} />
-                  <div className="host-mini-meta mt-2">
-                    <span>CPU {h.cpu}%</span>
-                    <span>MEM {h.mem}%</span>
+                  <div className="host-bar-row">
+                    <HostBar label="CPU" value={h.cpu} />
+                    <HostBar label="MEM" value={h.mem} />
                   </div>
                 </div>
               ))}
@@ -133,6 +132,28 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// Vertical bar for CPU/MEM. value is 0-100 or null. When null we render an
+// empty track + dash so the layout stays put until the metrics endpoint lands.
+const HostBar = ({ label, value }) => {
+  const has = value != null && !isNaN(value);
+  const pct = has ? Math.max(0, Math.min(100, Number(value))) : 0;
+  const color = !has ? 'transparent'
+    : pct < 60 ? 'var(--ok)'
+    : pct < 85 ? 'var(--warn)'
+    : 'var(--err)';
+  return (
+    <div className="host-bar">
+      <div className="host-bar-track">
+        <div className="host-bar-fill" style={{ height: pct + '%', background: color }} />
+      </div>
+      <div className="host-bar-label">{label}</div>
+      <div className="host-bar-value mono" style={{ color: has ? 'var(--fg)' : 'var(--fg-faint)' }}>
+        {has ? `${Math.round(pct)}%` : '—'}
       </div>
     </div>
   );
@@ -211,4 +232,4 @@ const SessionRow = ({ session: s, onOpen }) => {
   );
 };
 
-Object.assign(window, { Dashboard, StatCard, SessionRow });
+Object.assign(window, { Dashboard, StatCard, SessionRow, HostBar });

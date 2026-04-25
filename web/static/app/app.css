@@ -1088,17 +1088,57 @@ a { color: inherit; text-decoration: none; }
 /* Host card grid */
 .host-mini-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 14px; }
 .host-mini {
-  padding: 10px 12px;
+  padding: 12px;
   border: 1px solid var(--hairline);
   border-radius: 9px;
   background: var(--bg-elev-2);
 }
 .host-mini-head {
   display: flex; align-items: center; gap: 7px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .host-mini-name { font-size: 12.5px; font-family: var(--font-mono); color: var(--fg); font-weight: 500; }
-.host-mini-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--fg-subtle); font-family: var(--font-mono); }
+
+/* Vertical CPU / MEM bars */
+.host-bar-row {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 4px 0 2px;
+}
+.host-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.host-bar-track {
+  position: relative;
+  width: 14px;
+  height: 56px;
+  background: var(--bg-elev);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.host-bar-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  transition: height 200ms ease, background 200ms ease;
+}
+.host-bar-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+.host-bar-value {
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Settings */
 .settings-grid { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }

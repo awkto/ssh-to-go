@@ -177,7 +177,7 @@ const Dashboard = ({
       fontSize: 11.5,
       fontFamily: 'var(--font-mono)'
     }
-  }, "last 60s")), React.createElement("div", {
+  }, "cpu \xB7 mem")), React.createElement("div", {
     className: "host-mini-grid"
   }, HOSTS.map(h => React.createElement("div", {
     key: h.id,
@@ -188,13 +188,15 @@ const Dashboard = ({
     status: h.status === 'online' ? 'active' : 'offline'
   }), React.createElement("span", {
     className: "host-mini-name truncate"
-  }, h.fqdn)), React.createElement(Sparkline, {
-    data: h.load,
-    width: 120,
-    height: 28
-  }), React.createElement("div", {
-    className: "host-mini-meta mt-2"
-  }, React.createElement("span", null, "CPU ", h.cpu, "%"), React.createElement("span", null, "MEM ", h.mem, "%")))))), React.createElement("div", {
+  }, h.fqdn)), React.createElement("div", {
+    className: "host-bar-row"
+  }, React.createElement(HostBar, {
+    label: "CPU",
+    value: h.cpu
+  }), React.createElement(HostBar, {
+    label: "MEM",
+    value: h.mem
+  })))))), React.createElement("div", {
     className: "panel"
   }, React.createElement("div", {
     className: "panel-head"
@@ -211,6 +213,32 @@ const Dashboard = ({
       textAlign: 'center'
     }
   }, "Live activity feed lands with backend event log (issue #20).")))));
+};
+const HostBar = ({
+  label,
+  value
+}) => {
+  const has = value != null && !isNaN(value);
+  const pct = has ? Math.max(0, Math.min(100, Number(value))) : 0;
+  const color = !has ? 'transparent' : pct < 60 ? 'var(--ok)' : pct < 85 ? 'var(--warn)' : 'var(--err)';
+  return React.createElement("div", {
+    className: "host-bar"
+  }, React.createElement("div", {
+    className: "host-bar-track"
+  }, React.createElement("div", {
+    className: "host-bar-fill",
+    style: {
+      height: pct + '%',
+      background: color
+    }
+  })), React.createElement("div", {
+    className: "host-bar-label"
+  }, label), React.createElement("div", {
+    className: "host-bar-value mono",
+    style: {
+      color: has ? 'var(--fg)' : 'var(--fg-faint)'
+    }
+  }, has ? `${Math.round(pct)}%` : '—'));
 };
 const StatCard = ({
   label,
@@ -342,5 +370,6 @@ const SessionRow = ({
 Object.assign(window, {
   Dashboard,
   StatCard,
-  SessionRow
+  SessionRow,
+  HostBar
 });
