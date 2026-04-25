@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/awkto/ssh-to-go/internal/config"
+	"github.com/awkto/ssh-to-go/internal/metrics"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"golang.org/x/crypto/ssh"
 )
@@ -51,6 +52,7 @@ type PollResult struct {
 	TmuxVersion  string
 	TmuxDetected bool
 	DetectedOS   string
+	Metrics      *metrics.Metrics
 	Error        error
 }
 
@@ -94,6 +96,15 @@ func StartPoller(host config.Host, interval time.Duration, resolveKey KeyResolve
 				cachedOS = DetectOSViaClient(client)
 			}
 			result.DetectedOS = cachedOS
+
+			// Best-effort metrics collection. Don't fail the poll if it errors —
+			// hosts without /proc or busybox-stripped systems can still report
+			// tmux state without metrics.
+			if m, err := metrics.Collect(client); err == nil {
+				result.Metrics = &m
+			} else {
+				log.Printf("metrics for %s: %v", host.Name, err)
+			}
 
 			results <- result
 		}

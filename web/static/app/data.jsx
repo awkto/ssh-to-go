@@ -65,6 +65,7 @@ function adaptHosts() {
     const os = h.detected_os || cfg.os || '';
     const osKind = detectOsKind(os);
     const sessionCount = (h.sessions || []).length;
+    const metrics = h.metrics || null;
     return {
       id: cfg.name,
       fqdn: fqdnBase + port,
@@ -74,10 +75,11 @@ function adaptHosts() {
       osKind,
       sessions: sessionCount,
       lastSync: h.last_poll ? timeAgo(new Date(h.last_poll)) : '—',
-      // Host metrics + load history are not exposed by the backend yet (issue #20).
-      // A flat zero-line placeholder keeps the sparkline renderable.
-      load: Array(20).fill(0),
-      cpu: null, mem: null, disk: null,
+      load: h.load_history && h.load_history.length ? h.load_history : Array(20).fill(0),
+      cpu: metrics ? metrics.cpu : null,
+      mem: metrics ? metrics.mem : null,
+      disk: metrics ? metrics.disk : null,
+      load1: metrics ? metrics.load1 : null,
       tags: cfg.tags || [],
       _raw: h,
     };

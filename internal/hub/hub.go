@@ -7,19 +7,26 @@ import (
 	"time"
 
 	"github.com/awkto/ssh-to-go/internal/config"
+	"github.com/awkto/ssh-to-go/internal/metrics"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 )
 
+// LoadHistorySize is the number of 1-minute load samples retained per host.
+// At a typical 5-10s poll interval this covers the last 5-10 minutes.
+const LoadHistorySize = 60
+
 type HostState struct {
-	Config       config.Host    `json:"config"`
-	TmuxDetected bool           `json:"tmux_detected"`
-	TmuxVersion  string         `json:"tmux_version"`
-	Sessions     []tmux.Session `json:"sessions"`
-	LastPoll     time.Time      `json:"last_poll"`
-	Error        string         `json:"error,omitempty"`
-	Online       bool           `json:"online"`
-	DetectedOS   string         `json:"detected_os,omitempty"`
+	Config       config.Host      `json:"config"`
+	TmuxDetected bool             `json:"tmux_detected"`
+	TmuxVersion  string           `json:"tmux_version"`
+	Sessions     []tmux.Session   `json:"sessions"`
+	LastPoll     time.Time        `json:"last_poll"`
+	Error        string           `json:"error,omitempty"`
+	Online       bool             `json:"online"`
+	DetectedOS   string           `json:"detected_os,omitempty"`
+	Metrics      *metrics.Metrics `json:"metrics,omitempty"`
+	LoadHistory  []float64        `json:"load_history,omitempty"`
 }
 
 // HostSession is a flattened view of a session with its host info.
@@ -68,6 +75,15 @@ func (h *Hub) Update(result tmux.PollResult) {
 	}
 	if result.DetectedOS != "" {
 		state.DetectedOS = result.DetectedOS
+	}
+	if result.Metrics != nil {
+		state.Metrics = result.Metrics
+		// Append the 1-min load to the ring buffer, trimming from the front
+		// once we exceed LoadHistorySize. Frontend treats it as oldest-first.
+		state.LoadHistory = append(state.LoadHistory, result.Metrics.Load1)
+		if len(state.LoadHistory) > LoadHistorySize {
+			state.LoadHistory = state.LoadHistory[len(state.LoadHistory)-LoadHistorySize:]
+		}
 	}
 }
 
@@ -198,6 +214,10 @@ func (h *Hub) ScanHost(name string, tm *tmux.Manager, keyPath string) (*HostStat
 	}
 	result.Sessions = sessions
 	result.DetectedOS = tmux.DetectOSViaClient(client)
+
+	if m, err := metrics.Collect(client); err == nil {
+		result.Metrics = &m
+	}
 
 	h.Update(result)
 
