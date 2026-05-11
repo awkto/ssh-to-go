@@ -1,5 +1,5 @@
-ssh-to-go
-config.yaml
-data/
-dev-config.yaml
-devdata/
+/ssh-to-go
+/config.yaml
+/data/
+/dev-config.yaml
+/devdata/

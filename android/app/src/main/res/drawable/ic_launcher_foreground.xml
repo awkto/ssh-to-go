@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Stylised terminal prompt: green "$ _" inside a rounded square. -->
+    <path
+        android:pathData="M27,32 h54 q4,0 4,4 v36 q0,4 -4,4 h-54 q-4,0 -4,-4 v-36 q0,-4 4,-4 z"
+        android:fillColor="#1B1F27" />
+    <path
+        android:pathData="M38,50 l8,6 -8,6"
+        android:strokeColor="#7CE38B"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M52,64 h18"
+        android:strokeColor="#7CE38B"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+</vector>

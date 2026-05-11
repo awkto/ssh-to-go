@@ -1,0 +1,77 @@
+name: Build Android APK
+
+on:
+  push:
+    tags:
+      - 'android-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to attach the APK to (e.g. android-v0.1.0). Leave empty to skip release upload.'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          # Strip android-v prefix for versionName (e.g. android-v0.1.0 -> 0.1.0)
+          VERSION="${TAG#android-v}"
+          if [[ -z "$VERSION" ]]; then
+            VERSION="0.0.0-dev"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug-signed release APK
+        working-directory: android
+        run: gradle -PversionName=${{ steps.meta.outputs.version }} :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        working-directory: android
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk \
+             out/ssh-to-go-android-${{ steps.meta.outputs.version }}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssh-to-go-android-${{ steps.meta.outputs.version }}
+          path: android/out/*.apk
+          if-no-files-found: error
+
+      - name: Attach APK to GitHub release
+        if: startsWith(github.ref, 'refs/tags/android-v') || inputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          files: android/out/*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
