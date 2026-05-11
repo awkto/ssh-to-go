@@ -68,6 +68,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("POST /api/scan", handlers.ScanAll)
 	mux.HandleFunc("GET /api/pubkey", handlers.PubKey)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
+	mux.HandleFunc("GET /api/me", handlers.Me)
 
 	// Keypair API
 	mux.HandleFunc("GET /api/keypairs", handlers.ListKeypairs)

@@ -31,9 +31,16 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	// Increase read limit for terminal data
 	ws.SetReadLimit(64 * 1024)
 
-	log.Printf("terminal attached: host=%s session=%s", hostName, sessionName)
+	mouse := r.URL.Query().Get("mouse")
 
-	err = relay.Relay(r.Context(), ws, hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg), sessionName, h.Settings.TmuxWindowSize())
+	log.Printf("terminal attached: host=%s session=%s mouse=%q", hostName, sessionName, mouse)
+
+	err = relay.RelayWithOptions(
+		r.Context(), ws,
+		hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg),
+		sessionName, h.Settings.TmuxWindowSize(),
+		relay.Options{Mouse: mouse},
+	)
 	if err != nil {
 		log.Printf("relay error: %v", err)
 	}

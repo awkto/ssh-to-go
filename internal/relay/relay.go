@@ -21,8 +21,23 @@ type resizeMsg struct {
 	Rows int    `json:"rows"`
 }
 
+// Options controls per-attach relay behavior.
+type Options struct {
+	// Mouse controls whether tmux mouse mode is enabled for this attach.
+	// Default ("on" or "") matches historical behavior for the web client.
+	// "off" skips the set-option so the client can handle scroll gestures
+	// locally without tmux entering copy-mode (used by native clients that
+	// render their own smooth-scroll scrollback).
+	Mouse string
+}
+
 // Relay bridges a WebSocket connection to a tmux session over SSH.
 func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sessionName, windowSize string) error {
+	return RelayWithOptions(ctx, ws, address, user, keyPath, sessionName, windowSize, Options{})
+}
+
+// RelayWithOptions is the same as Relay but accepts per-attach Options.
+func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sessionName, windowSize string, opts Options) error {
 	client, err := sshutil.Dial(address, user, keyPath)
 	if err != nil {
 		return fmt.Errorf("ssh dial: %w", err)
@@ -61,9 +76,13 @@ func Relay(ctx context.Context, ws *websocket.Conn, address, user, keyPath, sess
 	// We print the tty on a single line followed by a NUL byte delimiter,
 	// then exec into tmux. The NUL byte ensures we can split cleanly even
 	// if tmux output arrives in the same read buffer.
+	mouseOpt := `set-option -g mouse on 2>/dev/null \; `
+	if opts.Mouse == "off" {
+		mouseOpt = ""
+	}
 	cmd := fmt.Sprintf(
-		`printf '%%s\x00' "$(tty)"; exec tmux set-option -g mouse on 2>/dev/null \; new-session -A -s %q \; set-option window-size %s`,
-		sessionName, windowSize,
+		`printf '%%s\x00' "$(tty)"; exec tmux %snew-session -A -s %q \; set-option window-size %s`,
+		mouseOpt, sessionName, windowSize,
 	)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("start tmux: %w", err)

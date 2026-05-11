@@ -34,6 +34,18 @@ func (h *Handlers) GetVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"version": h.Version})
 }
 
+// Me returns whether the caller is authenticated and the server version.
+// Used by native clients (Android) to verify a stored bearer token at
+// server-add time. Middleware has already gated unauthenticated requests
+// unless NoAuth is on; either way reaching this handler means "OK".
+func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"authenticated": true,
+		"no_auth":       h.Auth != nil && h.Auth.NoAuth(),
+		"version":       h.Version,
+	})
+}
+
 func (h *Handlers) resolveKey(host config.Host) string {
 	return keystore.ResolveKeyPath(host, h.KeyStore, h.Settings)
 }
