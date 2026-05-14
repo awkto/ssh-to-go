@@ -128,6 +128,8 @@ const Settings = ({ store }) => {
 
         <McpPanel />
 
+        <ApiTokensPanel />
+
         <div className="panel">
           <div className="panel-head">
             <h2>SSH keypairs</h2>
@@ -231,4 +233,132 @@ const McpPanel = () => {
   );
 };
 
-Object.assign(window, { Settings, McpPanel });
+const ApiTokensPanel = () => {
+  const [tokens, setTokens] = React.useState(null);
+  const [name, setName] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const [justCreated, setJustCreated] = React.useState(null); // { name, token }
+  const [copied, setCopied] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const r = await fetch('/api/auth/tokens');
+      if (!r.ok) throw new Error(await r.text());
+      setTokens(await r.json());
+    } catch (e) {
+      setErr(e.message || 'load failed');
+    }
+  }, []);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const create = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch('/api/auth/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const body = await r.json();
+      setJustCreated(body);
+      setName('');
+      setCopied(false);
+      load();
+    } catch (ex) {
+      setErr(ex.message || 'create failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (tokenName) => {
+    if (!confirm(`Revoke token "${tokenName}"? Clients using it will stop working.`)) return;
+    try {
+      const r = await fetch(`/api/auth/tokens/${encodeURIComponent(tokenName)}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error(await r.text());
+      if (justCreated && justCreated.name === tokenName) setJustCreated(null);
+      load();
+    } catch (ex) {
+      alert('revoke failed: ' + ex.message);
+    }
+  };
+
+  const copy = async () => {
+    if (!justCreated) return;
+    try { await navigator.clipboard.writeText(justCreated.token); setCopied(true); }
+    catch (ex) { alert('copy failed: ' + ex.message); }
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h2>API tokens</h2>
+        <span className="muted" style={{fontSize:12}}>Bearer tokens for native clients (Android app, MCP)</span>
+      </div>
+      <div className="panel-body">
+        {justCreated && (
+          <div className="setting-row" style={{background:'var(--bg-elev-2)', padding:12, borderRadius:8, alignItems:'flex-start'}}>
+            <div className="setting-label">
+              <h4 style={{color:'var(--ok)'}}>New token: {justCreated.name}</h4>
+              <p>Copy it now — it won't be shown again. Paste this into the Android app's "API token" field.</p>
+            </div>
+            <div style={{display:'flex', flexDirection:'column', gap:8, minWidth:0}}>
+              <code className="mono" style={{
+                padding:'8px 10px',
+                background:'var(--bg)',
+                border:'1px solid var(--hairline)',
+                borderRadius:6,
+                fontSize:12,
+                wordBreak:'break-all',
+                userSelect:'all'
+              }}>{justCreated.token}</code>
+              <div style={{display:'flex', gap:6}}>
+                <Button variant="primary" size="sm" icon={IconCopy} onClick={copy}>{copied ? 'Copied!' : 'Copy'}</Button>
+                <Button variant="ghost" size="sm" onClick={() => setJustCreated(null)}>Dismiss</Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <form className="setting-row" onSubmit={create}>
+          <div className="setting-label">
+            <h4>Create token</h4>
+            <p>Pick a memorable name (e.g. "phone", "android"). The token itself will be generated server-side.</p>
+          </div>
+          <div style={{display:'flex', gap:6}}>
+            <input className="input mono" placeholder="name" value={name} onChange={e => setName(e.target.value)} />
+            <Button variant="primary" size="sm" type="submit" disabled={busy || !name.trim()}>{busy ? '…' : 'Create'}</Button>
+          </div>
+        </form>
+
+        {err && <div style={{color:'var(--err)', fontSize:12.5, padding:'0 0 8px'}}>{err}</div>}
+
+        <div style={{padding:'4px 0 0'}}>
+          {tokens === null && <div className="muted" style={{fontSize:13}}>Loading…</div>}
+          {tokens && tokens.length === 0 && <div className="muted" style={{fontSize:13}}>No tokens yet.</div>}
+          {tokens && tokens.map(t => (
+            <div key={t.name} className="key-card">
+              <span className="icon-bg" style={{width:28, height:28, borderRadius:6, background:'var(--accent-soft)', color:'var(--accent)', display:'grid', placeItems:'center'}}>
+                <IconKey size={14}/>
+              </span>
+              <div style={{flex:1, minWidth:0}}>
+                <div className="row gap-2">
+                  <span className="key-name">{t.name}</span>
+                  <span className="muted mono" style={{fontSize:11}}>created {timeAgo(new Date(t.created))}</span>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => remove(t.name)}>Revoke</Button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+Object.assign(window, { Settings, McpPanel, ApiTokensPanel });
