@@ -10,15 +10,23 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import io.sshtogo.android.SshToGoApplication
+import io.sshtogo.android.terminal.TerminalScreen
 import io.sshtogo.android.ui.add.AddServerScreen
 import io.sshtogo.android.ui.dashboard.DashboardScreen
 import io.sshtogo.android.ui.servers.ServerListScreen
+import java.net.URLEncoder
 
 object Routes {
     const val ServerList = "servers"
     const val AddServer = "servers/add"
     const val Dashboard = "dashboard/{profileId}"
     fun dashboard(profileId: String) = "dashboard/$profileId"
+
+    const val Terminal = "terminal/{profileId}/{hostName}/{sessionName}"
+    fun terminal(profileId: String, hostName: String, sessionName: String): String {
+        fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+        return "terminal/${enc(profileId)}/${enc(hostName)}/${enc(sessionName)}"
+    }
 }
 
 @Composable
@@ -72,6 +80,20 @@ fun SshToGoApp() {
                     onAddServer = {
                         nav.navigate(Routes.AddServer)
                     },
+                    onOpenSession = { hostName, sessionName ->
+                        nav.navigate(Routes.terminal(profileId, hostName, sessionName))
+                    },
+                )
+            }
+            composable(Routes.Terminal) { backStack ->
+                val profileId = backStack.arguments?.getString("profileId").orEmpty()
+                val hostName = backStack.arguments?.getString("hostName").orEmpty()
+                val sessionName = backStack.arguments?.getString("sessionName").orEmpty()
+                TerminalScreen(
+                    profileId = profileId,
+                    hostName = hostName,
+                    sessionName = sessionName,
+                    onBack = { nav.popBackStack() },
                 )
             }
         }

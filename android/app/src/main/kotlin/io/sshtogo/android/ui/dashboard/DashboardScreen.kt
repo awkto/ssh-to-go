@@ -1,6 +1,7 @@
 package io.sshtogo.android.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +53,7 @@ fun DashboardScreen(
     profileId: String,
     onSwitchServer: () -> Unit,
     onAddServer: () -> Unit,
+    onOpenSession: (hostName: String, sessionName: String) -> Unit,
 ) {
     val store = SshToGoApplication.instance.profileStore
     val profiles by store.profiles.collectAsState()
@@ -127,6 +129,7 @@ fun DashboardScreen(
                     modifier = Modifier.padding(pad),
                     hosts = state.hosts,
                     sessions = state.sessions,
+                    onOpenSession = onOpenSession,
                 )
             }
         }
@@ -138,6 +141,7 @@ private fun DashboardList(
     modifier: Modifier,
     hosts: List<HostState>,
     sessions: List<HostSession>,
+    onOpenSession: (hostName: String, sessionName: String) -> Unit,
 ) {
     val sessionsByHost = sessions.groupBy { it.host }
 
@@ -147,13 +151,21 @@ private fun DashboardList(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(hosts, key = { it.name }) { host ->
-            HostCard(host = host, sessions = sessionsByHost[host.name].orEmpty())
+            HostCard(
+                host = host,
+                sessions = sessionsByHost[host.name].orEmpty(),
+                onOpenSession = onOpenSession,
+            )
         }
     }
 }
 
 @Composable
-private fun HostCard(host: HostState, sessions: List<HostSession>) {
+private fun HostCard(
+    host: HostState,
+    sessions: List<HostSession>,
+    onOpenSession: (hostName: String, sessionName: String) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -183,7 +195,13 @@ private fun HostCard(host: HostState, sessions: List<HostSession>) {
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     sessions.forEach { s ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenSession(host.name, s.name) }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
                                 "•  ${s.name}",
                                 style = MaterialTheme.typography.bodyMedium,

@@ -1,6 +1,6 @@
 # ssh-to-go Android
 
-Native Android client for [ssh-to-go](../README.md). Phase 1 (this commit): scaffold, login, server profiles, dashboard list. Terminal rendering lands in a later phase.
+Native Android client for [ssh-to-go](../README.md). Phase 2 (this commit): tap a session on the dashboard to open a terminal backed by the existing `/ws/{host}/{session}` relay (`?mouse=off` so swipes don't trip tmux copy-mode). Scrolling is the vanilla Termux baseline — smooth scroll lands in Phase 3.
 
 ## Why a native app
 
@@ -37,8 +37,16 @@ CI uses `gradle/actions/setup-gradle` so no wrapper jar is required in the repo.
 
 ## Phases
 
-- **Phase 1** (current): Gradle scaffold, login, server profile storage, dashboard list (hosts + sessions). No terminal yet.
-- **Phase 2**: terminal MVP with vanilla Termux view (baseline jerky scroll).
-- **Phase 3**: forked terminal-view with smooth scroll + IME accessory bar — the make-or-break for the Termux-emulator route.
+- **Phase 1**: Gradle scaffold, login, server profile storage, dashboard list.
+- **Phase 2** (current): tap-to-open terminal screen. Termux's terminal-emulator + terminal-view are vendored under `libraries/` with the local-PTY/JNI plumbing stripped out; I/O goes through ssh-to-go's WebSocket relay instead.
+- **Phase 3**: smooth-scroll + IME accessory bar in the terminal-view fork — the make-or-break for the Termux-emulator route.
 - **Phase 4**: multi-tab, kill/rename/handoff parity with the web dashboard.
 - **Phase 5**: CI release polish.
+
+## Third-party code
+
+`android/libraries/terminal-emulator/` and `android/libraries/terminal-view/` are
+derived from the Termux app (GPLv3, https://github.com/termux/termux-app). The
+local PTY transport has been removed; bytes are piped through OkHttp's
+WebSocket against ssh-to-go's `/ws` relay instead. License: GPLv3 — compatible
+with ssh-to-go's AGPLv3.

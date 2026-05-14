@@ -13,8 +13,8 @@ android {
         applicationId = "io.sshtogo.android"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = project.findProperty("versionName")?.toString() ?: "0.1.1"
+        versionCode = 3
+        versionName = project.findProperty("versionName")?.toString() ?: "0.2.0"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -70,6 +70,10 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+
+    // Vendored terminal emulator + view (modified copy of Termux's libraries
+    // with the local-PTY/JNI plumbing replaced by a remote WebSocket transport).
+    implementation(project(":libraries:terminal-view"))
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

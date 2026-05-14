@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 rootProject.name = "ssh-to-go-android"
 
 include(":app")
+include(":libraries:terminal-emulator")
+include(":libraries:terminal-view")
