@@ -12,6 +12,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/config"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
+	"github.com/awkto/ssh-to-go/internal/sessionreg"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 )
@@ -22,6 +23,7 @@ type Handlers struct {
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
 	SessionIcons *keystore.SessionIconStore
+	Registry     *sessionreg.Store
 	Auth         *auth.Manager
 	ConfigPath   string
 	PollInterval time.Duration
@@ -58,12 +60,45 @@ func (h *Handlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, sessions)
 }
 
+// hostResponse mirrors hub.HostState and adds missing-session data
+// computed from the registry. The embedded HostState preserves the
+// existing wire format so older clients keep working.
+type hostResponse struct {
+	hub.HostState
+	MissingSessions []sessionreg.Entry `json:"missing_sessions,omitempty"`
+}
+
+// missingFor returns app-tracked sessions that the host's last poll
+// didn't see in tmux. Only returns entries when the host is online —
+// otherwise we don't know what's actually missing vs unreachable.
+func (h *Handlers) missingFor(host hub.HostState) []sessionreg.Entry {
+	if h.Registry == nil || !host.Online {
+		return nil
+	}
+	tracked := h.Registry.ListByHost(host.Config.Name)
+	if len(tracked) == 0 {
+		return nil
+	}
+	alive := make(map[string]struct{}, len(host.Sessions))
+	for _, s := range host.Sessions {
+		alive[s.Name] = struct{}{}
+	}
+	var missing []sessionreg.Entry
+	for _, e := range tracked {
+		if _, ok := alive[e.Name]; !ok {
+			missing = append(missing, e)
+		}
+	}
+	return missing
+}
+
 func (h *Handlers) ListHosts(w http.ResponseWriter, r *http.Request) {
 	hosts := h.Hub.AllHosts()
-	if hosts == nil {
-		hosts = []hub.HostState{}
+	resp := make([]hostResponse, 0, len(hosts))
+	for _, host := range hosts {
+		resp = append(resp, hostResponse{HostState: host, MissingSessions: h.missingFor(host)})
 	}
-	writeJSON(w, hosts)
+	writeJSON(w, resp)
 }
 
 type createSessionReq struct {
@@ -101,6 +136,12 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.Registry != nil {
+		if err := h.Registry.Add(hostName, req.Name, req.Cwd); err != nil {
+			log.Printf("session registry add %s/%s: %v", hostName, req.Name, err)
+		}
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "created", "name": req.Name})
 }
@@ -125,6 +166,12 @@ func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
 	if err := h.Tmux.KillSession(client, sessionName); err != nil {
 		http.Error(w, fmt.Sprintf("kill session failed: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.Registry != nil {
+		if err := h.Registry.Remove(hostName, sessionName); err != nil {
+			log.Printf("session registry remove %s/%s: %v", hostName, sessionName, err)
+		}
 	}
 
 	writeJSON(w, map[string]string{"status": "killed"})
@@ -168,6 +215,15 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 
 	// Migrate session icon/color/star data to the new name
 	_ = h.SessionIcons.Rename(hostName, sessionName, req.NewName)
+
+	// Move the registry entry along with the rename so a future reboot
+	// recreates the session under its new name.
+	if h.Registry != nil {
+		if entry, ok := h.Registry.Get(hostName, sessionName); ok {
+			_ = h.Registry.Remove(hostName, sessionName)
+			_ = h.Registry.Add(hostName, req.NewName, entry.WorkingDir)
+		}
+	}
 
 	writeJSON(w, map[string]string{"status": "renamed", "old_name": sessionName, "new_name": req.NewName})
 }
@@ -381,7 +437,7 @@ func (h *Handlers) AddHost(w http.ResponseWriter, r *http.Request) {
 	resolveKey := func(hc config.Host) string {
 		return keystore.ResolveKeyPath(hc, h.KeyStore, h.Settings)
 	}
-	tmux.StartPoller(host, h.PollInterval, resolveKey, h.PollResults, h.Done)
+	tmux.StartPoller(host, h.PollInterval, resolveKey, h.Registry, h.PollResults, h.Done)
 	log.Printf("started poller for new host %s (%s@%s)", host.Name, host.User, host.DialAddress())
 
 	w.WriteHeader(http.StatusCreated)
@@ -448,6 +504,12 @@ func (h *Handlers) DeleteHost(w http.ResponseWriter, r *http.Request) {
 
 	if err := config.RemoveHost(h.ConfigPath, hostName); err != nil {
 		log.Printf("warning: host removed at runtime but config save failed: %v", err)
+	}
+
+	if h.Registry != nil {
+		if err := h.Registry.RemoveHost(hostName); err != nil {
+			log.Printf("session registry purge %s: %v", hostName, err)
+		}
 	}
 
 	writeJSON(w, map[string]string{"status": "deleted"})
@@ -811,6 +873,85 @@ func sessionCookie(token string) *http.Cookie {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+// ── Tracked sessions ──
+
+// RecreateSession brings back a tracked session that no longer exists in
+// tmux (typically lost to a host reboot). The session is created with
+// the working directory we last observed for it. Refuses if the session
+// is already alive or isn't tracked.
+func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+	sessionName := r.PathValue("session")
+
+	if h.Registry == nil {
+		http.Error(w, "session registry unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	entry, ok := h.Registry.Get(hostName, sessionName)
+	if !ok {
+		http.Error(w, "session not tracked", http.StatusNotFound)
+		return
+	}
+
+	hostCfg, ok := h.Hub.GetHostConfig(hostName)
+	if !ok {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	// Refuse if it's already alive on the host — nothing to recreate.
+	if state, ok := h.Hub.GetHost(hostName); ok {
+		for _, s := range state.Sessions {
+			if s.Name == sessionName {
+				http.Error(w, "session already exists", http.StatusConflict)
+				return
+			}
+		}
+	}
+
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer client.Close()
+
+	if err := h.Tmux.CreateSession(client, sessionName, h.Settings.TmuxWindowSize(), entry.WorkingDir); err != nil {
+		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Refresh LastSeenAt; CreatedAt and WorkingDir are unchanged because
+	// Add() preserves them when the entry already exists.
+	if err := h.Registry.Add(hostName, sessionName, entry.WorkingDir); err != nil {
+		log.Printf("session registry touch %s/%s: %v", hostName, sessionName, err)
+	}
+
+	writeJSON(w, map[string]string{
+		"status":      "recreated",
+		"name":        sessionName,
+		"working_dir": entry.WorkingDir,
+	})
+}
+
+// ForgetSession drops a tracked session from the registry without
+// touching tmux. Intended for "this session is gone and I don't want
+// it back" — clears the entry so it stops appearing as missing.
+func (h *Handlers) ForgetSession(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+	sessionName := r.PathValue("session")
+
+	if h.Registry == nil {
+		http.Error(w, "session registry unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.Registry.Remove(hostName, sessionName); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "forgotten"})
 }
 
 // ── Session Icons ──

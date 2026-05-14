@@ -4,6 +4,7 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
   const HOSTS = store.hosts;
   const SESSIONS = store.sessions;
   const KEYPAIRS = store.keypairs;
+  const MISSING = store.missingSessions || [];
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
   const attached = SESSIONS.filter(s => s.clients.length > 0).length;
   const totalHostLoad = HOSTS.length
@@ -56,6 +57,8 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
           icon={<IconKey size={13} />}
         />
       </div>
+
+      {MISSING.length > 0 && <MissingSessionsPanel missing={MISSING} />}
 
       <div className="grid-2">
         {/* Recent sessions */}
@@ -173,6 +176,61 @@ const StatCard = ({ label, value, sub, delta, spark, icon }) => (
   </div>
 );
 
+const MissingSessionsPanel = ({ missing }) => {
+  const [busy, setBusy] = React.useState({});
+  const action = async (fn, m, label) => {
+    const key = `${m.hostName}:${m.name}`;
+    setBusy(b => ({ ...b, [key]: label }));
+    try { await fn(m.hostName, m.name); }
+    catch (err) { alert(`${label} failed: ${err.message}`); }
+    finally { setBusy(b => { const n = { ...b }; delete n[key]; return n; }); }
+  };
+  return (
+    <div className="panel" style={{marginBottom:16, borderColor:'var(--warn, #c89b3c)'}}>
+      <div className="panel-head">
+        <div className="row gap-3">
+          <h2 style={{color:'var(--warn, #c89b3c)'}}>Missing sessions</h2>
+          <span className="muted" style={{fontSize:12}}>tracked by ssh-to-go but not running on the host — usually a reboot</span>
+        </div>
+        <span className="muted mono" style={{fontSize:12}}>{missing.length}</span>
+      </div>
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th style={{width:'24%'}}>Session</th>
+            <th>Host</th>
+            <th className="hide-mobile">Last working dir</th>
+            <th style={{textAlign:'right'}}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {missing.map(m => {
+            const key = `${m.hostName}:${m.name}`;
+            const b = busy[key];
+            return (
+              <tr key={key}>
+                <td><span className="mono">{m.name}</span></td>
+                <td className="muted mono" style={{fontSize:12.5}}>{m.host}</td>
+                <td className="mono muted hide-mobile" style={{fontSize:12}}>{m.workingDir || '—'}</td>
+                <td>
+                  <div className="actions-cell">
+                    <button className="action-btn primary" disabled={!!b} onClick={() => action(recreateSession, m, 'recreate')}>
+                      {b === 'recreate' ? '…' : 'Recreate'}
+                    </button>
+                    <button className="action-btn" disabled={!!b} onClick={() => action(forgetSession, m, 'forget')}>
+                      {b === 'forget' ? '…' : 'Forget'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const SessionRow = ({ session: s, onOpen }) => {
   const [starred, setStarred] = React.useState(s.starred);
   const toggleStar = (e) => {
@@ -232,4 +290,4 @@ const SessionRow = ({ session: s, onOpen }) => {
   );
 };
 
-Object.assign(window, { Dashboard, StatCard, SessionRow, HostBar });
+Object.assign(window, { Dashboard, StatCard, SessionRow, HostBar, MissingSessionsPanel });

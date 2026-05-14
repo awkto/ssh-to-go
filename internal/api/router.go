@@ -8,6 +8,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/mcp"
+	"github.com/awkto/ssh-to-go/internal/sessionreg"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 )
 
@@ -17,6 +18,7 @@ type RouterConfig struct {
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
 	SessionIcons *keystore.SessionIconStore
+	Registry     *sessionreg.Store
 	Auth         *auth.Manager
 	StaticFS     http.FileSystem
 	ConfigPath   string
@@ -33,6 +35,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 		KeyStore:     rc.KeyStore,
 		Settings:     rc.Settings,
 		SessionIcons: rc.SessionIcons,
+		Registry:     rc.Registry,
 		Auth:         rc.Auth,
 		ConfigPath:   rc.ConfigPath,
 		PollInterval: rc.PollInterval,
@@ -61,6 +64,8 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("POST /api/hosts/{host}/scan", handlers.ScanHost)
 	mux.HandleFunc("DELETE /api/hosts/{host}/sessions/{session}", handlers.KillSession)
 	mux.HandleFunc("PUT /api/hosts/{host}/sessions/{session}", handlers.RenameSession)
+	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/recreate", handlers.RecreateSession)
+	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/forget", handlers.ForgetSession)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/handoff", handlers.Handoff)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/cwd", handlers.SessionCwd)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/clients", handlers.ListClients)

@@ -81,9 +81,35 @@ function adaptHosts() {
       disk: metrics ? metrics.disk : null,
       load1: metrics ? metrics.load1 : null,
       tags: cfg.tags || [],
+      missingSessions: (h.missing_sessions || []).map(m => ({
+        name: m.name,
+        workingDir: m.working_dir || '',
+        createdAt: m.created_at || '',
+        lastSeenAt: m.last_seen_at || '',
+      })),
       _raw: h,
     };
   });
+}
+
+function allMissingSessions() {
+  const out = [];
+  for (const h of STORE.hosts || []) {
+    const hostName = h.config && h.config.name;
+    if (!hostName) continue;
+    if (!h.online) continue;
+    for (const m of (h.missing_sessions || [])) {
+      out.push({
+        hostName,
+        host: (h.config.address || hostName),
+        name: m.name,
+        workingDir: m.working_dir || '',
+        createdAt: m.created_at || '',
+        lastSeenAt: m.last_seen_at || '',
+      });
+    }
+  }
+  return out;
 }
 
 function adaptSessions() {
@@ -183,6 +209,7 @@ function useStore() {
   return {
     hosts: adaptHosts(),
     sessions: adaptSessions(),
+    missingSessions: allMissingSessions(),
     keypairs: adaptKeypairs(),
     settings: STORE.settings,
     icons: STORE.icons,
@@ -207,6 +234,19 @@ async function createSession(hostName, name, cwd) {
 
 async function killSession(hostName, name) {
   const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (!r.ok) throw new Error(await r.text());
+  await refresh();
+}
+
+async function recreateSession(hostName, name) {
+  const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions/${encodeURIComponent(name)}/recreate`, { method: 'POST' });
+  if (!r.ok) throw new Error(await r.text());
+  await refresh();
+  return r.json();
+}
+
+async function forgetSession(hostName, name) {
+  const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions/${encodeURIComponent(name)}/forget`, { method: 'POST' });
   if (!r.ok) throw new Error(await r.text());
   await refresh();
 }
@@ -268,7 +308,8 @@ authFetch('/api/version').then(r => r.json()).then(v => { STORE.version = v.vers
 
 Object.assign(window, {
   STORE, useStore, refresh,
-  createSession, killSession, renameSession, getHandoff,
+  createSession, killSession, recreateSession, forgetSession,
+  renameSession, getHandoff,
   setSessionIconPatch, addHost, scanAll, openTerminal,
   timeAgo, formatUptime,
 });

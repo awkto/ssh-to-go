@@ -15,6 +15,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/config"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
+	"github.com/awkto/ssh-to-go/internal/sessionreg"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 	"github.com/awkto/ssh-to-go/web"
@@ -53,6 +54,13 @@ func main() {
 	sis, err := keystore.NewSessionIconStore(cfg.DataDir)
 	if err != nil {
 		log.Fatalf("session icons: %v", err)
+	}
+
+	// Initialize tracked-session registry (records app-created sessions
+	// so we can offer "recreate" after a host reboot).
+	reg, err := sessionreg.NewStore(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("session registry: %v", err)
 	}
 
 	// Initialize auth
@@ -112,7 +120,7 @@ func main() {
 
 	for _, host := range cfg.Hosts {
 		log.Printf("starting poller for %s (%s@%s)", host.Name, host.User, host.DialAddress())
-		tmux.StartPoller(host, cfg.PollInterval, resolveKey, pollResults, done)
+		tmux.StartPoller(host, cfg.PollInterval, resolveKey, reg, pollResults, done)
 	}
 
 	// Process poll results in background
@@ -139,6 +147,7 @@ func main() {
 		KeyStore:     ks,
 		Settings:     sm,
 		SessionIcons: sis,
+		Registry:     reg,
 		Auth:         am,
 		StaticFS:     http.FS(staticSub),
 		ConfigPath:   *configPath,

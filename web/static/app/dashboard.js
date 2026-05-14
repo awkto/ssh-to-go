@@ -7,6 +7,7 @@ const Dashboard = ({
   const HOSTS = store.hosts;
   const SESSIONS = store.sessions;
   const KEYPAIRS = store.keypairs;
+  const MISSING = store.missingSessions || [];
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
   const attached = SESSIONS.filter(s => s.clients.length > 0).length;
   const totalHostLoad = HOSTS.length ? HOSTS.reduce((sum, h) => sum.map((v, i) => v + (h.load[i] || 0)), Array(20).fill(0)).map(v => v / HOSTS.length) : Array(20).fill(0);
@@ -103,7 +104,9 @@ const Dashboard = ({
     icon: React.createElement(IconKey, {
       size: 13
     })
-  })), React.createElement("div", {
+  })), MISSING.length > 0 && React.createElement(MissingSessionsPanel, {
+    missing: MISSING
+  }), React.createElement("div", {
     className: "grid-2"
   }, React.createElement("div", {
     className: "panel"
@@ -260,6 +263,64 @@ const StatCard = ({
 }, sub), spark && React.createElement("div", {
   className: "stat-spark"
 }, spark));
+const MissingSessionsPanel = ({
+  missing
+}) => {
+  const [busy, setBusy] = React.useState({});
+  const action = async (fn, m, label) => {
+    const key = `${m.hostName}:${m.name}`;
+    setBusy(b => ({ ...b, [key]: label }));
+    try { await fn(m.hostName, m.name); }
+    catch (err) { alert(`${label} failed: ${err.message}`); }
+    finally { setBusy(b => { const n = { ...b }; delete n[key]; return n; }); }
+  };
+  return React.createElement("div", {
+    className: "panel",
+    style: { marginBottom: 16, borderColor: 'var(--warn, #c89b3c)' }
+  }, React.createElement("div", {
+    className: "panel-head"
+  }, React.createElement("div", {
+    className: "row gap-3"
+  }, React.createElement("h2", {
+    style: { color: 'var(--warn, #c89b3c)' }
+  }, "Missing sessions"), React.createElement("span", {
+    className: "muted",
+    style: { fontSize: 12 }
+  }, "tracked by ssh-to-go but not running on the host — usually a reboot")), React.createElement("span", {
+    className: "muted mono",
+    style: { fontSize: 12 }
+  }, missing.length)), React.createElement("table", {
+    className: "tbl"
+  }, React.createElement("thead", null, React.createElement("tr", null, React.createElement("th", {
+    style: { width: '24%' }
+  }, "Session"), React.createElement("th", null, "Host"), React.createElement("th", {
+    className: "hide-mobile"
+  }, "Last working dir"), React.createElement("th", {
+    style: { textAlign: 'right' }
+  }, "Actions"))), React.createElement("tbody", null, missing.map(m => {
+    const key = `${m.hostName}:${m.name}`;
+    const b = busy[key];
+    return React.createElement("tr", {
+      key
+    }, React.createElement("td", null, React.createElement("span", { className: "mono" }, m.name)), React.createElement("td", {
+      className: "muted mono",
+      style: { fontSize: 12.5 }
+    }, m.host), React.createElement("td", {
+      className: "mono muted hide-mobile",
+      style: { fontSize: 12 }
+    }, m.workingDir || '—'), React.createElement("td", null, React.createElement("div", {
+      className: "actions-cell"
+    }, React.createElement("button", {
+      className: "action-btn primary",
+      disabled: !!b,
+      onClick: () => action(recreateSession, m, 'recreate')
+    }, b === 'recreate' ? '…' : 'Recreate'), React.createElement("button", {
+      className: "action-btn",
+      disabled: !!b,
+      onClick: () => action(forgetSession, m, 'forget')
+    }, b === 'forget' ? '…' : 'Forget'))));
+  }))));
+};
 const SessionRow = ({
   session: s,
   onOpen
@@ -371,5 +432,6 @@ Object.assign(window, {
   Dashboard,
   StatCard,
   SessionRow,
-  HostBar
+  HostBar,
+  MissingSessionsPanel
 });

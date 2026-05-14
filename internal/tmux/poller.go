@@ -45,6 +45,16 @@ func DetectOSViaClient(client *ssh.Client) string {
 // KeyResolver returns the private key path for a given host.
 type KeyResolver func(host config.Host) string
 
+// SessionTracker is the subset of the session registry that the poller
+// needs: it lists the sessions we expect to find on a host and accepts
+// cwd updates for the ones that are still alive. Nil is acceptable —
+// the poller will simply skip cwd tracking.
+type SessionTracker interface {
+	TrackedNames(host string) []string
+	SetCwd(host, name, cwd string)
+	MarkSeen(host, name string)
+}
+
 // PollResult is sent from a poller to the hub on each poll cycle.
 type PollResult struct {
 	HostName     string
@@ -58,7 +68,7 @@ type PollResult struct {
 
 // StartPoller launches a goroutine that periodically discovers tmux sessions
 // on the given host and sends results to the provided channel.
-func StartPoller(host config.Host, interval time.Duration, resolveKey KeyResolver, results chan<- PollResult, done <-chan struct{}) {
+func StartPoller(host config.Host, interval time.Duration, resolveKey KeyResolver, tracker SessionTracker, results chan<- PollResult, done <-chan struct{}) {
 	go func() {
 		mgr := NewManager()
 		var cachedOS string
@@ -90,6 +100,29 @@ func StartPoller(host config.Host, interval time.Duration, resolveKey KeyResolve
 				return
 			}
 			result.Sessions = sessions
+
+			// Refresh cwd for sessions we're tracking AND that still exist on
+			// the host. We piggyback on the existing SSH connection so this
+			// is cheap. Tracked-but-missing sessions are intentionally
+			// skipped — there's nothing to read their cwd from.
+			if tracker != nil {
+				tracked := tracker.TrackedNames(host.Name)
+				if len(tracked) > 0 {
+					alive := make(map[string]struct{}, len(sessions))
+					for _, s := range sessions {
+						alive[s.Name] = struct{}{}
+					}
+					for _, name := range tracked {
+						if _, ok := alive[name]; !ok {
+							continue
+						}
+						tracker.MarkSeen(host.Name, name)
+						if cwd, err := mgr.SessionCwd(client, name); err == nil && cwd != "" {
+							tracker.SetCwd(host.Name, name, cwd)
+						}
+					}
+				}
+			}
 
 			// Detect OS once per poller lifetime
 			if cachedOS == "" {
