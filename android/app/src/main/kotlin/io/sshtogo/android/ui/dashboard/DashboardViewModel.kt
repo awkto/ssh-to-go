@@ -6,6 +6,7 @@ import io.sshtogo.android.data.ServerProfile
 import io.sshtogo.android.net.HostSession
 import io.sshtogo.android.net.HostState
 import io.sshtogo.android.net.SshToGoClient
+import io.sshtogo.android.net.toHostSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,7 +34,7 @@ class DashboardViewModel(private val profile: ServerProfile) : ViewModel() {
             val api = SshToGoClient.forProfile(profile)
             try {
                 val hosts = api.hosts()
-                val sessions = api.sessions()
+                val sessions = api.sessions().map { it.toHostSession() }
                 _state.value = DashboardState(loading = false, hosts = hosts, sessions = sessions)
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(loading = false, error = t.message ?: "Failed to load")
