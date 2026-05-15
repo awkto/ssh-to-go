@@ -197,26 +197,26 @@ private fun HostCard(
                 )
             } else {
                 Column(
-                    modifier = Modifier.padding(top = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     sessions.forEach { s ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpenSession(host.name, s.name) }
-                                .padding(vertical = 4.dp),
+                                .padding(horizontal = 4.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "•  ${s.name}",
-                                style = MaterialTheme.typography.bodyMedium,
+                                "›  ${s.name}",
+                                style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.weight(1f),
                             )
                             if (s.attached) {
                                 Text(
                                     "attached",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                             }

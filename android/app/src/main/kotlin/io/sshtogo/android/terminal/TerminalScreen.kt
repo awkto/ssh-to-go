@@ -20,7 +20,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
@@ -43,16 +42,21 @@ fun TerminalScreen(
         return
     }
 
-    val ctx = LocalContext.current
     val surfaceColor = MaterialTheme.colorScheme.surface.toArgb()
 
-    val sessionClient = remember { NoopSessionClient() }
+    // The session needs a client before the view exists, but the client needs
+    // to call back into the view on screen updates. Hold a mutable view ref
+    // that we assign once AndroidView's factory runs.
+    val sessionClient = remember { ViewBackedSessionClient() }
     val session = remember(profile.id, hostName, sessionName) {
         RelayTerminalSession(profile, hostName, sessionName, sessionClient)
     }
 
     DisposableEffect(session) {
-        onDispose { session.finishIfRunning() }
+        onDispose {
+            sessionClient.view = null
+            session.finishIfRunning()
+        }
     }
 
     Scaffold(
@@ -80,6 +84,7 @@ fun TerminalScreen(
                         isFocusable = true
                         isFocusableInTouchMode = true
                         requestFocus()
+                        sessionClient.view = this
                     }
                 },
             )
@@ -143,14 +148,25 @@ private class ComposeTerminalViewClient(
     override fun logStackTrace(tag: String, e: Exception) { android.util.Log.e(tag, "", e) }
 }
 
-private class NoopSessionClient : TerminalSessionClient {
-    override fun onTextChanged(s: TerminalSession) {}
+/**
+ * A session client that forwards onTextChanged → view.onScreenUpdated()
+ * so the AndroidView actually invalidates and repaints. Without this the
+ * emulator parses bytes happily but nothing visible ever changes.
+ */
+private class ViewBackedSessionClient : TerminalSessionClient {
+    @Volatile var view: TerminalView? = null
+
+    override fun onTextChanged(s: TerminalSession) {
+        view?.onScreenUpdated()
+    }
     override fun onTitleChanged(s: TerminalSession) {}
     override fun onSessionFinished(s: TerminalSession) {}
     override fun onCopyTextToClipboard(s: TerminalSession, text: String) {}
     override fun onPasteTextFromClipboard(s: TerminalSession?) {}
     override fun onBell(s: TerminalSession) {}
-    override fun onColorsChanged(s: TerminalSession) {}
+    override fun onColorsChanged(s: TerminalSession) {
+        view?.onScreenUpdated()
+    }
     override fun onTerminalCursorStateChange(state: Boolean) {}
     override fun setTerminalShellPid(s: TerminalSession, pid: Int) {}
     override fun getTerminalCursorStyle(): Int? = null
