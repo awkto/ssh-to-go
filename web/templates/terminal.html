@@ -132,6 +132,11 @@
         }
 
         #terminal { flex: 1; min-height: 0; overflow: hidden; }
+        /* Hide xterm.js's internal scrollbar — we forward wheel events to
+           tmux and use tmux's scrollback, so the local viewport scrollbar
+           is dead weight (and confusingly never reflects tmux state). */
+        .xterm-viewport { overflow-y: hidden !important; scrollbar-width: none; }
+        .xterm-viewport::-webkit-scrollbar { display: none; }
 
         /* Mobile keyboard toolbar — only shown on touch devices */
         #mobile-bar {
