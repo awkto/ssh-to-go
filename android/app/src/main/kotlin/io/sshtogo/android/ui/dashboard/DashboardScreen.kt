@@ -39,11 +39,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.sshtogo.android.SshToGoApplication
+import io.sshtogo.android.appVersionName
 import io.sshtogo.android.net.HostSession
 import io.sshtogo.android.net.HostState
 
@@ -72,6 +74,7 @@ fun DashboardScreen(
     )
     val state by vm.state.collectAsState()
     var menuOpen by remember { mutableStateOf(false) }
+    val version = LocalContext.current.appVersionName()
 
     Scaffold(
         topBar = {
@@ -79,7 +82,10 @@ fun DashboardScreen(
                 title = {
                     Column {
                         Text(profile.name, style = MaterialTheme.typography.titleMedium)
-                        Text(profile.baseUrl, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "${profile.baseUrl}  ·  v$version",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 },
                 actions = {

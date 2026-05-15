@@ -25,8 +25,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.sshtogo.android.SshToGoApplication
+import io.sshtogo.android.appVersionName
 import io.sshtogo.android.data.ServerProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,9 +39,22 @@ fun ServerListScreen(
 ) {
     val store = SshToGoApplication.instance.profileStore
     val profiles by store.profiles.collectAsState()
+    val version = LocalContext.current.appVersionName()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Servers") }) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Servers", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "ssh-to-go android · v$version",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAdd,
