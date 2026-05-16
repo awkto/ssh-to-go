@@ -213,7 +213,12 @@ public final class TerminalView extends View {
                 // Do not start scrolling until last fling has been taken care of:
                 if (!mScroller.isFinished()) return true;
 
-                final boolean mouseTrackingAtStartOfFling = mEmulator.isMouseTrackingActive();
+                // Only honour the mouse-wheel path for actual mouse input. A touch fling
+                // with tmux mouse mode enabled would otherwise be turned into wheel-up
+                // events that scroll tmux's copy-mode in 5-line increments — exactly the
+                // jerky behaviour we vendored this view to avoid.
+                final boolean fromMouse = e2 != null && e2.isFromSource(InputDevice.SOURCE_MOUSE);
+                final boolean mouseTrackingAtStartOfFling = fromMouse && mEmulator.isMouseTrackingActive();
                 final boolean altBufAtStartOfFling = mEmulator.isAlternateBufferActive();
                 final float SCALE = 0.25f;
 
