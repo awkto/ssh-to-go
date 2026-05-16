@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -71,7 +72,7 @@ fun TerminalScreen(
             )
         },
     ) { pad ->
-        Box(modifier = Modifier.fillMaxSize().padding(pad)) {
+        Box(modifier = Modifier.fillMaxSize().padding(pad).imePadding()) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->

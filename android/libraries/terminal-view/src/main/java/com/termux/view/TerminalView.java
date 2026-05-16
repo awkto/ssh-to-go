@@ -267,6 +267,15 @@ public final class TerminalView extends View {
                     if (lineSpacing <= 0) return true;
                     final int maxScrollUpPx = mEmulator.getScreen().getActiveTranscriptRows() * lineSpacing;
                     final int startScrollUpPx = Math.round(-mTopRow * (float) lineSpacing + mScrollOffsetPx);
+
+                    // Don't start a fling that's already hard against a boundary —
+                    // Scroller still ticks for ~250ms in that case and yields tiny,
+                    // jittery sub-pixel motion as the kinematics fight the clamp.
+                    if ((startScrollUpPx <= 0 && velocityY < 0) ||
+                        (startScrollUpPx >= maxScrollUpPx && velocityY > 0)) {
+                        return true;
+                    }
+
                     // Finger up = velocityY < 0 = user wants to see newer = scrollUp should decrease.
                     mScroller.fling(0, startScrollUpPx, 0, (int) velocityY, 0, 0, 0, Math.max(0, maxScrollUpPx));
                     post(new Runnable() {
