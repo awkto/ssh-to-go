@@ -80,10 +80,29 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	if opts.Mouse == "off" {
 		mouseOpt = ""
 	}
-	cmd := fmt.Sprintf(
-		`printf '%%s\x00' "$(tty)"; exec tmux %snew-session -A -s %q \; set-option window-size %s`,
-		mouseOpt, sessionName, windowSize,
-	)
+
+	// For native clients running with mouse=off we don't let tmux handle
+	// scrollback (its row-quantised wheel binding ruins smooth scroll on
+	// touch devices). Instead we dump up-to-5000 lines of pane history
+	// over the wire BEFORE attaching, so the client's local emulator
+	// fills its scrollback with the real session history. tmux's attach
+	// then paints the live frame on top; the scrollback above it remains.
+	var cmd string
+	if opts.Mouse == "off" {
+		cmd = fmt.Sprintf(
+			`printf '%%s\x00' "$(tty)"; `+
+				`tmux has-session -t %q 2>/dev/null || tmux new-session -d -s %q; `+
+				`tmux capture-pane -p -e -S -5000 -E -1 -t %q 2>/dev/null; `+
+				`printf '\x1b[0m'; `+
+				`exec tmux new-session -A -s %q \; set-option window-size %s`,
+			sessionName, sessionName, sessionName, sessionName, windowSize,
+		)
+	} else {
+		cmd = fmt.Sprintf(
+			`printf '%%s\x00' "$(tty)"; exec tmux %snew-session -A -s %q \; set-option window-size %s`,
+			mouseOpt, sessionName, windowSize,
+		)
+	}
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("start tmux: %w", err)
 	}
