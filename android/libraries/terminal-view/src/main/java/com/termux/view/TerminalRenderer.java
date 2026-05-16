@@ -56,8 +56,19 @@ public final class TerminalRenderer {
     /** Render the terminal to a canvas with at a specified row scroll, and an optional rectangular selection. */
     public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow,
                              int selectionY1, int selectionY2, int selectionX1, int selectionX2) {
+        render(mEmulator, canvas, topRow, mEmulator.mRows, selectionY1, selectionY2, selectionX1, selectionX2);
+    }
+
+    /**
+     * Render variant that lets the caller draw {@code rowCount} rows starting at {@code topRow}
+     * instead of exactly {@code mEmulator.mRows}. ssh-to-go uses this for smooth-scroll: when the
+     * canvas is translated by a sub-row offset, we render one extra row so the translation
+     * doesn't leave a blank band at the bottom edge.
+     */
+    public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow, int rowCount,
+                             int selectionY1, int selectionY2, int selectionX1, int selectionX2) {
         final boolean reverseVideo = mEmulator.isReverseVideo();
-        final int endRow = topRow + mEmulator.mRows;
+        final int endRow = topRow + rowCount;
         final int columns = mEmulator.mColumns;
         final int cursorCol = mEmulator.getCursorCol();
         final int cursorRow = mEmulator.getCursorRow();

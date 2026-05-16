@@ -68,6 +68,15 @@ public final class TerminalView extends View {
 
     /** The top row of text to display. Ranges from -activeTranscriptRows to 0. */
     int mTopRow;
+    /**
+     * Sub-row scroll offset in pixels, in the range [0, fontLineSpacing). Lets us scroll
+     * smoothly between rows instead of snapping integer-row at a time. When > 0, the
+     * top {@code mScrollOffsetPx} pixels of row {@code mTopRow} are clipped above the
+     * top edge, and one extra row is rendered at the bottom edge.
+     *
+     * Invariant: when {@code mTopRow == 0} (at the bottom of the buffer), this is 0.
+     */
+    float mScrollOffsetPx;
     int[] mDefaultSelectors = new int[]{-1,-1,-1,-1};
 
     float mScaleFactor = 1.f;
@@ -175,12 +184,17 @@ public final class TerminalView extends View {
                     // since we cannot just start sending these events without a starting press event,
                     // which we do not do for touch input, only mouse in onTouchEvent().
                     sendMouseEventCode(e, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true);
-                } else {
+                } else if (mEmulator.isAlternateBufferActive()) {
+                    // Apps that don't use mouse mode but draw their own UI on the alt screen
+                    // (less, vim) expect arrow-key scrolls — fall back to row-quantised path.
                     scrolledWithFinger = true;
                     distanceY += mScrollRemainder;
                     int deltaRows = (int) (distanceY / mRenderer.mFontLineSpacing);
                     mScrollRemainder = distanceY - deltaRows * mRenderer.mFontLineSpacing;
                     doScroll(e, deltaRows);
+                } else {
+                    scrolledWithFinger = true;
+                    doSubScrollPixels(distanceY);
                 }
                 return true;
             }
@@ -200,31 +214,68 @@ public final class TerminalView extends View {
                 if (!mScroller.isFinished()) return true;
 
                 final boolean mouseTrackingAtStartOfFling = mEmulator.isMouseTrackingActive();
-                float SCALE = 0.25f;
+                final boolean altBufAtStartOfFling = mEmulator.isAlternateBufferActive();
+                final float SCALE = 0.25f;
+
                 if (mouseTrackingAtStartOfFling) {
                     mScroller.fling(0, 0, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.mRows / 2, mEmulator.mRows / 2);
-                } else {
-                    mScroller.fling(0, mTopRow, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.getScreen().getActiveTranscriptRows(), 0);
-                }
-
-                post(new Runnable() {
-                    private int mLastY = 0;
-
-                    @Override
-                    public void run() {
-                        if (mouseTrackingAtStartOfFling != mEmulator.isMouseTrackingActive()) {
-                            mScroller.abortAnimation();
-                            return;
+                    post(new Runnable() {
+                        private int mLastY = 0;
+                        @Override public void run() {
+                            if (mouseTrackingAtStartOfFling != mEmulator.isMouseTrackingActive()) {
+                                mScroller.abortAnimation();
+                                return;
+                            }
+                            if (mScroller.isFinished()) return;
+                            boolean more = mScroller.computeScrollOffset();
+                            int newY = mScroller.getCurrY();
+                            int diff = newY - mLastY;
+                            doScroll(e2, diff);
+                            mLastY = newY;
+                            if (more) post(this);
                         }
-                        if (mScroller.isFinished()) return;
-                        boolean more = mScroller.computeScrollOffset();
-                        int newY = mScroller.getCurrY();
-                        int diff = mouseTrackingAtStartOfFling ? (newY - mLastY) : (newY - mTopRow);
-                        doScroll(e2, diff);
-                        mLastY = newY;
-                        if (more) post(this);
-                    }
-                });
+                    });
+                } else if (altBufAtStartOfFling) {
+                    // Apps like less/vim handle their own scrolling on the alt screen.
+                    mScroller.fling(0, mTopRow, 0, -(int) (velocityY * SCALE), 0, 0,
+                        -mEmulator.getScreen().getActiveTranscriptRows(), 0);
+                    post(new Runnable() {
+                        @Override public void run() {
+                            if (mScroller.isFinished()) return;
+                            boolean more = mScroller.computeScrollOffset();
+                            int newY = mScroller.getCurrY();
+                            doScroll(e2, newY - mTopRow);
+                            if (more) post(this);
+                        }
+                    });
+                } else {
+                    // Smooth pixel-precision fling: fling in scrollUpPx space (0 at the
+                    // bottom of the buffer, increasing into history).
+                    final int lineSpacing = mRenderer.mFontLineSpacing;
+                    if (lineSpacing <= 0) return true;
+                    final int maxScrollUpPx = mEmulator.getScreen().getActiveTranscriptRows() * lineSpacing;
+                    final int startScrollUpPx = Math.round(-mTopRow * (float) lineSpacing + mScrollOffsetPx);
+                    // Finger up = velocityY < 0 = user wants to see newer = scrollUp should decrease.
+                    mScroller.fling(0, startScrollUpPx, 0, (int) velocityY, 0, 0, 0, Math.max(0, maxScrollUpPx));
+                    post(new Runnable() {
+                        private int mLastY = startScrollUpPx;
+                        @Override public void run() {
+                            if (mEmulator == null) return;
+                            if (mEmulator.isMouseTrackingActive() || mEmulator.isAlternateBufferActive()) {
+                                mScroller.abortAnimation();
+                                return;
+                            }
+                            if (mScroller.isFinished()) return;
+                            boolean more = mScroller.computeScrollOffset();
+                            int newY = mScroller.getCurrY();
+                            // Positive distanceY (passed to doSubScrollPixels) means "scroll content up
+                            // toward newer" which DECREASES scrollUpPx; so distanceY = mLastY - newY.
+                            doSubScrollPixels(mLastY - newY);
+                            mLastY = newY;
+                            if (more) post(this);
+                        }
+                    });
+                }
 
                 return true;
             }
@@ -290,6 +341,7 @@ public final class TerminalView extends View {
     public boolean attachSession(TerminalSession session) {
         if (session == mTermSession) return false;
         mTopRow = 0;
+        mScrollOffsetPx = 0f;
 
         mTermSession = session;
         mEmulator = null;
@@ -458,7 +510,10 @@ public final class TerminalView extends View {
         if (mEmulator == null) return;
 
         int rowsInHistory = mEmulator.getScreen().getActiveTranscriptRows();
-        if (mTopRow < -rowsInHistory) mTopRow = -rowsInHistory;
+        if (mTopRow < -rowsInHistory) {
+            mTopRow = -rowsInHistory;
+            mScrollOffsetPx = 0f;
+        }
 
         if (isSelectingText() || mEmulator.isAutoScrollDisabled()) {
 
@@ -472,6 +527,7 @@ public final class TerminalView extends View {
 
                 if (mEmulator.isAutoScrollDisabled()) {
                     mTopRow = -rowsInHistory;
+                    mScrollOffsetPx = 0f;
                     skipScrolling = true;
                 }
             } else {
@@ -481,15 +537,13 @@ public final class TerminalView extends View {
             }
         }
 
-        if (!skipScrolling && mTopRow != 0) {
-            // Scroll down if not already there.
+        if (!skipScrolling && (mTopRow != 0 || mScrollOffsetPx != 0f)) {
+            // Snap back to the bottom so new content is visible.
             if (mTopRow < -3) {
-                // Awaken scroll bars only if scrolling a noticeable amount
-                // - we do not want visible scroll bars during normal typing
-                // of one row at a time.
                 awakenScrollBars();
             }
             mTopRow = 0;
+            mScrollOffsetPx = 0f;
         }
 
         mEmulator.clearScrollCounter();
@@ -583,9 +637,49 @@ public final class TerminalView extends View {
                 handleKeyCode(up ? KeyEvent.KEYCODE_DPAD_UP : KeyEvent.KEYCODE_DPAD_DOWN, 0);
             } else {
                 mTopRow = Math.min(0, Math.max(-(mEmulator.getScreen().getActiveTranscriptRows()), mTopRow + (up ? -1 : 1)));
+                mScrollOffsetPx = 0f;
                 if (!awakenScrollBars()) invalidate();
             }
         }
+    }
+
+    /**
+     * Smooth pixel-precision scroll for finger drags and flings. {@code distanceYPx > 0}
+     * scrolls content UP (toward newer / cursor); {@code < 0} scrolls into history.
+     * Maintains the invariant that {@code mScrollOffsetPx} stays in [0, lineSpacing)
+     * and is forced to 0 when {@code mTopRow} reaches 0 (no fractional past the bottom).
+     */
+    void doSubScrollPixels(float distanceYPx) {
+        if (mEmulator == null || mRenderer == null) return;
+        final int lineSpacing = mRenderer.mFontLineSpacing;
+        if (lineSpacing <= 0) return;
+
+        final int minTopRow = -mEmulator.getScreen().getActiveTranscriptRows();
+
+        mScrollOffsetPx += distanceYPx;
+
+        while (mScrollOffsetPx >= lineSpacing) {
+            mScrollOffsetPx -= lineSpacing;
+            mTopRow++;
+        }
+        while (mScrollOffsetPx < 0f) {
+            mScrollOffsetPx += lineSpacing;
+            mTopRow--;
+        }
+
+        if (mTopRow > 0) {
+            mTopRow = 0;
+            mScrollOffsetPx = 0f;
+        } else if (mTopRow == 0 && mScrollOffsetPx > 0f) {
+            mScrollOffsetPx = 0f;
+        }
+
+        if (mTopRow < minTopRow) {
+            mTopRow = minTopRow;
+            mScrollOffsetPx = 0f;
+        }
+
+        invalidate();
     }
 
     /** Overriding {@link View#onGenericMotionEvent(MotionEvent)}. */
@@ -1000,6 +1094,7 @@ public final class TerminalView extends View {
                 mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
 
             mTopRow = 0;
+            mScrollOffsetPx = 0f;
             scrollTo(0, 0);
             invalidate();
         }
@@ -1016,7 +1111,19 @@ public final class TerminalView extends View {
                 mTextSelectionCursorController.getSelectors(sel);
             }
 
-            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3]);
+            // Smooth-scroll: when we've scrolled a fractional row, shift the canvas
+            // up by mScrollOffsetPx and render one extra row at the bottom so the
+            // translation doesn't expose a blank band. mTopRow == 0 forces offset to
+            // zero, so no extra row needed in that case.
+            if (mScrollOffsetPx > 0f && mTopRow < 0) {
+                canvas.save();
+                canvas.translate(0f, -mScrollOffsetPx);
+                mRenderer.render(mEmulator, canvas, mTopRow, mEmulator.mRows + 1,
+                    sel[0], sel[1], sel[2], sel[3]);
+                canvas.restore();
+            } else {
+                mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3]);
+            }
 
             // render the text selection handles
             renderTextSelection();
