@@ -13,8 +13,8 @@ android {
         applicationId = "io.sshtogo.android"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = project.findProperty("versionName")?.toString() ?: "0.4.2"
+        versionCode = 15
+        versionName = project.findProperty("versionName")?.toString() ?: "0.4.3"
         vectorDrawables.useSupportLibrary = true
     }
 

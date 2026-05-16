@@ -121,7 +121,7 @@ fun DashboardScreen(
                                 text = { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }) },
                                 onClick = {
                                     menuOpen = false
-                                    app.prefs.setThemeMode(mode)
+                                    app.prefs.themeMode = mode
                                 },
                             )
                         }
