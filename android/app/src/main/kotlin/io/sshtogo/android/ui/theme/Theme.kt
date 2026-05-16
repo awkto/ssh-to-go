@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import io.sshtogo.android.SshToGoApplication
+import io.sshtogo.android.data.ThemeMode
 
 private val DarkColors = darkColorScheme(
     primary = Color(0xFF8AB4F8),
@@ -35,11 +37,17 @@ private val LightColors = lightColorScheme(
 
 @Composable
 fun SshToGoTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+    val mode = SshToGoApplication.instance.prefs.themeMode
+    val darkTheme = when (mode) {
+        ThemeMode.SYSTEM -> systemDark
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+    }
     val colors = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

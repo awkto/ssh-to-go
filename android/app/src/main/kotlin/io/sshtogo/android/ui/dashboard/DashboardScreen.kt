@@ -108,24 +108,20 @@ fun DashboardScreen(
                             onClick = { menuOpen = false; onAddServer() },
                         )
                         HorizontalDivider()
-                        // Terminal palette picker. Selection is applied to the
-                        // global TerminalColors.COLOR_SCHEME immediately so the
-                        // next session you open uses the new palette. Already-
-                        // attached sessions keep their current colours until
-                        // reconnected.
-                        val app = io.sshtogo.android.SshToGoApplication.instance
-                        val currentPalette = io.sshtogo.android.terminal.TerminalPalette.fromName(
-                            app.prefs.terminalPaletteName,
+                        Text(
+                            "App theme",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         )
-                        io.sshtogo.android.terminal.TerminalPalette.entries.forEach { palette ->
+                        val app = io.sshtogo.android.SshToGoApplication.instance
+                        io.sshtogo.android.data.ThemeMode.entries.forEach { mode ->
                             DropdownMenuItem(
-                                leadingIcon = if (palette == currentPalette)
+                                leadingIcon = if (mode == app.prefs.themeMode)
                                     { { Icon(Icons.Default.Palette, contentDescription = null) } } else null,
-                                text = { Text(palette.displayName) },
+                                text = { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }) },
                                 onClick = {
                                     menuOpen = false
-                                    app.prefs.terminalPaletteName = palette.name
-                                    palette.apply()
+                                    app.prefs.setThemeMode(mode)
                                 },
                             )
                         }

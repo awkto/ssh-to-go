@@ -16,7 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -161,6 +164,35 @@ fun TerminalScreen(
                             Icon(Icons.Default.ChevronRight, contentDescription = "Next session")
                         }
                     }
+                    // Per-session palette picker. Each tmux session keeps its
+                    // own colour scheme — changing here applies to the active
+                    // session only and persists across reconnects.
+                    var paletteMenuOpen by remember { mutableStateOf(false) }
+                    IconButton(onClick = { paletteMenuOpen = true }) {
+                        Icon(Icons.Default.Palette, contentDescription = "Palette")
+                    }
+                    DropdownMenu(
+                        expanded = paletteMenuOpen,
+                        onDismissRequest = { paletteMenuOpen = false },
+                    ) {
+                        val app = SshToGoApplication.instance
+                        val currentPaletteName = app.prefs.paletteFor(hostName, currentSession)
+                        TerminalPalette.entries.forEach { palette ->
+                            DropdownMenuItem(
+                                leadingIcon = if (palette.name == currentPaletteName)
+                                    { { Icon(Icons.Default.Palette, contentDescription = null) } } else null,
+                                text = { Text(palette.displayName) },
+                                onClick = {
+                                    paletteMenuOpen = false
+                                    // paletteFor() reads from the state-backed map, so this
+                                    // write triggers a recomposition of SessionTerminal and
+                                    // its AndroidView's update lambda re-applies the colours
+                                    // to the active emulator.
+                                    app.prefs.setPaletteFor(hostName, currentSession, palette.name)
+                                },
+                            )
+                        }
+                    }
                 },
             )
         },
@@ -170,10 +202,13 @@ fun TerminalScreen(
             modifier = Modifier.fillMaxSize().padding(pad).imePadding(),
             // Pager's own swipe gestures fight the terminal's vertical drag
             // (it greedy-grabs both axes), so we disable them and drive page
-            // changes from the title/arrow controls. The pager still gives
-            // us lazy page composition and smooth page animations.
+            // changes from the title/arrow controls.
             userScrollEnabled = false,
-            beyondViewportPageCount = 1,
+            // Only the currently visible page keeps a live WebSocket +
+            // emulator. Pre-warming neighbours made the app prone to freezes
+            // on hosts with many sessions; the small ~1s reconnect on swipe
+            // is a worthwhile trade for stability.
+            beyondViewportPageCount = 0,
         ) { pageIndex ->
             SessionTerminal(profile = profile, hostName = hostName, sessionName = list[pageIndex])
         }
@@ -192,6 +227,11 @@ private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionNam
     val session = remember(profile.id, hostName, sessionName) {
         RelayTerminalSession(profile, hostName, sessionName, sessionClient)
     }
+    // Read the per-session palette name from the state-backed prefs map so
+    // a change in the palette picker recomposes this view (and we'll push
+    // the new colours into the live emulator via the update block below).
+    val paletteName = SshToGoApplication.instance.prefs.paletteFor(hostName, sessionName)
+    val palette = remember(paletteName) { TerminalPalette.fromName(paletteName) }
 
     DisposableEffect(session) {
         onDispose {
@@ -204,6 +244,10 @@ private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionNam
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
+                // Apply the per-session palette to the global COLOR_SCHEME
+                // BEFORE the emulator is created — the emulator copies from
+                // COLOR_SCHEME at init, so this baked-in palette will stick.
+                palette.apply()
                 TerminalView(context, null).apply {
                     setBackgroundColor(surfaceColor)
                     val app = SshToGoApplication.instance
@@ -214,6 +258,16 @@ private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionNam
                     isFocusable = true
                     isFocusableInTouchMode = true
                     sessionClient.view = this
+                }
+            },
+            update = { view ->
+                // Palette change while the view is already alive: re-apply to
+                // COLOR_SCHEME, reset the active emulator's mColors so it
+                // copies the new defaults, and force a redraw.
+                palette.apply()
+                view.currentSession?.emulator?.let { em ->
+                    em.mColors.reset()
+                    view.onScreenUpdated()
                 }
             },
         )
