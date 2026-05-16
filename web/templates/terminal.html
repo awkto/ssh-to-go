@@ -132,11 +132,23 @@
         }
 
         #terminal { flex: 1; min-height: 0; overflow: hidden; }
-        /* Hide xterm.js's internal scrollbar — we forward wheel events to
-           tmux and use tmux's scrollback, so the local viewport scrollbar
-           is dead weight (and confusingly never reflects tmux state). */
-        .xterm-viewport { overflow-y: hidden !important; scrollbar-width: none; }
-        .xterm-viewport::-webkit-scrollbar { display: none; }
+        /* xterm.js's local viewport scrollbar is the real scrollback now —
+           the relay strips tmux's mouse/alt-screen escapes and prefills
+           history via capture-pane, so xterm drives smooth scroll locally. */
+
+        /* On touch devices, make the canvas (.xterm-screen) transparent
+           to pointer events so finger drags fall straight through to the
+           sibling .xterm-viewport, which the browser then scrolls
+           natively (momentum, kinetic, the lot). Selection-by-touch
+           stops working on the canvas as a result — for a remote-tmux
+           viewer that's an acceptable trade.
+
+           .xterm-helpers (which contains the input textarea) is a
+           SIBLING of .xterm-screen, not a child, so input still works. */
+        @media (pointer: coarse) {
+            .xterm .xterm-screen { pointer-events: none; }
+            .xterm .xterm-viewport { -webkit-overflow-scrolling: touch; }
+        }
 
         /* Mobile keyboard toolbar — only shown on touch devices */
         #mobile-bar {
@@ -151,6 +163,20 @@
         @media (pointer: coarse) {
             #mobile-bar { display: flex; }
         }
+        #mobile-input {
+            flex: 1;
+            min-width: 80px;
+            background: #2a2a4a;
+            color: #ddd;
+            border: 1px solid #3a3a5a;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-family: 'SF Mono', monospace;
+            font-size: 13px;
+            outline: none;
+        }
+        #mobile-input::placeholder { color: #666; }
+        #mobile-input:focus { border-color: #7c83ff; }
         #mobile-bar button {
             background: #2a2a4a;
             color: #ccc;
@@ -166,40 +192,6 @@
         }
         #mobile-bar button:active { background: #3a3a5a; }
 
-        /* Scroll overlay buttons — only on touch devices */
-        #scroll-overlay {
-            display: none;
-            position: absolute;
-            right: 12px;
-            bottom: 60px;
-            flex-direction: column;
-            gap: 6px;
-            z-index: 9999;
-        }
-        .scroll-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: rgba(60, 60, 80, 0.45);
-            color: #888;
-            border: 1px solid #555;
-            font-size: 16px;
-            line-height: 40px;
-            text-align: center;
-            touch-action: manipulation;
-            user-select: none;
-            -webkit-user-select: none;
-            cursor: pointer;
-        }
-        .scroll-btn:active { background: rgba(100, 100, 130, 0.8); color: #ccc; }
-
-        /* Show scroll buttons only on touch/mobile devices */
-        @media (pointer: coarse) {
-            #scroll-overlay { display: flex; }
-        }
-        @media (max-width: 768px) {
-            #scroll-overlay { display: flex; }
-        }
     </style>
 </head>
 <body>
@@ -235,13 +227,11 @@
             </div>
         </div>
     </div>
-    <div id="terminal" style="position:relative;">
-        <div id="scroll-overlay">
-            <button id="scroll-up" class="scroll-btn">&#9650;</button>
-            <button id="scroll-down" class="scroll-btn">&#9660;</button>
-        </div>
-    </div>
+    <div id="terminal" style="position:relative;"></div>
     <div id="mobile-bar">
+        <input id="mobile-input" type="text" inputmode="text"
+               autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+               placeholder="type here →">
         <button data-key="Tab">Tab</button>
         <button data-key="Escape">Esc</button>
         <button data-key="ArrowUp">↑</button>

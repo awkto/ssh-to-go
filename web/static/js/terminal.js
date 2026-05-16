@@ -321,101 +321,52 @@ function initTerminal(host, session) {
     term.open(container);
     fitAddon.fit();
 
-    // Scroll overlay buttons (touch devices) — dispatch wheel events same as
-    // desktop mouse wheel, which tmux handles natively for scrollback.
+    // On touch devices, .xterm-screen has pointer-events:none so finger
+    // drags pass through to the sibling .xterm-viewport and the browser
+    // scrolls it natively. Two complications we handle here:
+    //
+    // 1) xterm.js binds its own touchmove handler to the .xterm element
+    //    that manually sets viewport.scrollTop on each move. That race
+    //    against the browser's native scroll on .xterm-viewport seems to
+    //    kill momentum on Android Chrome/Firefox. stopPropagation in the
+    //    capture phase on #terminal prevents xterm's listener (on the
+    //    inner .xterm node) from ever firing, leaving the browser as the
+    //    sole driver of the gesture.
+    //
+    // 2) Because the canvas no longer receives the tap, xterm.js never
+    //    focuses its hidden helper textarea — soft-keyboard keystrokes
+    //    have no input target. Detect a brief stationary tap on
+    //    touchend and call term.focus() to fix that.
     (function () {
-        const screen = container.querySelector(".xterm-screen");
-        if (!screen) return;
-
-        function sendWheel(direction, count) {
-            for (var i = 0; i < count; i++) {
-                screen.dispatchEvent(new WheelEvent("wheel", {
-                    deltaY: direction,
-                    deltaMode: 1,
-                    bubbles: true,
-                    cancelable: true,
-                }));
-            }
-        }
-
-        // Continuous scroll on hold
-        var holdTimer = null;
-        var holdInterval = null;
-
-        function startHold(direction) {
-            sendWheel(direction, 3);
-            holdTimer = setTimeout(function () {
-                holdInterval = setInterval(function () {
-                    sendWheel(direction, 5);
-                }, 50);
-            }, 300);
-        }
-
-        function stopHold() {
-            clearTimeout(holdTimer);
-            clearInterval(holdInterval);
-            holdTimer = null;
-            holdInterval = null;
-        }
-
-        var upBtn = document.getElementById("scroll-up");
-        var downBtn = document.getElementById("scroll-down");
-
-        if (upBtn && downBtn) {
-            upBtn.addEventListener("touchstart", function (e) { e.preventDefault(); startHold(-1); });
-            upBtn.addEventListener("mousedown", function (e) { e.preventDefault(); startHold(-1); });
-            upBtn.addEventListener("touchend", stopHold);
-            upBtn.addEventListener("mouseup", stopHold);
-            upBtn.addEventListener("touchcancel", stopHold);
-            upBtn.addEventListener("mouseleave", stopHold);
-
-            downBtn.addEventListener("touchstart", function (e) { e.preventDefault(); startHold(1); });
-            downBtn.addEventListener("mousedown", function (e) { e.preventDefault(); startHold(1); });
-            downBtn.addEventListener("touchend", stopHold);
-            downBtn.addEventListener("mouseup", stopHold);
-            downBtn.addEventListener("touchcancel", stopHold);
-            downBtn.addEventListener("mouseleave", stopHold);
-        }
-
-        // Touch swipe scrolling — throttled via rAF for smooth delivery.
-        var touchY = 0;
-        var pendingLines = 0;
-        var scrollRaf = null;
-        var PX_PER_LINE = 10;
-
-        function flushScroll() {
-            scrollRaf = null;
-            if (pendingLines !== 0) {
-                sendWheel(pendingLines > 0 ? 1 : -1, Math.abs(pendingLines));
-                pendingLines = 0;
-            }
-        }
-
-        // Touch swipe scrolling disabled — use scroll overlay buttons instead
-        /*
         container.addEventListener("touchstart", function (e) {
-            if (e.touches.length === 1 && !e.target.closest("#scroll-overlay")) {
-                touchY = e.touches[0].clientY;
-                pendingLines = 0;
+            e.stopPropagation();
+        }, { capture: true, passive: true });
+        container.addEventListener("touchmove", function (e) {
+            e.stopPropagation();
+        }, { capture: true, passive: true });
+
+        let startX = 0, startY = 0, startT = 0;
+        container.addEventListener("touchstart", function (e) {
+            if (e.touches.length !== 1) return;
+            startX = e.touches[0].pageX;
+            startY = e.touches[0].pageY;
+            startT = performance.now();
+        }, { passive: true });
+        container.addEventListener("touchend", function (e) {
+            if (e.changedTouches.length !== 1) return;
+            const t = e.changedTouches[0];
+            const dx = Math.abs(t.pageX - startX);
+            const dy = Math.abs(t.pageY - startY);
+            const dt = performance.now() - startT;
+            if (dx < 10 && dy < 10 && dt < 300) {
+                // Tap (not a swipe). Focus the helper textarea so Android
+                // raises the soft keyboard and routes IME keys to xterm's
+                // input listener.
+                const ta = container.querySelector(".xterm-helper-textarea");
+                if (ta) ta.focus();
+                else term.focus();
             }
         }, { passive: true });
-
-        container.addEventListener("touchmove", function (e) {
-            if (e.touches.length !== 1) return;
-            if (e.target.closest("#scroll-overlay")) return;
-            e.preventDefault();
-
-            var curY = e.touches[0].clientY;
-            var dy = touchY - curY;
-            var lines = Math.trunc(dy / PX_PER_LINE);
-            if (lines !== 0) {
-                touchY += lines * PX_PER_LINE;
-                pendingLines += lines;
-                if (!scrollRaf) scrollRaf = requestAnimationFrame(flushScroll);
-            }
-        }, { passive: false });
-        */
-
     })();
 
     const statusEl = document.getElementById("ws-status");
@@ -440,7 +391,12 @@ function initTerminal(host, session) {
 
     function connect() {
         const proto = location.protocol === "https:" ? "wss:" : "ws:";
-        const url = `${proto}//${location.host}/ws/${encodeURIComponent(host)}/${encodeURIComponent(session)}`;
+        // mouse=off opts into the relay's native-client pipeline: tmux history
+        // is prefilled via capture-pane, and mouse-tracking + alt-screen escape
+        // sequences are stripped server-side. xterm.js then drives smooth
+        // scrolling locally against its own scrollback instead of tmux's
+        // row-quantised copy-mode wheel handler.
+        const url = `${proto}//${location.host}/ws/${encodeURIComponent(host)}/${encodeURIComponent(session)}?mouse=off`;
         const ws = new WebSocket(url);
         activeWs = ws;
         ws.binaryType = "arraybuffer";
@@ -833,42 +789,15 @@ function initTerminal(host, session) {
         }, 150);
     });
 
-    // Strip mouse mode escape sequences from incoming data so xterm.js never
-    // enters mouse reporting mode. This ensures local text selection works
-    // natively without fighting tmux's mouse handling.
-    // Matches: \x1b[?1000h, \x1b[?1002h, \x1b[?1003h, \x1b[?1006h and their
-    // disable variants (l), plus \x1b[?1005h/l
-    const mouseSeqRegex = /\x1b\[\?10(00|02|03|05|06)[hl]/g;
+    // Defense-in-depth: server already strips mouse-reporting DECSET sequences
+    // for mouse=off attaches, but if anything slips through we also drop them
+    // here so xterm.js never enters mouse-tracking mode.
+    const mouseSeqRegex = /\x1b\[\?(9|10(00|01|02|03|05|06|15))[hl]/g;
 
-    // Since we strip mouse mode, scroll wheel won't be reported to tmux.
-    // Manually send SGR mouse scroll sequences so tmux scrollback works.
-    // tmux still expects mouse events (it set mouse mode, we just hid it from xterm).
-    // SGR encoding: \x1b[<64;col;rowM = scroll up, \x1b[<65;col;rowM = scroll down
-    container.addEventListener("wheel", function (e) {
-        if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-
-        // Clear any text selection so it doesn't shift/drift as the terminal scrolls
-        term.clearSelection();
-
-        // Use deltaMode to normalize: LINE mode sends 1 line per notch, PIXEL mode
-        // divides by a larger value (120px ≈ one scroll notch on most mice).
-        var lines;
-        if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) {
-            lines = Math.max(1, Math.round(Math.abs(e.deltaY)));
-        } else {
-            lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 120));
-        }
-        var btn = e.deltaY < 0 ? 64 : 65;
-        var col = Math.floor(term.cols / 2);
-        var row = Math.floor(term.rows / 2);
-        var seq = "\x1b[<" + btn + ";" + col + ";" + row + "M";
-        for (var i = 0; i < lines; i++) {
-            activeWs.send(new TextEncoder().encode(seq));
-        }
-    }, { capture: true, passive: false });
+    // No manual wheel forwarding — with mouse=off the relay isn't expecting
+    // mouse-button reports, and xterm.js's native viewport handles wheel and
+    // touch scrolling against its local 5000-row scrollback (which the relay
+    // prefilled via tmux capture-pane on attach).
 
     // Clipboard helper that works on HTTP (non-secure contexts)
     function clipCopy(text) {
@@ -973,6 +902,86 @@ function initTerminal(host, session) {
     // Mobile keyboard toolbar
     let ctrlActive = false;
     const mobileBar = document.getElementById("mobile-bar");
+    const mobileInput = document.getElementById("mobile-input");
+
+    // Mobile text input: forwards characters straight to the WebSocket so
+    // we don't depend on xterm's hidden helper textarea getting focus +
+    // input events on Android (which is fragile across browsers + IMEs).
+    //
+    // We intercept beforeinput rather than input — on Android Gboard,
+    // ordinary letters go through IME composition that only commits on
+    // space/enter, so listening for input alone would miss every
+    // intermediate keystroke. beforeinput fires for every keystroke
+    // BEFORE the field's value changes, and gives us e.data + e.inputType.
+    // We send the typed character immediately and preventDefault so the
+    // field stays empty and the IME has nothing to compose against.
+    if (mobileInput) {
+        function send(data) {
+            if (!data) return;
+            if (ctrlActive && data.length === 1) {
+                const code = data.toLowerCase().charCodeAt(0);
+                if (code >= 97 && code <= 122) data = String.fromCharCode(code - 96);
+                ctrlActive = false;
+                const ctrlBtn = mobileBar && mobileBar.querySelector('[data-mod="ctrl"]');
+                if (ctrlBtn) { ctrlBtn.style.background = ""; ctrlBtn.style.color = ""; }
+            }
+            if (activeWs && activeWs.readyState === WebSocket.OPEN) {
+                activeWs.send(new TextEncoder().encode(data));
+            }
+        }
+
+        mobileInput.addEventListener("beforeinput", function (e) {
+            switch (e.inputType) {
+                case "insertText":
+                case "insertCompositionText":
+                case "insertReplacementText":
+                case "insertFromComposition":
+                    if (e.data) send(e.data);
+                    e.preventDefault();
+                    break;
+                case "insertLineBreak":
+                case "insertParagraph":
+                    send("\r");
+                    e.preventDefault();
+                    break;
+                case "deleteContentBackward":
+                case "deleteWordBackward":
+                    send("\x7f");
+                    e.preventDefault();
+                    break;
+                case "deleteContentForward":
+                    send("\x1b[3~");
+                    e.preventDefault();
+                    break;
+                default:
+                    // Unknown inputType — let the default happen and rely on
+                    // the input event below to catch it.
+                    break;
+            }
+        });
+
+        // Safety net: if the field ever ends up with text (shouldn't, given
+        // preventDefault above) ship it and reset.
+        mobileInput.addEventListener("input", function () {
+            if (mobileInput.value) {
+                send(mobileInput.value);
+                mobileInput.value = "";
+            }
+        });
+
+        // Some Android IMEs send Enter and Backspace as keydown rather than
+        // through beforeinput. Handle them here as a fallback.
+        mobileInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                send("\r");
+            } else if (e.key === "Backspace" && !mobileInput.value) {
+                e.preventDefault();
+                send("\x7f");
+            }
+        });
+    }
+
     if (mobileBar) {
         const keyMap = {
             Tab: "\t",
