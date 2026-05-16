@@ -54,6 +54,18 @@ class RelayTerminalSession(
     @Volatile
     private var lastRows: Int = 0
 
+    /** Set when finishIfRunning() is called — no reconnect after a user-initiated close. */
+    @Volatile
+    private var userClosed = false
+
+    /** Number of consecutive failed reconnects; resets on a healthy onOpen. */
+    @Volatile
+    private var retryCount = 0
+
+    /** Pending reconnect timer (so we can cancel it on user-initiated close). */
+    @Volatile
+    private var reconnectRunnable: Runnable? = null
+
     fun ttyPath(): String? = hostTty
 
     override fun initializeEmulator(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
@@ -75,8 +87,32 @@ class RelayTerminalSession(
     }
 
     override fun finishIfRunning() {
+        userClosed = true
+        reconnectRunnable?.let { main.removeCallbacks(it) }
+        reconnectRunnable = null
         ws?.close(1000, "client closed")
         ws = null
+    }
+
+    /**
+     * Reconnect with exponential backoff after an unexpected disconnect.
+     * Caps at ~30s. Cancelled by finishIfRunning().
+     */
+    private fun scheduleReconnect() {
+        if (userClosed) return
+        val attempt = retryCount.coerceAtMost(5)
+        val delayMs = (1000L shl attempt).coerceAtMost(30_000L) // 1, 2, 4, 8, 16, 30, 30, …
+        retryCount++
+        val notice = "\r\n[reconnecting in ${delayMs / 1000}s …]".toByteArray()
+        emulatorAppend(notice, notice.size)
+        val r = Runnable {
+            if (userClosed) return@Runnable
+            val msg = "\r\n[reconnecting…]".toByteArray()
+            emulatorAppend(msg, msg.size)
+            connect()
+        }
+        reconnectRunnable = r
+        main.postDelayed(r, delayMs)
     }
 
     private fun connect() {
@@ -93,6 +129,7 @@ class RelayTerminalSession(
 
         ws = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                main.post { retryCount = 0 }
                 if (lastCols > 0 && lastRows > 0) sendResize(lastCols, lastRows)
             }
 
@@ -120,6 +157,7 @@ class RelayTerminalSession(
                 main.post {
                     val notice = "\r\n[connection closed${if (reason.isNotBlank()) " — $reason" else ""}]".toByteArray()
                     emulatorAppend(notice, notice.size)
+                    if (!userClosed && code != 1000) scheduleReconnect()
                 }
             }
 
@@ -127,6 +165,7 @@ class RelayTerminalSession(
                 main.post {
                     val notice = "\r\n[connection error: ${t.message ?: t.javaClass.simpleName}]".toByteArray()
                     emulatorAppend(notice, notice.size)
+                    if (!userClosed) scheduleReconnect()
                 }
             }
         })

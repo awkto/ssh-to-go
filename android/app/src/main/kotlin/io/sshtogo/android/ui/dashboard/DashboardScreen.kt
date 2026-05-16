@@ -18,10 +18,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -105,6 +107,28 @@ fun DashboardScreen(
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
                             onClick = { menuOpen = false; onAddServer() },
                         )
+                        HorizontalDivider()
+                        // Terminal palette picker. Selection is applied to the
+                        // global TerminalColors.COLOR_SCHEME immediately so the
+                        // next session you open uses the new palette. Already-
+                        // attached sessions keep their current colours until
+                        // reconnected.
+                        val app = io.sshtogo.android.SshToGoApplication.instance
+                        val currentPalette = io.sshtogo.android.terminal.TerminalPalette.fromName(
+                            app.prefs.terminalPaletteName,
+                        )
+                        io.sshtogo.android.terminal.TerminalPalette.entries.forEach { palette ->
+                            DropdownMenuItem(
+                                leadingIcon = if (palette == currentPalette)
+                                    { { Icon(Icons.Default.Palette, contentDescription = null) } } else null,
+                                text = { Text(palette.displayName) },
+                                onClick = {
+                                    menuOpen = false
+                                    app.prefs.terminalPaletteName = palette.name
+                                    palette.apply()
+                                },
+                            )
+                        }
                     }
                 },
             )
