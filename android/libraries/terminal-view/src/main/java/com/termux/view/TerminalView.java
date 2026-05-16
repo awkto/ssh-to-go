@@ -77,6 +77,15 @@ public final class TerminalView extends View {
      * Invariant: when {@code mTopRow == 0} (at the bottom of the buffer), this is 0.
      */
     float mScrollOffsetPx;
+    /**
+     * Generation counter for the smooth-scroll fling runnable. Each new
+     * fling — and each touch-down that aborts an in-flight fling —
+     * increments this. Posted runnables capture their generation and
+     * bail on the next tick if it no longer matches, so a fresh touch
+     * truly stops the previous fling even if its run() callbacks were
+     * already queued ahead of the abort.
+     */
+    int mFlingGen;
     int[] mDefaultSelectors = new int[]{-1,-1,-1,-1};
 
     float mScaleFactor = 1.f;
@@ -281,9 +290,14 @@ public final class TerminalView extends View {
 
                     // Finger up = velocityY < 0 = user wants to see newer = scrollUp should decrease.
                     mScroller.fling(0, startScrollUpPx, 0, (int) velocityY, 0, 0, 0, Math.max(0, maxScrollUpPx));
+                    final int myFlingGen = ++mFlingGen;
                     post(new Runnable() {
                         private int mLastY = startScrollUpPx;
                         @Override public void run() {
+                            // A newer fling — or an onDown abort — bumped the generation;
+                            // stop ticking even if our post()s were already queued ahead
+                            // of the abort.
+                            if (myFlingGen != mFlingGen) return;
                             if (mEmulator == null) return;
                             if (mEmulator.isMouseTrackingActive() || mEmulator.isAlternateBufferActive()) {
                                 mScroller.abortAnimation();
@@ -306,6 +320,11 @@ public final class TerminalView extends View {
 
             @Override
             public boolean onDown(float x, float y) {
+                // Any touch immediately stops an in-flight fling — bump the
+                // generation so already-queued runnable ticks no-op, and
+                // abort the Scroller so its internal kinematics also stop.
+                if (!mScroller.isFinished()) mScroller.abortAnimation();
+                mFlingGen++;
                 // Why is true not returned here?
                 // https://developer.android.com/training/gestures/detector.html#detect-a-subset-of-supported-gestures
                 // Although setting this to true still does not solve the following errors when long pressing in terminal view text area
