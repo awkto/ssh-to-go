@@ -215,8 +215,11 @@ public final class TerminalView extends View {
             @Override
             public boolean onFling(final MotionEvent e2, float velocityX, float velocityY) {
                 if (mEmulator == null) return true;
-                // Do not start scrolling until last fling has been taken care of:
-                if (!mScroller.isFinished()) return true;
+                // Replace any in-flight fling with this new one so the previous
+                // momentum doesn't keep ticking underneath. onDown also aborts,
+                // but belt-and-braces in case the gesture detector fires onFling
+                // without a fresh onDown (e.g. multi-finger transitions).
+                if (!mScroller.isFinished()) mScroller.abortAnimation();
 
                 // Only honour mouse-wheel / TUI-arrow paths for actual mouse input.
                 // Touch flings ALWAYS take the smooth local-scroll path, regardless of
@@ -536,9 +539,17 @@ public final class TerminalView extends View {
             mScrollOffsetPx = 0f;
         }
 
-        if (isSelectingText() || mEmulator.isAutoScrollDisabled()) {
+        // Suppress the snap-to-bottom when the user has scrolled into history.
+        // Otherwise any live updates (claude's spinner, a clock, tmux status
+        // refresh) repeatedly yank the view back to the cursor every few hundred
+        // ms and make it impossible to stay scrolled up.
+        final boolean userScrolledBack = mTopRow < 0 || mScrollOffsetPx > 0f;
 
-            // Do not scroll when selecting text.
+        if (isSelectingText() || mEmulator.isAutoScrollDisabled() || userScrolledBack) {
+
+            // Do not scroll when selecting text — keep current visual position by
+            // decrementing mTopRow by the number of rows that just scrolled into
+            // the transcript.
             int rowShift = mEmulator.getScrollCounter();
             if (-mTopRow + rowShift > rowsInHistory) {
                 // .. unless we're hitting the end of history transcript, in which
@@ -546,7 +557,7 @@ public final class TerminalView extends View {
                 if (isSelectingText())
                     stopTextSelectionMode();
 
-                if (mEmulator.isAutoScrollDisabled()) {
+                if (mEmulator.isAutoScrollDisabled() || userScrolledBack) {
                     mTopRow = -rowsInHistory;
                     mScrollOffsetPx = 0f;
                     skipScrolling = true;
@@ -554,7 +565,8 @@ public final class TerminalView extends View {
             } else {
                 skipScrolling = true;
                 mTopRow -= rowShift;
-                decrementYTextSelectionCursors(rowShift);
+                if (isSelectingText())
+                    decrementYTextSelectionCursors(rowShift);
             }
         }
 
