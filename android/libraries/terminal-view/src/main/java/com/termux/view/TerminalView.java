@@ -178,21 +178,26 @@ public final class TerminalView extends View {
             @Override
             public boolean onScroll(MotionEvent e, float distanceX, float distanceY) {
                 if (mEmulator == null) return true;
-                if (mEmulator.isMouseTrackingActive() && e.isFromSource(InputDevice.SOURCE_MOUSE)) {
-                    // If moving with mouse pointer while pressing button, report that instead of scroll.
-                    // This means that we never report moving with button press-events for touch input,
-                    // since we cannot just start sending these events without a starting press event,
-                    // which we do not do for touch input, only mouse in onTouchEvent().
-                    sendMouseEventCode(e, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true);
-                } else if (mEmulator.isAlternateBufferActive()) {
-                    // Apps that don't use mouse mode but draw their own UI on the alt screen
-                    // (less, vim) expect arrow-key scrolls — fall back to row-quantised path.
-                    scrolledWithFinger = true;
-                    distanceY += mScrollRemainder;
-                    int deltaRows = (int) (distanceY / mRenderer.mFontLineSpacing);
-                    mScrollRemainder = distanceY - deltaRows * mRenderer.mFontLineSpacing;
-                    doScroll(e, deltaRows);
+                final boolean fromMouse = e.isFromSource(InputDevice.SOURCE_MOUSE);
+                if (fromMouse) {
+                    // Mouse input: preserve upstream behaviour. If tmux/the inner app
+                    // enabled mouse tracking, forward the drag as a mouse motion;
+                    // otherwise scroll the buffer row-by-row (which is also how
+                    // alt-screen apps get arrow keys via doScroll).
+                    if (mEmulator.isMouseTrackingActive()) {
+                        sendMouseEventCode(e, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true);
+                    } else {
+                        scrolledWithFinger = true;
+                        distanceY += mScrollRemainder;
+                        int deltaRows = (int) (distanceY / mRenderer.mFontLineSpacing);
+                        mScrollRemainder = distanceY - deltaRows * mRenderer.mFontLineSpacing;
+                        doScroll(e, deltaRows);
+                    }
                 } else {
+                    // Touch input always drives the local pixel-precision scroll.
+                    // We never want to forward swipes to tmux's copy-mode wheel
+                    // handling (5 lines/event) or to inner TUI apps as arrow keys,
+                    // even when isAlternateBufferActive() / isMouseTrackingActive().
                     scrolledWithFinger = true;
                     doSubScrollPixels(distanceY);
                 }
@@ -213,13 +218,15 @@ public final class TerminalView extends View {
                 // Do not start scrolling until last fling has been taken care of:
                 if (!mScroller.isFinished()) return true;
 
-                // Only honour the mouse-wheel path for actual mouse input. A touch fling
-                // with tmux mouse mode enabled would otherwise be turned into wheel-up
-                // events that scroll tmux's copy-mode in 5-line increments — exactly the
-                // jerky behaviour we vendored this view to avoid.
+                // Only honour mouse-wheel / TUI-arrow paths for actual mouse input.
+                // Touch flings ALWAYS take the smooth local-scroll path, regardless of
+                // mouse-tracking or alt-buffer state — otherwise tmux's copy-mode wheel
+                // binding (5 lines/event) or alt-screen TUIs (vim/less) would turn touch
+                // flings back into the jerky line-by-line behaviour we vendored this
+                // view to avoid.
                 final boolean fromMouse = e2 != null && e2.isFromSource(InputDevice.SOURCE_MOUSE);
                 final boolean mouseTrackingAtStartOfFling = fromMouse && mEmulator.isMouseTrackingActive();
-                final boolean altBufAtStartOfFling = mEmulator.isAlternateBufferActive();
+                final boolean altBufAtStartOfFling = fromMouse && mEmulator.isAlternateBufferActive();
                 final float SCALE = 0.25f;
 
                 if (mouseTrackingAtStartOfFling) {
