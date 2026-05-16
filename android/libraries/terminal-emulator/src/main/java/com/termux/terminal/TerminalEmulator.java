@@ -483,7 +483,13 @@ public final class TerminalEmulator {
 
     /** If mouse events are being sent as escape codes to the terminal. */
     public boolean isMouseTrackingActive() {
-        return isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) || isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT);
+        // ssh-to-go: always report false. The remote tmux may have mouse mode on
+        // and will send DECSET 1000/1002 to enable mouse reporting, which the
+        // parser still records, but we never want our client to forward swipes
+        // back to tmux as wheel events — that re-introduces the row-quantised
+        // 5-lines-per-wheel behaviour we vendored this library to avoid. The
+        // client renders its own smooth scrollback locally.
+        return false;
     }
 
     private void setDefaultTabStops() {
