@@ -3,6 +3,7 @@ package io.sshtogo.android.terminal
 import android.graphics.Typeface
 import android.view.KeyEvent
 import android.view.MotionEvent
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,11 +30,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.launch
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
@@ -85,21 +93,57 @@ fun TerminalScreen(
     val initialIndex = list.indexOf(sessionName).let { if (it < 0) 0 else it }
     val pagerState = rememberPagerState(initialPage = initialIndex) { list.size }
     val currentSession = list.getOrNull(pagerState.currentPage) ?: sessionName
+    val scope = rememberCoroutineScope()
+    val swipeThresholdPx = with(LocalDensity.current) { 56.dp.toPx() }
+
+    fun goPrev() {
+        if (pagerState.currentPage > 0) {
+            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+        }
+    }
+    fun goNext() {
+        if (pagerState.currentPage < list.size - 1) {
+            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            "$currentSession @ $hostName",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        if (list.size > 1) {
+                    // Swipe the title horizontally to switch sessions. The
+                    // terminal body keeps all vertical+horizontal gestures
+                    // for its own scrolling / selection.
+                    var dragAccum = 0f
+                    Box(
+                        modifier = Modifier
+                            .pointerInput(list.size) {
+                                detectHorizontalDragGestures(
+                                    onDragStart = { dragAccum = 0f },
+                                    onDragEnd = {
+                                        if (dragAccum > swipeThresholdPx) goPrev()
+                                        else if (dragAccum < -swipeThresholdPx) goNext()
+                                        dragAccum = 0f
+                                    },
+                                    onDragCancel = { dragAccum = 0f },
+                                    onHorizontalDrag = { change, dragAmount ->
+                                        dragAccum += dragAmount
+                                        change.consume()
+                                    },
+                                )
+                            },
+                    ) {
+                        Column {
                             Text(
-                                "${pagerState.currentPage + 1} / ${list.size}  ·  swipe for next",
-                                style = MaterialTheme.typography.labelSmall,
+                                "$currentSession @ $hostName",
+                                style = MaterialTheme.typography.titleMedium,
                             )
+                            if (list.size > 1) {
+                                Text(
+                                    "${pagerState.currentPage + 1} / ${list.size}  ·  swipe title or use arrows",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         }
                     }
                 },
@@ -108,15 +152,27 @@ fun TerminalScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    if (list.size > 1) {
+                        IconButton(onClick = ::goPrev, enabled = pagerState.currentPage > 0) {
+                            Icon(Icons.Default.ChevronLeft, contentDescription = "Previous session")
+                        }
+                        IconButton(onClick = ::goNext, enabled = pagerState.currentPage < list.size - 1) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Next session")
+                        }
+                    }
+                },
             )
         },
     ) { pad ->
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize().padding(pad).imePadding(),
-            // Keep adjacent pages composed so swiping reveals already-attached
-            // terminals instead of a flash-of-loading. Costs one extra
-            // WebSocket per neighbour, which is fine for a handful of sessions.
+            // Pager's own swipe gestures fight the terminal's vertical drag
+            // (it greedy-grabs both axes), so we disable them and drive page
+            // changes from the title/arrow controls. The pager still gives
+            // us lazy page composition and smooth page animations.
+            userScrollEnabled = false,
             beyondViewportPageCount = 1,
         ) { pageIndex ->
             SessionTerminal(profile = profile, hostName = hostName, sessionName = list[pageIndex])
