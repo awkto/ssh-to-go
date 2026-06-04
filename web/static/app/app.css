@@ -546,6 +546,7 @@ a { color: inherit; text-decoration: none; }
 .pill.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
 .pill.err { color: var(--err); background: var(--err-soft); border-color: transparent; }
 .pill.accent { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.pill.muted { color: var(--fg-subtle); background: var(--bg-elev-2); border-color: transparent; }
 .pill.mono { font-family: var(--font-mono); }
 
 /* Presence avatars */

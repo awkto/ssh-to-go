@@ -4,7 +4,8 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
   const HOSTS = store.hosts;
   const SESSIONS = store.sessions;
   const KEYPAIRS = store.keypairs;
-  const MISSING = store.missingSessions || [];
+  // Offloaded sessions are merged into store.sessions with status:'offloaded'
+  // and rendered at the bottom of the Recent sessions table.
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
   const attached = SESSIONS.filter(s => s.clients.length > 0).length;
   const totalHostLoad = HOSTS.length
@@ -58,8 +59,6 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
         />
       </div>
 
-      {MISSING.length > 0 && <MissingSessionsPanel missing={MISSING} />}
-
       <div className="grid-2">
         {/* Recent sessions */}
         <div className="panel">
@@ -90,9 +89,18 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
               </thead>
               <tbody>
                 {SESSIONS.slice().sort((a, b) => {
-                  // Starred pinned to top, then most-recently-accessed, then newest-created.
+                  // Starred pinned to top, then most-recently-used. "Recently used"
+                  // = max(tmux session_activity, our own click-to-open timestamp),
+                  // so opening a session via this UI and bash typing on the remote
+                  // both bubble the session to the top.
+                  // Offloaded sessions always sink to the bottom of the table.
+                  if ((a.status === 'offloaded') !== (b.status === 'offloaded')) {
+                    return a.status === 'offloaded' ? 1 : -1;
+                  }
                   if (a.starred !== b.starred) return a.starred ? -1 : 1;
-                  if (b.lastAccessedMs !== a.lastAccessedMs) return b.lastAccessedMs - a.lastAccessedMs;
+                  const aRecent = Math.max(a.activityMs || 0, a.lastAccessedMs || 0);
+                  const bRecent = Math.max(b.activityMs || 0, b.lastAccessedMs || 0);
+                  if (bRecent !== aRecent) return bRecent - aRecent;
                   return b.createdMs - a.createdMs;
                 }).slice(0, 20).map(s => (
                   <SessionRow key={`${s.hostName}:${s.id}`} session={s} onOpen={() => openSession(s)} />
@@ -189,8 +197,8 @@ const MissingSessionsPanel = ({ missing }) => {
     <div className="panel" style={{marginBottom:16, borderColor:'var(--warn, #c89b3c)'}}>
       <div className="panel-head">
         <div className="row gap-3">
-          <h2 style={{color:'var(--warn, #c89b3c)'}}>Missing sessions</h2>
-          <span className="muted" style={{fontSize:12}}>tracked by ssh-to-go but not running on the host — usually a reboot</span>
+          <h2 style={{color:'var(--warn, #c89b3c)'}}>Resumable sessions</h2>
+          <span className="muted" style={{fontSize:12}}>tracked but not running — either you offloaded them or the host rebooted</span>
         </div>
         <span className="muted mono" style={{fontSize:12}}>{missing.length}</span>
       </div>
@@ -233,6 +241,10 @@ const MissingSessionsPanel = ({ missing }) => {
 
 const SessionRow = ({ session: s, onOpen }) => {
   const [starred, setStarred] = React.useState(s.starred);
+  const [recreating, setRecreating] = React.useState(false);
+  // null | 'offloading' | 'ending' — shared so both destructive actions
+  // disable each other while one is in flight.
+  const [busy, setBusy] = React.useState(null);
   const toggleStar = (e) => {
     e.stopPropagation();
     const next = !starred;
@@ -245,8 +257,21 @@ const SessionRow = ({ session: s, onOpen }) => {
   };
   const onKill = async (e) => {
     e.stopPropagation();
-    if (!confirm(`End session "${s.id}"?`)) return;
-    try { await killSession(s.hostName, s.id); } catch(err) { alert('end failed: ' + err.message); }
+    if (busy) return;
+    if (!confirm(`End session "${s.id}"? This forgets it entirely.`)) return;
+    setBusy('ending');
+    try { await killSession(s.hostName, s.id); }
+    catch(err) { alert('end failed: ' + err.message); }
+    finally { setBusy(null); }
+  };
+  const onOffload = async (e) => {
+    e.stopPropagation();
+    if (busy) return;
+    if (!confirm(`Offload session "${s.id}"? The tmux session is killed but ssh-to-go keeps the working directory so you can resume it from the table below.`)) return;
+    setBusy('offloading');
+    try { await offloadSession(s.hostName, s.id); }
+    catch(err) { alert('offload failed: ' + err.message); }
+    finally { setBusy(null); }
   };
   const onPickIcon = (e) => {
     e.stopPropagation();
@@ -261,29 +286,71 @@ const SessionRow = ({ session: s, onOpen }) => {
     if (!next || next === s.id) return;
     try { await renameSession(s.hostName, s.id, next); } catch(err) { alert('rename failed: ' + err.message); }
   };
+  const onRecreate = async (e) => {
+    e.stopPropagation();
+    if (recreating) return;
+    setRecreating(true);
+    try {
+      await recreateSession(s.hostName, s.id);
+      // Jump straight into the freshly-spawned tmux session in a new tab.
+      openTerminal(s.hostName, s.id);
+    } catch(err) {
+      alert('recreate failed: ' + err.message);
+    } finally {
+      setRecreating(false);
+    }
+  };
+  const onForget = async (e) => {
+    e.stopPropagation();
+    if (!confirm(`Forget session "${s.id}"? ssh-to-go drops the saved working directory; it can't be resumed afterwards.`)) return;
+    try { await forgetSession(s.hostName, s.id); } catch(err) { alert('forget failed: ' + err.message); }
+  };
+  const offloaded = s.status === 'offloaded';
   return (
-    <tr>
+    <tr style={offloaded ? {opacity: 0.65} : null}>
       <td>
         <div className="cell-session">
           <button className="sess-icon-btn" onClick={onPickIcon} title="Change icon">
             <SessIcon kind={s.iconKind} color={s.iconColor} />
           </button>
-          <span className="mono name" onClick={onOpen} style={{cursor:'pointer'}}>{s.id}</span>
-          <button className="rename-btn" onClick={onRename} title="Rename"><IconEdit size={12}/></button>
+          <span className="mono name" onClick={offloaded ? onRecreate : onOpen} style={{cursor:'pointer'}}>{s.id}</span>
+          {!offloaded && <button className="rename-btn" onClick={onRename} title="Rename"><IconEdit size={12}/></button>}
+          {offloaded && <Pill variant="muted">offloaded</Pill>}
         </div>
+        {offloaded && s.workingDir && (
+          <div className="muted mono" style={{fontSize:11, marginTop:2, paddingLeft:28}}>resume in {s.workingDir}</div>
+        )}
       </td>
       <td className="muted mono hide-mobile" style={{fontSize:12.5}}>{s.host}</td>
-      <td className="hide-mobile"><ActivityCell session={s} /></td>
-      <td className="hide-mobile"><Presence clients={s.clients} /></td>
+      <td className="hide-mobile">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
+      <td className="hide-mobile">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <Presence clients={s.clients} />}</td>
       <td className="muted num hide-mobile">{s.uptime}</td>
       <td>
         <div className="actions-cell">
-          <button className={`action-btn star ${starred ? 'starred' : ''}`} onClick={toggleStar}>
-            <IconStar size={13} fill={starred ? 'currentColor' : 'none'} />
-          </button>
-          <button className="action-btn primary" onClick={onOpen}>Open</button>
-          <button className="action-btn" onClick={onHandoff} title="Copy SSH handoff command">Handoff</button>
-          <button className="action-btn danger" onClick={onKill}>End</button>
+          {offloaded ? (
+            <React.Fragment>
+              <button className="action-btn primary" onClick={onRecreate} disabled={recreating}
+                      title="Bring the tmux session back at its saved working directory and open it in a new tab">
+                {recreating ? 'Recreating…' : 'Recreate'}
+              </button>
+              <button className="action-btn" onClick={onForget} disabled={recreating} title="Forget the saved working directory">Forget</button>
+            </React.Fragment>
+          ) : (
+            <React.Fragment>
+              <button className={`action-btn star ${starred ? 'starred' : ''}`} onClick={toggleStar} disabled={!!busy}>
+                <IconStar size={13} fill={starred ? 'currentColor' : 'none'} />
+              </button>
+              <button className="action-btn primary" onClick={onOpen} disabled={!!busy}>Open</button>
+              <button className="action-btn" onClick={onHandoff} disabled={!!busy} title="Copy SSH handoff command">Handoff</button>
+              <button className="action-btn" onClick={onOffload} disabled={!!busy}
+                      title="Stop tmux but keep tracked so you can resume from the same directory">
+                {busy === 'offloading' ? 'Offloading…' : 'Offload'}
+              </button>
+              <button className="action-btn danger" onClick={onKill} disabled={!!busy}>
+                {busy === 'ending' ? 'Ending…' : 'End'}
+              </button>
+            </React.Fragment>
+          )}
         </div>
       </td>
     </tr>

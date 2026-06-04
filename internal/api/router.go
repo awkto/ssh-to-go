@@ -66,6 +66,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("PUT /api/hosts/{host}/sessions/{session}", handlers.RenameSession)
 	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/recreate", handlers.RecreateSession)
 	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/forget", handlers.ForgetSession)
+	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/offload", handlers.OffloadSession)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/handoff", handlers.Handoff)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/cwd", handlers.SessionCwd)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/clients", handlers.ListClients)

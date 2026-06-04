@@ -113,7 +113,7 @@ function allMissingSessions() {
 }
 function adaptSessions() {
   const now = Date.now();
-  return STORE.sessions.map(entry => {
+  const live = STORE.sessions.map(entry => {
     const s = entry.session || {};
     const hostName = entry.host_name;
     const host = STORE.hosts.find(x => (x.config && x.config.name) === hostName);
@@ -121,6 +121,8 @@ function adaptSessions() {
     const createdMs = s.created ? new Date(s.created).getTime() : now;
     const uptimeSec = Math.max(0, Math.floor((now - createdMs) / 1000));
     const icon = iconFor(hostName, s.name);
+    const activityMs = s.activity ? new Date(s.activity).getTime() : createdMs;
+    const idleSec = Math.max(0, Math.floor((now - activityMs) / 1000));
     const activity = s.attached ? 'active' : 'idle';
     const clients = [];
     for (let i = 0; i < (s.attached_clients || 0); i++) {
@@ -136,8 +138,8 @@ function adaptSessions() {
       hostName,
       uptime: formatUptime(uptimeSec),
       activity,
-      lastInput: s.attached ? 'attached' : timeAgo(new Date(createdMs)),
-      idle: activity === 'active' ? 0 : uptimeSec,
+      lastInput: s.attached ? 'attached' : timeAgo(new Date(activityMs)),
+      idle: activity === 'active' ? 0 : idleSec,
       clients,
       pid: null,
       win: s.windows || 1,
@@ -145,10 +147,51 @@ function adaptSessions() {
       iconColor: icon.color || 'indigo',
       starred: !!icon.starred,
       createdMs,
+      activityMs,
       lastAccessedMs,
+      status: 'live',
+      workingDir: '',
       _raw: entry
     };
   });
+  // Append offloaded / resumable sessions (sessionreg entries the poller no
+  // longer sees in tmux) into the same flat list so the table can render
+  // and sort them alongside live sessions. status:'offloaded' distinguishes
+  // them; sort comparators put offloaded last.
+  const offloaded = [];
+  for (const h of STORE.hosts || []) {
+    const hostName = h.config && h.config.name;
+    if (!hostName || !h.online) continue;
+    const hostAddress = h.config.address || hostName;
+    for (const m of h.missing_sessions || []) {
+      const icon = iconFor(hostName, m.name);
+      const createdMs = m.created_at ? new Date(m.created_at).getTime() : 0;
+      const activityMs = m.last_seen_at ? new Date(m.last_seen_at).getTime() : createdMs;
+      const lastAccessedMs = icon.last_accessed ? new Date(icon.last_accessed).getTime() : 0;
+      offloaded.push({
+        id: m.name,
+        host: hostAddress,
+        hostName,
+        uptime: '—',
+        activity: 'offloaded',
+        lastInput: activityMs ? 'off ' + timeAgo(new Date(activityMs)) : 'offloaded',
+        idle: 0,
+        clients: [],
+        pid: null,
+        win: 0,
+        iconKind: icon.icon || 'terminal',
+        iconColor: icon.color || 'indigo',
+        starred: !!icon.starred,
+        createdMs,
+        activityMs,
+        lastAccessedMs,
+        status: 'offloaded',
+        workingDir: m.working_dir || '',
+        _raw: m
+      });
+    }
+  }
+  return live.concat(offloaded);
 }
 function adaptKeypairs() {
   const defaultName = STORE.settings.default_keypair;
@@ -251,6 +294,13 @@ async function forgetSession(hostName, name) {
   if (!r.ok) throw new Error(await r.text());
   await refresh();
 }
+async function offloadSession(hostName, name) {
+  const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions/${encodeURIComponent(name)}/offload`, {
+    method: 'POST'
+  });
+  if (!r.ok) throw new Error(await r.text());
+  await refresh();
+}
 async function renameSession(hostName, oldName, newName) {
   const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions/${encodeURIComponent(oldName)}`, {
     method: 'PUT',
@@ -320,6 +370,7 @@ Object.assign(window, {
   refresh,
   createSession,
   killSession,
+  offloadSession,
   recreateSession,
   forgetSession,
   renameSession,

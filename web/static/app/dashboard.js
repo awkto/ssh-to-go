@@ -7,7 +7,6 @@ const Dashboard = ({
   const HOSTS = store.hosts;
   const SESSIONS = store.sessions;
   const KEYPAIRS = store.keypairs;
-  const MISSING = store.missingSessions || [];
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
   const attached = SESSIONS.filter(s => s.clients.length > 0).length;
   const totalHostLoad = HOSTS.length ? HOSTS.reduce((sum, h) => sum.map((v, i) => v + (h.load[i] || 0)), Array(20).fill(0)).map(v => v / HOSTS.length) : Array(20).fill(0);
@@ -104,9 +103,7 @@ const Dashboard = ({
     icon: React.createElement(IconKey, {
       size: 13
     })
-  })), MISSING.length > 0 && React.createElement(MissingSessionsPanel, {
-    missing: MISSING
-  }), React.createElement("div", {
+  })), React.createElement("div", {
     className: "grid-2"
   }, React.createElement("div", {
     className: "panel"
@@ -157,8 +154,14 @@ const Dashboard = ({
       textAlign: 'right'
     }
   }, "Actions"))), React.createElement("tbody", null, SESSIONS.slice().sort((a, b) => {
+    // Offloaded sessions always sink to the bottom of the table.
+    if ((a.status === 'offloaded') !== (b.status === 'offloaded')) {
+      return a.status === 'offloaded' ? 1 : -1;
+    }
     if (a.starred !== b.starred) return a.starred ? -1 : 1;
-    if (b.lastAccessedMs !== a.lastAccessedMs) return b.lastAccessedMs - a.lastAccessedMs;
+    const aRecent = Math.max(a.activityMs || 0, a.lastAccessedMs || 0);
+    const bRecent = Math.max(b.activityMs || 0, b.lastAccessedMs || 0);
+    if (bRecent !== aRecent) return bRecent - aRecent;
     return b.createdMs - a.createdMs;
   }).slice(0, 20).map(s => React.createElement(SessionRow, {
     key: `${s.hostName}:${s.id}`,
@@ -283,10 +286,10 @@ const MissingSessionsPanel = ({
     className: "row gap-3"
   }, React.createElement("h2", {
     style: { color: 'var(--warn, #c89b3c)' }
-  }, "Missing sessions"), React.createElement("span", {
+  }, "Resumable sessions"), React.createElement("span", {
     className: "muted",
     style: { fontSize: 12 }
-  }, "tracked by ssh-to-go but not running on the host — usually a reboot")), React.createElement("span", {
+  }, "tracked but not running — either you offloaded them or the host rebooted")), React.createElement("span", {
     className: "muted mono",
     style: { fontSize: 12 }
   }, missing.length)), React.createElement("table", {
@@ -326,6 +329,9 @@ const SessionRow = ({
   onOpen
 }) => {
   const [starred, setStarred] = React.useState(s.starred);
+  const [recreating, setRecreating] = React.useState(false);
+  // null | 'offloading' | 'ending'
+  const [busy, setBusy] = React.useState(null);
   const toggleStar = e => {
     e.stopPropagation();
     const next = !starred;
@@ -345,11 +351,28 @@ const SessionRow = ({
   };
   const onKill = async e => {
     e.stopPropagation();
-    if (!confirm(`End session "${s.id}"?`)) return;
+    if (busy) return;
+    if (!confirm(`End session "${s.id}"? This forgets it entirely.`)) return;
+    setBusy('ending');
     try {
       await killSession(s.hostName, s.id);
     } catch (err) {
       alert('end failed: ' + err.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const onOffload = async e => {
+    e.stopPropagation();
+    if (busy) return;
+    if (!confirm(`Offload session "${s.id}"? The tmux session is killed but ssh-to-go keeps the working directory so you can resume it from the table below.`)) return;
+    setBusy('offloading');
+    try {
+      await offloadSession(s.hostName, s.id);
+    } catch (err) {
+      alert('offload failed: ' + err.message);
+    } finally {
+      setBusy(null);
     }
   };
   const onPickIcon = e => {
@@ -372,61 +395,66 @@ const SessionRow = ({
       alert('rename failed: ' + err.message);
     }
   };
-  return React.createElement("tr", null, React.createElement("td", null, React.createElement("div", {
-    className: "cell-session"
-  }, React.createElement("button", {
-    className: "sess-icon-btn",
-    onClick: onPickIcon,
-    title: "Change icon"
-  }, React.createElement(SessIcon, {
-    kind: s.iconKind,
-    color: s.iconColor
-  })), React.createElement("span", {
-    className: "mono name",
-    onClick: onOpen,
-    style: {
-      cursor: 'pointer'
+  const onRecreate = async e => {
+    e.stopPropagation();
+    if (recreating) return;
+    setRecreating(true);
+    try {
+      await recreateSession(s.hostName, s.id);
+      openTerminal(s.hostName, s.id);
+    } catch (err) {
+      alert('recreate failed: ' + err.message);
+    } finally {
+      setRecreating(false);
     }
-  }, s.id), React.createElement("button", {
-    className: "rename-btn",
-    onClick: onRename,
-    title: "Rename"
-  }, React.createElement(IconEdit, {
-    size: 12
-  })))), React.createElement("td", {
-    className: "muted mono hide-mobile",
-    style: {
-      fontSize: 12.5
-    }
-  }, s.host), React.createElement("td", {
-    className: "hide-mobile"
-  }, React.createElement(ActivityCell, {
-    session: s
-  })), React.createElement("td", {
-    className: "hide-mobile"
-  }, React.createElement(Presence, {
-    clients: s.clients
-  })), React.createElement("td", {
-    className: "muted num hide-mobile"
-  }, s.uptime), React.createElement("td", null, React.createElement("div", {
-    className: "actions-cell"
-  }, React.createElement("button", {
-    className: `action-btn star ${starred ? 'starred' : ''}`,
-    onClick: toggleStar
-  }, React.createElement(IconStar, {
-    size: 13,
-    fill: starred ? 'currentColor' : 'none'
-  })), React.createElement("button", {
-    className: "action-btn primary",
-    onClick: onOpen
-  }, "Open"), React.createElement("button", {
-    className: "action-btn",
-    onClick: onHandoff,
-    title: "Copy SSH handoff command"
-  }, "Handoff"), React.createElement("button", {
-    className: "action-btn danger",
-    onClick: onKill
-  }, "End"))));
+  };
+  const onForget = async e => {
+    e.stopPropagation();
+    if (!confirm(`Forget session "${s.id}"? ssh-to-go drops the saved working directory; it can't be resumed afterwards.`)) return;
+    try { await forgetSession(s.hostName, s.id); } catch (err) { alert('forget failed: ' + err.message); }
+  };
+  const offloaded = s.status === 'offloaded';
+  return React.createElement("tr", { style: offloaded ? { opacity: 0.65 } : null },
+    React.createElement("td", null,
+      React.createElement("div", { className: "cell-session" },
+        React.createElement("button", { className: "sess-icon-btn", onClick: onPickIcon, title: "Change icon" },
+          React.createElement(SessIcon, { kind: s.iconKind, color: s.iconColor })),
+        React.createElement("span", { className: "mono name", onClick: offloaded ? onRecreate : onOpen, style: { cursor: 'pointer' } }, s.id),
+        !offloaded && React.createElement("button", { className: "rename-btn", onClick: onRename, title: "Rename" },
+          React.createElement(IconEdit, { size: 12 })),
+        offloaded && React.createElement(Pill, { variant: "muted" }, "offloaded"),
+      ),
+      offloaded && s.workingDir && React.createElement("div", {
+        className: "muted mono",
+        style: { fontSize: 11, marginTop: 2, paddingLeft: 28 }
+      }, "resume in ", s.workingDir),
+    ),
+    React.createElement("td", { className: "muted mono hide-mobile", style: { fontSize: 12.5 } }, s.host),
+    React.createElement("td", { className: "hide-mobile" },
+      offloaded ? React.createElement("span", { className: "muted", style: { fontSize: 12 } }, "—")
+                : React.createElement(ActivityCell, { session: s })),
+    React.createElement("td", { className: "hide-mobile" },
+      offloaded ? React.createElement("span", { className: "muted", style: { fontSize: 12 } }, "—")
+                : React.createElement(Presence, { clients: s.clients })),
+    React.createElement("td", { className: "muted num hide-mobile" }, s.uptime),
+    React.createElement("td", null, React.createElement("div", { className: "actions-cell" },
+      offloaded
+        ? [
+            React.createElement("button", { key: "rec", className: "action-btn primary", onClick: onRecreate, disabled: recreating,
+                title: "Bring the tmux session back at its saved working directory and open it in a new tab" },
+              recreating ? "Recreating…" : "Recreate"),
+            React.createElement("button", { key: "fgt", className: "action-btn", onClick: onForget, disabled: recreating, title: "Forget the saved working directory" }, "Forget"),
+          ]
+        : [
+            React.createElement("button", { key: "star", className: `action-btn star ${starred ? 'starred' : ''}`, onClick: toggleStar, disabled: !!busy },
+              React.createElement(IconStar, { size: 13, fill: starred ? 'currentColor' : 'none' })),
+            React.createElement("button", { key: "open", className: "action-btn primary", onClick: onOpen, disabled: !!busy }, "Open"),
+            React.createElement("button", { key: "h", className: "action-btn", onClick: onHandoff, disabled: !!busy, title: "Copy SSH handoff command" }, "Handoff"),
+            React.createElement("button", { key: "off", className: "action-btn", onClick: onOffload, disabled: !!busy, title: "Stop tmux but keep tracked so you can resume from the same directory" },
+              busy === 'offloading' ? "Offloading…" : "Offload"),
+            React.createElement("button", { key: "end", className: "action-btn danger", onClick: onKill, disabled: !!busy },
+              busy === 'ending' ? "Ending…" : "End"),
+          ])));
 };
 Object.assign(window, {
   Dashboard,

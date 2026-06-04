@@ -173,6 +173,48 @@ func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
 			log.Printf("session registry remove %s/%s: %v", hostName, sessionName, err)
 		}
 	}
+}
+
+// OffloadSession kills the tmux session like KillSession does, but keeps the
+// registry entry intact. The session will then appear in the dashboard's
+// "Resumable sessions" panel with its last-known working directory, ready to
+// be recreated. Used to free up RAM on long-running idle sessions without
+// losing the ability to come back to them later.
+func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
+	hostName := r.PathValue("host")
+	sessionName := r.PathValue("session")
+
+	if h.Registry == nil {
+		http.Error(w, "session registry unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	// Only offload sessions we're already tracking — otherwise this would
+	// silently lose the session (kill it without remembering it).
+	if _, ok := h.Registry.Get(hostName, sessionName); !ok {
+		http.Error(w, "session not tracked (was it created via this app?)", http.StatusBadRequest)
+		return
+	}
+
+	hostCfg, ok := h.Hub.GetHostConfig(hostName)
+	if !ok {
+		http.Error(w, "host not found", http.StatusNotFound)
+		return
+	}
+
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ssh connect failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer client.Close()
+
+	if err := h.Tmux.KillSession(client, sessionName); err != nil {
+		http.Error(w, fmt.Sprintf("kill session failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Intentionally leave the registry entry in place — that's the whole point.
+	writeJSON(w, map[string]string{"status": "offloaded", "name": sessionName})
 
 	writeJSON(w, map[string]string{"status": "killed"})
 }
