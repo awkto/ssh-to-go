@@ -119,6 +119,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	req.Name = sanitizeSessionName(req.Name)
 	if req.Name == "" {
 		http.Error(w, "session name required", http.StatusBadRequest)
 		return
@@ -144,6 +145,32 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "created", "name": req.Name})
+}
+
+// sanitizeSessionName collapses any run of whitespace (spaces, tabs) in a
+// requested session name into single dashes. tmux happily accepts spaces in
+// session names, but the SSH handoff command joins arguments at two shell
+// layers and any name with a space gets split into multiple tmux args
+// ("too many arguments"). Replacing spaces with dashes sidesteps the
+// quoting mess entirely. Other special characters are left alone.
+func sanitizeSessionName(name string) string {
+	name = strings.TrimSpace(name)
+	// Collapse internal whitespace runs into a single dash.
+	var b strings.Builder
+	b.Grow(len(name))
+	prevSpace := false
+	for _, r := range name {
+		if r == ' ' || r == '\t' {
+			if !prevSpace {
+				b.WriteByte('-')
+				prevSpace = true
+			}
+			continue
+		}
+		b.WriteRune(r)
+		prevSpace = false
+	}
+	return b.String()
 }
 
 func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
@@ -241,6 +268,7 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	req.NewName = sanitizeSessionName(req.NewName)
 	if req.NewName == "" {
 		http.Error(w, "new_name is required", http.StatusBadRequest)
 		return
