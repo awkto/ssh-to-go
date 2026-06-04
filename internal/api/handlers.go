@@ -188,12 +188,6 @@ func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session registry unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	// Only offload sessions we're already tracking — otherwise this would
-	// silently lose the session (kill it without remembering it).
-	if _, ok := h.Registry.Get(hostName, sessionName); !ok {
-		http.Error(w, "session not tracked (was it created via this app?)", http.StatusBadRequest)
-		return
-	}
 
 	hostCfg, ok := h.Hub.GetHostConfig(hostName)
 	if !ok {
@@ -208,6 +202,23 @@ func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
+	// If we're not yet tracking this session (it was created manually via
+	// tmux), claim it: discover its current working directory and write a
+	// registry entry. That way Offload works on any tmux session the user
+	// can see in the dashboard, not just ones spawned via this app.
+	if _, ok := h.Registry.Get(hostName, sessionName); !ok {
+		cwd, cwdErr := h.Tmux.SessionCwd(client, sessionName)
+		if cwdErr != nil {
+			// Couldn't read cwd (session might not exist or have any panes).
+			// Still proceed but with empty cwd — Recreate will land in $HOME.
+			log.Printf("offload: get cwd %s/%s: %v", hostName, sessionName, cwdErr)
+			cwd = ""
+		}
+		if err := h.Registry.Add(hostName, sessionName, cwd); err != nil {
+			log.Printf("offload: registry add %s/%s: %v", hostName, sessionName, err)
+		}
+	}
+
 	if err := h.Tmux.KillSession(client, sessionName); err != nil {
 		http.Error(w, fmt.Sprintf("kill session failed: %v", err), http.StatusInternalServerError)
 		return
@@ -215,8 +226,6 @@ func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
 
 	// Intentionally leave the registry entry in place — that's the whole point.
 	writeJSON(w, map[string]string{"status": "offloaded", "name": sessionName})
-
-	writeJSON(w, map[string]string{"status": "killed"})
 }
 
 type renameSessionReq struct {
