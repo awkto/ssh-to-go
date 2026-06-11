@@ -100,7 +100,10 @@ type Client struct {
 
 // ListClients returns all tmux clients attached to a session on the remote host.
 func (m *Manager) ListClients(client *ssh.Client, sessionName string) ([]Client, error) {
-	out, err := sshutil.Exec(client, fmt.Sprintf("tmux list-clients -t %q -F '#{client_tty}\t#{client_session}\t#{client_width}\t#{client_height}'", sessionName))
+	// client_name is the tty path for terminal clients and a synthetic
+	// "client-<pid>" for tty-less control-mode clients; detach-client -t
+	// accepts either, so it works as the universal client identifier.
+	out, err := sshutil.Exec(client, fmt.Sprintf("tmux list-clients -t %q -F '#{client_name}\t#{client_session}\t#{client_width}\t#{client_height}'", sessionName))
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "no clients") || strings.Contains(errStr, "no server running") {

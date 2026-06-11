@@ -389,6 +389,13 @@ function initTerminal(host, session) {
         }
     }
 
+    // Relay pipeline: "control" (default) attaches via tmux control mode —
+    // history comes from capture-pane over the control channel and live
+    // output as %output events, so nothing ever repaints and the local
+    // scrollback stays accurate. Add ?mode=legacy to the page URL to fall
+    // back to the classic PTY attach pipeline for comparison.
+    const relayMode = new URLSearchParams(location.search).get("mode") === "legacy" ? "" : "control";
+
     function connect() {
         const proto = location.protocol === "https:" ? "wss:" : "ws:";
         // mouse=off opts into the relay's native-client pipeline: tmux history
@@ -396,13 +403,18 @@ function initTerminal(host, session) {
         // sequences are stripped server-side. xterm.js then drives smooth
         // scrolling locally against its own scrollback instead of tmux's
         // row-quantised copy-mode wheel handler.
-        const url = `${proto}//${location.host}/ws/${encodeURIComponent(host)}/${encodeURIComponent(session)}?mouse=off`;
+        const url = `${proto}//${location.host}/ws/${encodeURIComponent(host)}/${encodeURIComponent(session)}?mouse=off${relayMode ? "&mode=" + relayMode : ""}`;
         const ws = new WebSocket(url);
         activeWs = ws;
         ws.binaryType = "arraybuffer";
 
         ws.onopen = function () {
             statusEl.className = "status connected";
+            if (relayMode === "control") {
+                // The server resends the full tmux history on every
+                // (re)connect; start from a clean buffer so it never stacks.
+                term.reset();
+            }
             // Send initial size
             ws.send(JSON.stringify({
                 type: "resize",

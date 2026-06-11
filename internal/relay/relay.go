@@ -29,6 +29,13 @@ type Options struct {
 	// locally without tmux entering copy-mode (used by native clients that
 	// render their own smooth-scroll scrollback).
 	Mouse string
+
+	// Mode selects the relay pipeline. "" = classic PTY attach (with the
+	// Mouse-dependent capture-pane prefill). "control" = tmux control mode:
+	// history prefilled over the control channel, live output streamed as
+	// %output events. No screen repaints, so the browser emulator owns the
+	// scrollback with no duplicates or width clipping. See control.go.
+	Mode string
 }
 
 // Relay bridges a WebSocket connection to a tmux session over SSH.
@@ -48,6 +55,10 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	done := make(chan struct{})
 	defer close(done)
 	go sshutil.KeepAlive(client, 15_000_000_000, done) // 15s
+
+	if opts.Mode == "control" {
+		return relayControlMode(ctx, ws, client, sessionName, windowSize)
+	}
 
 	// Default size, will be resized by first client message
 	cols, rows := 80, 24
@@ -152,7 +163,7 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 			select {
 			case <-kickCh:
 				wasKicked = true
-					kickMsg, _ := json.Marshal(map[string]string{"type": "kicked"})
+				kickMsg, _ := json.Marshal(map[string]string{"type": "kicked"})
 				_ = ws.Write(ctx, websocket.MessageText, kickMsg)
 			case <-ctx.Done():
 			}
