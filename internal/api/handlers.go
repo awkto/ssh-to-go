@@ -119,9 +119,33 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	rawName := req.Name
 	req.Name = sanitizeSessionName(req.Name)
 	if req.Name == "" {
 		http.Error(w, "session name required", http.StatusBadRequest)
+		return
+	}
+
+	// Pre-flight: refuse the request if a session with this name is already
+	// alive on the host, OR if there's an offloaded entry under that name.
+	// Without this, tmux returns "duplicate session" with a 500 (live case)
+	// or — much worse — the offloaded entry gets silently overwritten with
+	// a new working directory (resume context lost). The error message
+	// surfaces both the typed name and the sanitized one when they differ
+	// so the user understands where the collision came from.
+	if exists, kind := h.sessionExists(hostName, req.Name); exists {
+		typedHint := ""
+		if rawName != req.Name {
+			typedHint = fmt.Sprintf(" (you submitted %q which sanitizes to %q)", rawName, req.Name)
+		}
+		var msg string
+		switch kind {
+		case "live":
+			msg = fmt.Sprintf("session %q is already running on %q%s", req.Name, hostName, typedHint)
+		case "offloaded":
+			msg = fmt.Sprintf("an offloaded session %q is already tracked on %q%s — use Recreate to bring it back, or Forget it first", req.Name, hostName, typedHint)
+		}
+		http.Error(w, msg, http.StatusConflict)
 		return
 	}
 
@@ -145,6 +169,28 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "created", "name": req.Name})
+}
+
+// sessionExists reports whether a session with the given name is already
+// known on the host — either as a live tmux session (kind="live") or as
+// an offloaded entry in the registry (kind="offloaded"). The live check
+// uses the hub's last polled snapshot rather than a fresh tmux ls so it's
+// O(N) in-memory; stale state would just let the tmux create call catch
+// the duplicate the slow way.
+func (h *Handlers) sessionExists(hostName, name string) (bool, string) {
+	if state, ok := h.Hub.GetHost(hostName); ok {
+		for _, s := range state.Sessions {
+			if s.Name == name {
+				return true, "live"
+			}
+		}
+	}
+	if h.Registry != nil {
+		if _, ok := h.Registry.Get(hostName, name); ok {
+			return true, "offloaded"
+		}
+	}
+	return false, ""
 }
 
 // sanitizeSessionName collapses any run of whitespace (spaces, tabs) in a
@@ -268,9 +314,29 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	rawNew := req.NewName
 	req.NewName = sanitizeSessionName(req.NewName)
 	if req.NewName == "" {
 		http.Error(w, "new_name is required", http.StatusBadRequest)
+		return
+	}
+	if req.NewName == sessionName {
+		writeJSON(w, map[string]string{"status": "renamed", "old_name": sessionName, "new_name": req.NewName})
+		return
+	}
+	if exists, kind := h.sessionExists(hostName, req.NewName); exists {
+		typedHint := ""
+		if rawNew != req.NewName {
+			typedHint = fmt.Sprintf(" (you submitted %q which sanitizes to %q)", rawNew, req.NewName)
+		}
+		var msg string
+		switch kind {
+		case "live":
+			msg = fmt.Sprintf("session %q is already running on %q%s", req.NewName, hostName, typedHint)
+		case "offloaded":
+			msg = fmt.Sprintf("an offloaded session %q is already tracked on %q%s — use Recreate to bring it back, or Forget it first", req.NewName, hostName, typedHint)
+		}
+		http.Error(w, msg, http.StatusConflict)
 		return
 	}
 
