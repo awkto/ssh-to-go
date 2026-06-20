@@ -49,8 +49,27 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build debug-signed release APK
+      - name: Decode release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Release keystore decoded — APK will be release-signed."
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 secret set — APK will be debug-signed."
+          fi
+
+      - name: Build release APK
         working-directory: android
+        env:
+          # When ANDROID_KEYSTORE_PATH is set the gradle build signs with the
+          # release keystore; otherwise it falls back to debug signing.
+          ANDROID_KEYSTORE_PATH: ${{ env.ANDROID_KEYSTORE_PATH }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle -PversionName=${{ steps.meta.outputs.version }} :app:assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK

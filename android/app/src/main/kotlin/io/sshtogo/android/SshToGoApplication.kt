@@ -2,6 +2,7 @@ package io.sshtogo.android
 
 import android.app.Application
 import io.sshtogo.android.data.AppPreferences
+import io.sshtogo.android.data.OpenedSessions
 import io.sshtogo.android.data.ServerProfileStore
 
 class SshToGoApplication : Application() {
@@ -9,6 +10,9 @@ class SshToGoApplication : Application() {
         private set
     lateinit var prefs: AppPreferences
         private set
+
+    /** Sessions opened during this app run, driving the terminal swipe carousel. */
+    val openedSessions: OpenedSessions = OpenedSessions()
 
     override fun onCreate() {
         super.onCreate()

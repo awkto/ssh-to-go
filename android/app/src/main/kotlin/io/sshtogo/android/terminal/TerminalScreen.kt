@@ -17,7 +17,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,13 +28,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -50,7 +47,6 @@ import com.termux.view.TerminalViewClient
 import io.sshtogo.android.SshToGoApplication
 import io.sshtogo.android.data.AppPreferences
 import io.sshtogo.android.data.ServerProfile
-import io.sshtogo.android.net.SshToGoClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,30 +63,14 @@ fun TerminalScreen(
         return
     }
 
-    // Fetch the host's full session list so we can offer horizontal-swipe
-    // navigation between siblings. Falls back to the one tapped if the
-    // API call fails or returns empty.
-    var sessions by remember(profile.id, hostName) { mutableStateOf<List<String>?>(null) }
-    LaunchedEffect(profile.id, hostName) {
-        sessions = try {
-            val api = SshToGoClient.forProfile(profile)
-            api.sessions()
-                .filter { it.hostName == hostName }
-                .map { it.session.name }
-                .ifEmpty { listOf(sessionName) }
-        } catch (_: Throwable) {
-            listOf(sessionName)
-        }
-    }
-
-    val list = sessions
-    if (list == null) {
-        Scaffold(topBar = { TopAppBar(title = { Text("$sessionName @ $hostName") }) }) { pad ->
-            Box(modifier = Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        return
+    // Build the horizontal-swipe carousel from the sessions opened in this app
+    // run on this host (recording the one just tapped first), rather than the
+    // host's full session list — so swiping only steps between sessions we've
+    // actually opened and never reconnects through ones we haven't.
+    val list = remember(profile.id, hostName, sessionName) {
+        val opened = SshToGoApplication.instance.openedSessions
+        opened.markOpened(hostName, sessionName)
+        opened.forHost(hostName).ifEmpty { listOf(sessionName) }
     }
 
     val initialIndex = list.indexOf(sessionName).let { if (it < 0) 0 else it }
