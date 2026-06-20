@@ -18,6 +18,28 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    // Release signing keystore, supplied by CI (env) or a local gradle.properties.
+    // Resolution order per field: env var first, then gradle property. When no
+    // keystore path is provided the release build falls back to debug signing so
+    // local `assembleRelease` keeps working without the secrets.
+    val releaseStorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+        ?: (project.findProperty("releaseStoreFile") as String?)
+    val hasReleaseKeystore = !releaseStorePath.isNullOrBlank()
+
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = file(releaseStorePath!!)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                    ?: project.findProperty("releaseStorePassword") as String?
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                    ?: project.findProperty("releaseKeyAlias") as String?
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                    ?: project.findProperty("releaseKeyPassword") as String?
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -25,11 +47,14 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            // Phase-1: debug-signed releases so the GitHub Actions pipeline
-            // can publish an installable APK without keystore secrets.
-            // Replace with a proper keystore + secrets when distribution
-            // beyond personal sideloading is needed.
-            signingConfig = signingConfigs.getByName("debug")
+            // Sign with the real release keystore when one is available
+            // (CI with secrets set); otherwise fall back to the debug keystore
+            // so local release builds and forks without secrets still produce
+            // an installable APK.
+            signingConfig = if (hasReleaseKeystore)
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
             isMinifyEnabled = false
         }
     }
