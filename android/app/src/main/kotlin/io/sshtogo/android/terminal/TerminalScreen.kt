@@ -37,7 +37,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -55,7 +54,6 @@ import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import io.sshtogo.android.SshToGoApplication
 import io.sshtogo.android.data.AppPreferences
-import io.sshtogo.android.data.ServerProfile
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -82,15 +80,32 @@ fun TerminalScreen(
         opened.forHost(hostName).ifEmpty { listOf(sessionName) }
     }
 
-    // Carousel of the active sessions. Each opened session stays composed and
-    // connected (see beyondViewportPageCount on the pager) so switching between
-    // them is instant — no reconnect, no relay replay, scrollback intact. The
-    // swipe handler wraps from the last session back to the first and vice-versa.
+    // Persistent per-session terminals: each session is created once and kept
+    // alive (its WebSocket + emulator + scrollback) for the life of this screen,
+    // cached by name. Swiping reuses the live session — no reconnect, no relay
+    // replay — and sessions connect lazily the first time you swipe to one.
+    val sessions = remember(profile.id, hostName) { mutableMapOf<String, SessionHolder>() }
+    fun holderFor(name: String): SessionHolder = sessions.getOrPut(name) {
+        val client = ViewBackedSessionClient()
+        SessionHolder(RelayTerminalSession(profile, hostName, name, client), client)
+    }
+    DisposableEffect(profile.id, hostName) {
+        onDispose { sessions.values.forEach { it.session.finishIfRunning() } }
+    }
+
+    // Endless wrap-around carousel: a huge virtual page count makes swiping past
+    // the last session loop to the first with the same one-page slide animation
+    // (the real session for a page is page % count). beyondViewportPageCount=0
+    // keeps only the current + transitioning page composed, and adjacent virtual
+    // pages are always distinct sessions, so a session is never hosted twice.
     val initialIndex = list.indexOf(sessionName).let { if (it < 0) 0 else it }
     val pageCount = list.size
     val loop = pageCount > 1
-    val pagerState = rememberPagerState(initialPage = initialIndex) { pageCount }
-    val currentIndex = pagerState.currentPage
+    val virtualCount = if (loop) Int.MAX_VALUE else 1
+    val startPage = if (loop) (virtualCount / 2).let { it - it % pageCount + initialIndex } else 0
+    val pagerState = rememberPagerState(initialPage = startPage) { virtualCount }
+    fun sessionIndexFor(page: Int): Int = if (pageCount > 0) page % pageCount else 0
+    val currentIndex = sessionIndexFor(pagerState.currentPage)
     val currentSession = list.getOrNull(currentIndex) ?: sessionName
 
     Scaffold(
@@ -215,18 +230,10 @@ fun TerminalScreen(
                                 if (axis == 1) change.consume() else if (axis == -1) break
                             }
                             if (axis == 1 && abs(dx) > switchThresholdPx) {
-                                val cur = pagerState.currentPage
-                                val target = if (dx < 0) {
-                                    if (cur == pageCount - 1) 0 else cur + 1          // swipe left → next (wraps)
-                                } else {
-                                    if (cur == 0) pageCount - 1 else cur - 1          // swipe right → prev (wraps)
-                                }
-                                scope.launch {
-                                    // Adjacent step animates; a wrap jump snaps so it
-                                    // doesn't visibly scroll through every page.
-                                    if (abs(target - cur) <= 1) pagerState.animateScrollToPage(target)
-                                    else pagerState.scrollToPage(target)
-                                }
+                                // One virtual page either way; the modulo mapping makes
+                                // the wrap (last→first) just another adjacent slide.
+                                val target = pagerState.currentPage + if (dx < 0) 1 else -1
+                                scope.launch { pagerState.animateScrollToPage(target) }
                             }
                         }
                     },
@@ -238,42 +245,39 @@ fun TerminalScreen(
                 // Gestures are handled by the axis-aware detector above, so the
                 // pager's own (greedy) drag handling stays off.
                 userScrollEnabled = false,
-                // Keep every opened session composed — not just the visible one —
-                // so each keeps its live WebSocket + emulator and switching is
-                // instant with scrollback intact. Bounded by how many sessions
-                // you've actually opened this run (a small set), so the old
-                // "pre-warm the whole host" freeze risk doesn't apply.
-                beyondViewportPageCount = (pageCount - 1).coerceAtLeast(0),
+                // Only the current + transitioning page is composed; persistence
+                // comes from the session cache above (not from keeping pages
+                // alive), so wrap-around stays a smooth one-page slide.
+                beyondViewportPageCount = 0,
             ) { pageIndex ->
-                SessionTerminal(profile = profile, hostName = hostName, sessionName = list[pageIndex])
+                val name = list[sessionIndexFor(pageIndex)]
+                SessionTerminal(holder = holderFor(name), hostName = hostName, sessionName = name)
             }
         }
     }
 }
 
 /**
- * Renders one tmux session: opens a RelayTerminalSession + TerminalView,
- * tears them down on dispose. Kept WS-per-page so swiping between sessions
- * is instant after the initial connect.
+ * Renders one tmux session from the screen-level cache. The session (its relay
+ * WebSocket + emulator + scrollback) is owned by [holder] and outlives this
+ * composable, so swiping away and back re-attaches a fresh TerminalView to the
+ * still-connected session — TerminalSession.updateSize just resizes the existing
+ * emulator, so the buffer re-renders instantly with no reconnect or replay.
  */
 @Composable
-private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionName: String) {
-    val surfaceColor = MaterialTheme.colorScheme.surface.toArgb()
-    val sessionClient = remember(profile.id, hostName, sessionName) { ViewBackedSessionClient() }
-    val session = remember(profile.id, hostName, sessionName) {
-        RelayTerminalSession(profile, hostName, sessionName, sessionClient)
-    }
+private fun SessionTerminal(holder: SessionHolder, hostName: String, sessionName: String) {
+    val session = holder.session
+    val sessionClient = holder.client
     // Read the per-session palette name from the state-backed prefs map so
     // a change in the palette picker recomposes this view (and we'll push
     // the new colours into the live emulator via the update block below).
     val paletteName = SshToGoApplication.instance.prefs.paletteFor(hostName, sessionName)
     val palette = remember(paletteName) { TerminalPalette.fromName(paletteName) }
 
+    // Detach the view on dispose but keep the session alive — it's owned by the
+    // screen-level cache and finished only when the whole screen closes.
     DisposableEffect(session) {
-        onDispose {
-            sessionClient.view = null
-            session.finishIfRunning()
-        }
+        onDispose { sessionClient.view = null }
     }
 
     // Reconnect the relay across screen-off/on. The OS drops the WebSocket
@@ -301,7 +305,10 @@ private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionNam
                 // COLOR_SCHEME at init, so this baked-in palette will stick.
                 palette.apply()
                 TerminalView(context, null).apply {
-                    setBackgroundColor(surfaceColor)
+                    // Use the palette's own background so the whole terminal area
+                    // (incl. padding) matches the theme — important for light/white
+                    // and gray palettes, which otherwise show the app surface colour.
+                    setBackgroundColor(palette.backgroundColor)
                     val app = SshToGoApplication.instance
                     setTextSize(app.prefs.terminalFontSizeSp.scaledPx(context))
                     setTypeface(Typeface.MONOSPACE)
@@ -315,8 +322,9 @@ private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionNam
             update = { view ->
                 // Palette change while the view is already alive: re-apply to
                 // COLOR_SCHEME, reset the active emulator's mColors so it
-                // copies the new defaults, and force a redraw.
+                // copies the new defaults, update the view background, and redraw.
                 palette.apply()
+                view.setBackgroundColor(palette.backgroundColor)
                 view.currentSession?.emulator?.let { em ->
                     em.mColors.reset()
                     view.onScreenUpdated()
@@ -325,6 +333,15 @@ private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionNam
         )
     }
 }
+
+/**
+ * Screen-scoped owner of a session's relay + client so it survives the pager
+ * disposing and recreating its page during swipes.
+ */
+private class SessionHolder(
+    val session: RelayTerminalSession,
+    val client: ViewBackedSessionClient,
+)
 
 private fun Float.scaledPx(context: android.content.Context): Int =
     (this * context.resources.displayMetrics.scaledDensity).toInt()

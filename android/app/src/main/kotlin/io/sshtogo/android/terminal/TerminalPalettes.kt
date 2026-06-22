@@ -121,7 +121,34 @@ enum class TerminalPalette(
             0xff5c5444.toInt(), 0xffff8a72.toInt(), 0xffcde071.toInt(), 0xffffd479.toInt(),
             0xff88b8cc.toInt(), 0xffc08fb0.toInt(), 0xff92c7bd.toInt(), 0xfff5eccf.toInt(),
         ),
+    ),
+    ZENBURN(
+        "Zenburn gray",
+        background = 0xff3f3f3f.toInt(),
+        foreground = 0xffdcdccc.toInt(),
+        cursor = 0xffdcdccc.toInt(),
+        ansi16 = intArrayOf(
+            0xff3f3f3f.toInt(), 0xffcc9393.toInt(), 0xff7f9f7f.toInt(), 0xffd0bf8f.toInt(),
+            0xff6ca0a3.toInt(), 0xffdc8cc3.toInt(), 0xff93e0e3.toInt(), 0xffdcdccc.toInt(),
+            0xff709080.toInt(), 0xffdca3a3.toInt(), 0xffbfebbf.toInt(), 0xfff0dfaf.toInt(),
+            0xff8cd0d3.toInt(), 0xffec93d3.toInt(), 0xff93e0e3.toInt(), 0xffffffff.toInt(),
+        ),
+    ),
+    PAPER(
+        "Paper (white)",
+        background = 0xffffffff.toInt(),
+        foreground = 0xff2e2e2e.toInt(),
+        cursor = 0xff2e2e2e.toInt(),
+        ansi16 = intArrayOf(
+            0xff2e2e2e.toInt(), 0xffc7254e.toInt(), 0xff2f8a2f.toInt(), 0xffb58900.toInt(),
+            0xff2060c0.toInt(), 0xff9c27b0.toInt(), 0xff0a9b9b.toInt(), 0xffd0d0d0.toInt(),
+            0xff5a5a5a.toInt(), 0xffe0405e.toInt(), 0xff36a836.toInt(), 0xffc79a1a.toInt(),
+            0xff3a78d8.toInt(), 0xffb452c4.toInt(), 0xff14b3b3.toInt(), 0xffffffff.toInt(),
+        ),
     );
+
+    /** The palette's background colour (ARGB), for theming the whole view area. */
+    val backgroundColor: Int get() = background
 
     /**
      * Apply this palette to the global [com.termux.terminal.TerminalColors.COLOR_SCHEME].
