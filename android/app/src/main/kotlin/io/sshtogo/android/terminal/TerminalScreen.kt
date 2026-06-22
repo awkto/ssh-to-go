@@ -82,20 +82,15 @@ fun TerminalScreen(
         opened.forHost(hostName).ifEmpty { listOf(sessionName) }
     }
 
-    // Wrap-around carousel: swiping the terminal left/right switches between the
-    // active sessions, and swiping past the last one loops back to the first.
-    // With a single session there's nothing to switch to, so it's one fixed page.
+    // Carousel of the active sessions. Each opened session stays composed and
+    // connected (see beyondViewportPageCount on the pager) so switching between
+    // them is instant — no reconnect, no relay replay, scrollback intact. The
+    // swipe handler wraps from the last session back to the first and vice-versa.
     val initialIndex = list.indexOf(sessionName).let { if (it < 0) 0 else it }
     val pageCount = list.size
     val loop = pageCount > 1
-    // A huge virtual page count fakes an endless carousel; the real session for
-    // any page is page % pageCount. Start near the middle (aligned so the tapped
-    // session shows first) to leave room to swipe both directions.
-    val virtualCount = if (loop) Int.MAX_VALUE else 1
-    val startPage = if (loop) (virtualCount / 2).let { it - it % pageCount + initialIndex } else 0
-    val pagerState = rememberPagerState(initialPage = startPage) { virtualCount }
-    fun sessionIndexFor(page: Int): Int = if (pageCount > 0) page % pageCount else 0
-    val currentIndex = sessionIndexFor(pagerState.currentPage)
+    val pagerState = rememberPagerState(initialPage = initialIndex) { pageCount }
+    val currentIndex = pagerState.currentPage
     val currentSession = list.getOrNull(currentIndex) ?: sessionName
 
     Scaffold(
@@ -220,8 +215,18 @@ fun TerminalScreen(
                                 if (axis == 1) change.consume() else if (axis == -1) break
                             }
                             if (axis == 1 && abs(dx) > switchThresholdPx) {
-                                val target = pagerState.currentPage + if (dx < 0) 1 else -1
-                                scope.launch { pagerState.animateScrollToPage(target) }
+                                val cur = pagerState.currentPage
+                                val target = if (dx < 0) {
+                                    if (cur == pageCount - 1) 0 else cur + 1          // swipe left → next (wraps)
+                                } else {
+                                    if (cur == 0) pageCount - 1 else cur - 1          // swipe right → prev (wraps)
+                                }
+                                scope.launch {
+                                    // Adjacent step animates; a wrap jump snaps so it
+                                    // doesn't visibly scroll through every page.
+                                    if (abs(target - cur) <= 1) pagerState.animateScrollToPage(target)
+                                    else pagerState.scrollToPage(target)
+                                }
                             }
                         }
                     },
@@ -233,13 +238,14 @@ fun TerminalScreen(
                 // Gestures are handled by the axis-aware detector above, so the
                 // pager's own (greedy) drag handling stays off.
                 userScrollEnabled = false,
-                // Only the currently visible page keeps a live WebSocket +
-                // emulator. Pre-warming neighbours made the app prone to freezes
-                // on hosts with many sessions; the small ~1s reconnect on swipe
-                // is a worthwhile trade for stability.
-                beyondViewportPageCount = 0,
+                // Keep every opened session composed — not just the visible one —
+                // so each keeps its live WebSocket + emulator and switching is
+                // instant with scrollback intact. Bounded by how many sessions
+                // you've actually opened this run (a small set), so the old
+                // "pre-warm the whole host" freeze risk doesn't apply.
+                beyondViewportPageCount = (pageCount - 1).coerceAtLeast(0),
             ) { pageIndex ->
-                SessionTerminal(profile = profile, hostName = hostName, sessionName = list[sessionIndexFor(pageIndex)])
+                SessionTerminal(profile = profile, hostName = hostName, sessionName = list[pageIndex])
             }
         }
     }
