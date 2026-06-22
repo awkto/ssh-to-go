@@ -3,6 +3,8 @@ package io.sshtogo.android.terminal
 import android.graphics.Typeface
 import android.view.KeyEvent
 import android.view.MotionEvent
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,12 +12,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,12 +37,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.launch
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
@@ -48,7 +56,7 @@ import io.sshtogo.android.SshToGoApplication
 import io.sshtogo.android.data.AppPreferences
 import io.sshtogo.android.data.ServerProfile
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TerminalScreen(
     profileId: String,
@@ -136,6 +144,56 @@ fun TerminalScreen(
                     }
                 },
                 actions = {
+                    val app = SshToGoApplication.instance
+
+                    // Per-session palette control, LEFT of the arrows:
+                    //  · single tap  → advance to the next palette
+                    //  · long press → open the full palette list
+                    // Each tmux session keeps its own colour scheme; changes
+                    // apply to the active session only and persist across reconnects.
+                    var paletteMenuOpen by remember { mutableStateOf(false) }
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .combinedClickable(
+                                    onClick = {
+                                        val entries = TerminalPalette.entries
+                                        val current = app.prefs.paletteFor(hostName, currentSession)
+                                        val idx = entries.indexOfFirst { it.name == current }
+                                            .let { if (it < 0) 0 else it }
+                                        val next = entries[(idx + 1) % entries.size]
+                                        app.prefs.setPaletteFor(hostName, currentSession, next.name)
+                                    },
+                                    onLongClick = { paletteMenuOpen = true },
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Default.Palette, contentDescription = "Theme — tap: next, hold: list")
+                        }
+                        DropdownMenu(
+                            expanded = paletteMenuOpen,
+                            onDismissRequest = { paletteMenuOpen = false },
+                        ) {
+                            val currentPaletteName = app.prefs.paletteFor(hostName, currentSession)
+                            TerminalPalette.entries.forEach { palette ->
+                                DropdownMenuItem(
+                                    leadingIcon = if (palette.name == currentPaletteName)
+                                        { { Icon(Icons.Default.Palette, contentDescription = null) } } else null,
+                                    text = { Text(palette.displayName) },
+                                    onClick = {
+                                        paletteMenuOpen = false
+                                        // paletteFor() reads from the state-backed map, so this
+                                        // write triggers a recomposition of SessionTerminal and
+                                        // its AndroidView's update lambda re-applies the colours
+                                        // to the active emulator.
+                                        app.prefs.setPaletteFor(hostName, currentSession, palette.name)
+                                    },
+                                )
+                            }
+                        }
+                    }
+
                     if (list.size > 1) {
                         IconButton(onClick = ::goPrev, enabled = pagerState.currentPage > 0) {
                             Icon(Icons.Default.ChevronLeft, contentDescription = "Previous session")
@@ -144,34 +202,15 @@ fun TerminalScreen(
                             Icon(Icons.Default.ChevronRight, contentDescription = "Next session")
                         }
                     }
-                    // Per-session palette picker. Each tmux session keeps its
-                    // own colour scheme — changing here applies to the active
-                    // session only and persists across reconnects.
-                    var paletteMenuOpen by remember { mutableStateOf(false) }
-                    IconButton(onClick = { paletteMenuOpen = true }) {
-                        Icon(Icons.Default.Palette, contentDescription = "Palette")
-                    }
-                    DropdownMenu(
-                        expanded = paletteMenuOpen,
-                        onDismissRequest = { paletteMenuOpen = false },
-                    ) {
-                        val app = SshToGoApplication.instance
-                        val currentPaletteName = app.prefs.paletteFor(hostName, currentSession)
-                        TerminalPalette.entries.forEach { palette ->
-                            DropdownMenuItem(
-                                leadingIcon = if (palette.name == currentPaletteName)
-                                    { { Icon(Icons.Default.Palette, contentDescription = null) } } else null,
-                                text = { Text(palette.displayName) },
-                                onClick = {
-                                    paletteMenuOpen = false
-                                    // paletteFor() reads from the state-backed map, so this
-                                    // write triggers a recomposition of SessionTerminal and
-                                    // its AndroidView's update lambda re-applies the colours
-                                    // to the active emulator.
-                                    app.prefs.setPaletteFor(hostName, currentSession, palette.name)
-                                },
-                            )
-                        }
+
+                    // Close THIS session in the app (RIGHT of the arrows). Drops it
+                    // from the swipe carousel and returns to the list — the tmux
+                    // session keeps running on the server (no kill is sent).
+                    IconButton(onClick = {
+                        app.openedSessions.close(hostName, currentSession)
+                        onBack()
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "Close session (tmux keeps running)")
                     }
                 },
             )
@@ -218,6 +257,22 @@ private fun SessionTerminal(profile: ServerProfile, hostName: String, sessionNam
             sessionClient.view = null
             session.finishIfRunning()
         }
+    }
+
+    // Reconnect the relay across screen-off/on. The OS drops the WebSocket
+    // while backgrounded; close it on pause and re-establish on resume so the
+    // visible page recovers on wake instead of sitting on a dead socket.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, session) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> session.pause()
+                Lifecycle.Event.ON_RESUME -> session.resume()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
