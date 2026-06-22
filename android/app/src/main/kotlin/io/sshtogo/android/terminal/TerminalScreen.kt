@@ -5,6 +5,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,15 +33,22 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
@@ -175,20 +184,63 @@ fun TerminalScreen(
             )
         },
     ) { pad ->
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize().padding(pad).imePadding(),
-            // Horizontal swipe on the terminal switches sessions; vertical drags
-            // pass through to the terminal for scrollback. Disabled when there's
-            // only one session to switch to.
-            userScrollEnabled = loop,
-            // Only the currently visible page keeps a live WebSocket +
-            // emulator. Pre-warming neighbours made the app prone to freezes
-            // on hosts with many sessions; the small ~1s reconnect on swipe
-            // is a worthwhile trade for stability.
-            beyondViewportPageCount = 0,
-        ) { pageIndex ->
-            SessionTerminal(profile = profile, hostName = hostName, sessionName = list[sessionIndexFor(pageIndex)])
+        val scope = rememberCoroutineScope()
+        val switchThresholdPx = with(LocalDensity.current) { 56.dp.toPx() }
+
+        // The pager is driven programmatically; we read touches ourselves on the
+        // INITIAL pass (before the terminal view) and only claim a gesture once
+        // it's clearly horizontal — biased toward vertical so terminal scrollback
+        // stays smooth. Horizontal gestures get consumed (so the terminal ignores
+        // them) and a past-threshold swipe flips to the next/previous session;
+        // anything else is left untouched for the terminal to scroll.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(pad)
+                .imePadding()
+                .then(
+                    if (!loop) Modifier else Modifier.pointerInput(pageCount) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            var dx = 0f
+                            var dy = 0f
+                            var axis = 0 // 0 = undecided, 1 = horizontal (ours), -1 = vertical (terminal's)
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                val d = change.positionChange()
+                                dx += d.x
+                                dy += d.y
+                                if (axis == 0 && (abs(dx) > viewConfiguration.touchSlop || abs(dy) > viewConfiguration.touchSlop)) {
+                                    // Require clear horizontal dominance (1.25×) so
+                                    // near-vertical and diagonal drags scroll the terminal.
+                                    axis = if (abs(dx) > abs(dy) * 1.25f) 1 else -1
+                                }
+                                if (axis == 1) change.consume() else if (axis == -1) break
+                            }
+                            if (axis == 1 && abs(dx) > switchThresholdPx) {
+                                val target = pagerState.currentPage + if (dx < 0) 1 else -1
+                                scope.launch { pagerState.animateScrollToPage(target) }
+                            }
+                        }
+                    },
+                ),
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                // Gestures are handled by the axis-aware detector above, so the
+                // pager's own (greedy) drag handling stays off.
+                userScrollEnabled = false,
+                // Only the currently visible page keeps a live WebSocket +
+                // emulator. Pre-warming neighbours made the app prone to freezes
+                // on hosts with many sessions; the small ~1s reconnect on swipe
+                // is a worthwhile trade for stability.
+                beyondViewportPageCount = 0,
+            ) { pageIndex ->
+                SessionTerminal(profile = profile, hostName = hostName, sessionName = list[sessionIndexFor(pageIndex)])
+            }
         }
     }
 }
