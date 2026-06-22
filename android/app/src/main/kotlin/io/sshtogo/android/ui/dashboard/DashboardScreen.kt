@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -221,6 +222,9 @@ private fun HostCard(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     sessions.forEach { s ->
+                        // Reactive: dot shows when this session is open in the app
+                        // (in the swipe carousel for this run).
+                        val isOpen = SshToGoApplication.instance.openedSessions.isOpen(host.name, s.name)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -228,6 +232,19 @@ private fun HostCard(
                                 .padding(horizontal = 4.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            // Fixed-width leading slot keeps names aligned whether
+                            // or not the open-dot is shown.
+                            Box(modifier = Modifier.size(8.dp), contentAlignment = Alignment.Center) {
+                                if (isOpen) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.size(8.dp))
                             Text(
                                 "›  ${s.name}",
                                 style = MaterialTheme.typography.titleMedium,

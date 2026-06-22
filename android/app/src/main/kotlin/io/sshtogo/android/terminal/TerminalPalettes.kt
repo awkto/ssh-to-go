@@ -73,6 +73,54 @@ enum class TerminalPalette(
             0xff4c566a.toInt(), 0xffbf616a.toInt(), 0xffa3be8c.toInt(), 0xffebcb8b.toInt(),
             0xff81a1c1.toInt(), 0xffb48ead.toInt(), 0xff8fbcbb.toInt(), 0xffeceff4.toInt(),
         ),
+    ),
+    GRAPHITE(
+        "Graphite gray",
+        background = 0xff303030.toInt(),
+        foreground = 0xffd0d0d0.toInt(),
+        cursor = 0xffd0d0d0.toInt(),
+        ansi16 = intArrayOf(
+            0xff303030.toInt(), 0xffd75f5f.toInt(), 0xff87af87.toInt(), 0xffd7af87.toInt(),
+            0xff87afd7.toInt(), 0xffaf87d7.toInt(), 0xff87d7d7.toInt(), 0xffc0c0c0.toInt(),
+            0xff5f5f5f.toInt(), 0xffff8787.toInt(), 0xffafd7af.toInt(), 0xffffd7af.toInt(),
+            0xffafd7ff.toInt(), 0xffd7afff.toInt(), 0xffafffff.toInt(), 0xffffffff.toInt(),
+        ),
+    ),
+    SLATE(
+        "Slate gray",
+        background = 0xff22272e.toInt(),
+        foreground = 0xffadbac7.toInt(),
+        cursor = 0xff539bf5.toInt(),
+        ansi16 = intArrayOf(
+            0xff2d333b.toInt(), 0xfff47067.toInt(), 0xff57ab5a.toInt(), 0xffc69026.toInt(),
+            0xff539bf5.toInt(), 0xffb083f0.toInt(), 0xff39c5cf.toInt(), 0xffadbac7.toInt(),
+            0xff636e7b.toInt(), 0xffff938a.toInt(), 0xff6bc46d.toInt(), 0xffdaaa3f.toInt(),
+            0xff6cb6ff.toInt(), 0xffdcbdfb.toInt(), 0xff56d4dd.toInt(), 0xffcdd9e5.toInt(),
+        ),
+    ),
+    GRUVBOX_DARK(
+        "Gruvbox dark",
+        background = 0xff282828.toInt(),
+        foreground = 0xffebdbb2.toInt(),
+        cursor = 0xffebdbb2.toInt(),
+        ansi16 = intArrayOf(
+            0xff282828.toInt(), 0xffcc241d.toInt(), 0xff98971a.toInt(), 0xffd79921.toInt(),
+            0xff458588.toInt(), 0xffb16286.toInt(), 0xff689d6a.toInt(), 0xffa89984.toInt(),
+            0xff928374.toInt(), 0xfffb4934.toInt(), 0xffb8bb26.toInt(), 0xfffabd2f.toInt(),
+            0xff83a598.toInt(), 0xffd3869b.toInt(), 0xff8ec07c.toInt(), 0xffebdbb2.toInt(),
+        ),
+    ),
+    SOLAR_FLARE(
+        "Solar flare",
+        background = 0xff1c1611.toInt(),
+        foreground = 0xffe8d3a1.toInt(),
+        cursor = 0xffffcc66.toInt(),
+        ansi16 = intArrayOf(
+            0xff2b2620.toInt(), 0xffff6f5e.toInt(), 0xffb5cc52.toInt(), 0xfff4bf75.toInt(),
+            0xff6a9fb5.toInt(), 0xffaa759f.toInt(), 0xff75b5aa.toInt(), 0xffd0c8a0.toInt(),
+            0xff5c5444.toInt(), 0xffff8a72.toInt(), 0xffcde071.toInt(), 0xffffd479.toInt(),
+            0xff88b8cc.toInt(), 0xffc08fb0.toInt(), 0xff92c7bd.toInt(), 0xfff5eccf.toInt(),
+        ),
     );
 
     /**

@@ -5,8 +5,6 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,8 +15,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.DropdownMenu
@@ -35,19 +31,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import kotlinx.coroutines.launch
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
@@ -81,60 +73,36 @@ fun TerminalScreen(
         opened.forHost(hostName).ifEmpty { listOf(sessionName) }
     }
 
+    // Wrap-around carousel: swiping the terminal left/right switches between the
+    // active sessions, and swiping past the last one loops back to the first.
+    // With a single session there's nothing to switch to, so it's one fixed page.
     val initialIndex = list.indexOf(sessionName).let { if (it < 0) 0 else it }
-    val pagerState = rememberPagerState(initialPage = initialIndex) { list.size }
-    val currentSession = list.getOrNull(pagerState.currentPage) ?: sessionName
-    val scope = rememberCoroutineScope()
-    val swipeThresholdPx = with(LocalDensity.current) { 56.dp.toPx() }
-
-    fun goPrev() {
-        if (pagerState.currentPage > 0) {
-            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
-        }
-    }
-    fun goNext() {
-        if (pagerState.currentPage < list.size - 1) {
-            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-        }
-    }
+    val pageCount = list.size
+    val loop = pageCount > 1
+    // A huge virtual page count fakes an endless carousel; the real session for
+    // any page is page % pageCount. Start near the middle (aligned so the tapped
+    // session shows first) to leave room to swipe both directions.
+    val virtualCount = if (loop) Int.MAX_VALUE else 1
+    val startPage = if (loop) (virtualCount / 2).let { it - it % pageCount + initialIndex } else 0
+    val pagerState = rememberPagerState(initialPage = startPage) { virtualCount }
+    fun sessionIndexFor(page: Int): Int = if (pageCount > 0) page % pageCount else 0
+    val currentIndex = sessionIndexFor(pagerState.currentPage)
+    val currentSession = list.getOrNull(currentIndex) ?: sessionName
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    // Swipe the title horizontally to switch sessions. The
-                    // terminal body keeps all vertical+horizontal gestures
-                    // for its own scrolling / selection.
-                    var dragAccum = 0f
-                    Box(
-                        modifier = Modifier
-                            .pointerInput(list.size) {
-                                detectHorizontalDragGestures(
-                                    onDragStart = { dragAccum = 0f },
-                                    onDragEnd = {
-                                        if (dragAccum > swipeThresholdPx) goPrev()
-                                        else if (dragAccum < -swipeThresholdPx) goNext()
-                                        dragAccum = 0f
-                                    },
-                                    onDragCancel = { dragAccum = 0f },
-                                    onHorizontalDrag = { change, dragAmount ->
-                                        dragAccum += dragAmount
-                                        change.consume()
-                                    },
-                                )
-                            },
-                    ) {
-                        Column {
+                    Column {
+                        Text(
+                            "$currentSession @ $hostName",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (loop) {
                             Text(
-                                "$currentSession @ $hostName",
-                                style = MaterialTheme.typography.titleMedium,
+                                "${currentIndex + 1} / $pageCount  ·  swipe to switch",
+                                style = MaterialTheme.typography.labelSmall,
                             )
-                            if (list.size > 1) {
-                                Text(
-                                    "${pagerState.currentPage + 1} / ${list.size}  ·  swipe title or use arrows",
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
                         }
                     }
                 },
@@ -146,7 +114,7 @@ fun TerminalScreen(
                 actions = {
                     val app = SshToGoApplication.instance
 
-                    // Per-session palette control, LEFT of the arrows:
+                    // Per-session palette control:
                     //  · single tap  → advance to the next palette
                     //  · long press → open the full palette list
                     // Each tmux session keeps its own colour scheme; changes
@@ -194,18 +162,9 @@ fun TerminalScreen(
                         }
                     }
 
-                    if (list.size > 1) {
-                        IconButton(onClick = ::goPrev, enabled = pagerState.currentPage > 0) {
-                            Icon(Icons.Default.ChevronLeft, contentDescription = "Previous session")
-                        }
-                        IconButton(onClick = ::goNext, enabled = pagerState.currentPage < list.size - 1) {
-                            Icon(Icons.Default.ChevronRight, contentDescription = "Next session")
-                        }
-                    }
-
-                    // Close THIS session in the app (RIGHT of the arrows). Drops it
-                    // from the swipe carousel and returns to the list — the tmux
-                    // session keeps running on the server (no kill is sent).
+                    // Close THIS session in the app. Drops it from the swipe
+                    // carousel and returns to the list — the tmux session keeps
+                    // running on the server (no kill is sent).
                     IconButton(onClick = {
                         app.openedSessions.close(hostName, currentSession)
                         onBack()
@@ -219,17 +178,17 @@ fun TerminalScreen(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize().padding(pad).imePadding(),
-            // Pager's own swipe gestures fight the terminal's vertical drag
-            // (it greedy-grabs both axes), so we disable them and drive page
-            // changes from the title/arrow controls.
-            userScrollEnabled = false,
+            // Horizontal swipe on the terminal switches sessions; vertical drags
+            // pass through to the terminal for scrollback. Disabled when there's
+            // only one session to switch to.
+            userScrollEnabled = loop,
             // Only the currently visible page keeps a live WebSocket +
             // emulator. Pre-warming neighbours made the app prone to freezes
             // on hosts with many sessions; the small ~1s reconnect on swipe
             // is a worthwhile trade for stability.
             beyondViewportPageCount = 0,
         ) { pageIndex ->
-            SessionTerminal(profile = profile, hostName = hostName, sessionName = list[pageIndex])
+            SessionTerminal(profile = profile, hostName = hostName, sessionName = list[sessionIndexFor(pageIndex)])
         }
     }
 }
