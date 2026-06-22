@@ -25,4 +25,14 @@ class OpenedSessions {
     /** Snapshot of the sessions opened on [host] this run, in first-opened order. */
     @Synchronized
     fun forHost(host: String): List<String> = byHost[host]?.toList() ?: emptyList()
+
+    /**
+     * Drop [session] from [host]'s opened set — i.e. "close" it in the app so it
+     * leaves the swipe carousel. The tmux session itself is untouched on the
+     * server; re-opening it from the dashboard adds it back.
+     */
+    @Synchronized
+    fun close(host: String, session: String) {
+        byHost[host]?.remove(session)
+    }
 }

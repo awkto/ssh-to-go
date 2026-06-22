@@ -66,11 +66,20 @@ class RelayTerminalSession(
     @Volatile
     private var reconnectRunnable: Runnable? = null
 
+    /**
+     * True once the emulator has initialised and made its first connect().
+     * Gates lifecycle-driven resume() so a spurious ON_RESUME during initial
+     * layout (which fires before initializeEmulator) can't open a second socket.
+     */
+    @Volatile
+    private var emulatorReady = false
+
     fun ttyPath(): String? = hostTty
 
     override fun initializeEmulator(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
         super.initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels)
         connect()
+        emulatorReady = true
     }
 
     override fun onSizeChanged(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
@@ -92,6 +101,36 @@ class RelayTerminalSession(
         reconnectRunnable = null
         ws?.close(1000, "client closed")
         ws = null
+    }
+
+    /**
+     * Called when the screen turns off / the app is backgrounded. Closes the
+     * relay socket cleanly (so the server detaches this client) and cancels any
+     * pending reconnect. NOT a user-close — [resume] will reconnect. Nulling
+     * [ws] first marks the old socket stale so its onClosed/onFailure are ignored.
+     */
+    fun pause() {
+        if (userClosed) return
+        reconnectRunnable?.let { main.removeCallbacks(it) }
+        reconnectRunnable = null
+        val old = ws
+        ws = null
+        old?.close(1000, "app backgrounded")
+    }
+
+    /**
+     * Called when the app returns to the foreground (screen wakes). The OS
+     * tears WebSockets down while backgrounded and the failure often isn't
+     * observed until pings resume — leaving the page dead with no reconnect in
+     * flight. Reconnecting here makes wake-up recovery immediate. No-op if
+     * already connected, user-closed, or before the first connect.
+     */
+    fun resume() {
+        if (userClosed || !emulatorReady || ws != null) return
+        reconnectRunnable?.let { main.removeCallbacks(it) }
+        reconnectRunnable = null
+        retryCount = 0
+        connect()
     }
 
     /**
@@ -155,6 +194,7 @@ class RelayTerminalSession(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 main.post {
+                    if (webSocket !== ws) return@post // a socket we've already replaced (pause/reconnect)
                     val notice = "\r\n[connection closed${if (reason.isNotBlank()) " — $reason" else ""}]".toByteArray()
                     emulatorAppend(notice, notice.size)
                     if (!userClosed && code != 1000) scheduleReconnect()
@@ -163,6 +203,7 @@ class RelayTerminalSession(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 main.post {
+                    if (webSocket !== ws) return@post // a socket we've already replaced (pause/reconnect)
                     val notice = "\r\n[connection error: ${t.message ?: t.javaClass.simpleName}]".toByteArray()
                     emulatorAppend(notice, notice.size)
                     if (!userClosed) scheduleReconnect()
