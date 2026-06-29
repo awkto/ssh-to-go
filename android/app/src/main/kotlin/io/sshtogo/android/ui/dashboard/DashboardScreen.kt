@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Palette
@@ -109,12 +110,22 @@ fun DashboardScreen(
                             onClick = { menuOpen = false; onAddServer() },
                         )
                         HorizontalDivider()
+                        val app = io.sshtogo.android.SshToGoApplication.instance
+                        // Toggle: keep the menu open so the check updates in place.
+                        DropdownMenuItem(
+                            leadingIcon = if (app.prefs.sortSessionsByRecent)
+                                { { Icon(Icons.Default.Check, contentDescription = null) } } else null,
+                            text = { Text("Sort by recently used") },
+                            onClick = {
+                                app.prefs.sortSessionsByRecent = !app.prefs.sortSessionsByRecent
+                            },
+                        )
+                        HorizontalDivider()
                         Text(
                             "App theme",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         )
-                        val app = io.sshtogo.android.SshToGoApplication.instance
                         io.sshtogo.android.data.ThemeMode.entries.forEach { mode ->
                             DropdownMenuItem(
                                 leadingIcon = if (mode == app.prefs.themeMode)
@@ -171,6 +182,8 @@ private fun DashboardList(
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
 ) {
     val sessionsByHost = sessions.groupBy { it.host }
+    // Reading this state-backed pref here re-sorts the list when toggled.
+    val sortByRecent = SshToGoApplication.instance.prefs.sortSessionsByRecent
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -178,9 +191,13 @@ private fun DashboardList(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(hosts, key = { it.name }) { host ->
+            val hostSessions = sessionsByHost[host.name].orEmpty()
             HostCard(
                 host = host,
-                sessions = sessionsByHost[host.name].orEmpty(),
+                // Stable sort: most-recently-used first, ties keep server order.
+                sessions = if (sortByRecent)
+                    hostSessions.sortedByDescending { it.activityEpochMs }
+                else hostSessions,
                 onOpenSession = onOpenSession,
             )
         }
