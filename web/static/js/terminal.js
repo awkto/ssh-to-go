@@ -307,7 +307,10 @@ function initTerminal(host, session) {
         fontSize: savedFontSize,
         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
         rightClickSelectsWord: true,
-        scrollback: 5000,
+        // Server-configured scrollback depth (settings.scrollback_lines),
+        // sized to match the tmux history-limit so the deep prefill isn't
+        // truncated. Falls back to 5000 if the page didn't inject it.
+        scrollback: (window._scrollbackLines || 5000),
         theme: initialTheme,
     });
 

@@ -46,15 +46,24 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 
 // CreateSession creates a new detached tmux session on the remote host.
 // Sets window-size so multiple clients behave as configured (largest/smallest/latest).
-func (m *Manager) CreateSession(client *ssh.Client, name, windowSize, cwd string) error {
+// historyLimit (>0) is applied globally BEFORE new-session so the session's
+// first pane inherits the deeper scrollback — a pane's depth is fixed at
+// creation, so setting it afterwards wouldn't grow that pane.
+func (m *Manager) CreateSession(client *ssh.Client, name, windowSize, cwd string, historyLimit int) error {
 	if windowSize == "" {
 		windowSize = "largest"
 	}
+	// One tmux invocation; commands separated by tmux's own "\;". The
+	// history-limit set-option must come first so the new pane inherits it.
+	hist := ""
+	if historyLimit > 0 {
+		hist = fmt.Sprintf("set-option -g history-limit %d \\; ", historyLimit)
+	}
 	var cmd string
 	if cwd != "" {
-		cmd = fmt.Sprintf("tmux new-session -d -s %q -c %q \\; set-option -t %q window-size %s", name, cwd, name, windowSize)
+		cmd = fmt.Sprintf("tmux %snew-session -d -s %q -c %q \\; set-option -t %q window-size %s", hist, name, cwd, name, windowSize)
 	} else {
-		cmd = fmt.Sprintf("tmux new-session -d -s %q \\; set-option -t %q window-size %s", name, name, windowSize)
+		cmd = fmt.Sprintf("tmux %snew-session -d -s %q \\; set-option -t %q window-size %s", hist, name, name, windowSize)
 	}
 	_, err := sshutil.Exec(client, cmd)
 	if err != nil {

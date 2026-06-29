@@ -15,7 +15,16 @@ type Settings struct {
 	ShowPubKey      *bool  `json:"show_pub_key,omitempty"`
 	TabTitleFormat  string `json:"tab_title_format,omitempty"`
 	EnableMCP       bool   `json:"enable_mcp,omitempty"`
+	// ScrollbackLines is the tmux history-limit set on sessions ssh-to-go
+	// creates AND the browser emulator's scrollback target. 0 means "use
+	// DefaultScrollbackLines". It only affects newly-created tmux panes —
+	// tmux can't grow an existing pane's history buffer.
+	ScrollbackLines int `json:"scrollback_lines,omitempty"`
 }
+
+// DefaultScrollbackLines is the scrollback depth used when the setting is
+// unset. Large enough for deep history; bounded by validation in Update.
+const DefaultScrollbackLines = 50000
 
 type SettingsManager struct {
 	mu       sync.RWMutex
@@ -93,6 +102,12 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 			return fmt.Errorf("invalid tab_title_format %q", s.TabTitleFormat)
 		}
 	}
+	if s.ScrollbackLines != 0 {
+		if s.ScrollbackLines < 100 || s.ScrollbackLines > 1_000_000 {
+			return fmt.Errorf("invalid scrollback_lines %d: must be between 100 and 1000000", s.ScrollbackLines)
+		}
+		sm.settings.ScrollbackLines = s.ScrollbackLines
+	}
 
 	return sm.save()
 }
@@ -119,6 +134,17 @@ func (sm *SettingsManager) TmuxWindowSize() string {
 		return "largest"
 	}
 	return sm.settings.TmuxWindowSize
+}
+
+// ScrollbackLines returns the configured scrollback depth, or
+// DefaultScrollbackLines when unset.
+func (sm *SettingsManager) ScrollbackLines() int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if sm.settings.ScrollbackLines <= 0 {
+		return DefaultScrollbackLines
+	}
+	return sm.settings.ScrollbackLines
 }
 
 func (sm *SettingsManager) MCPEnabled() bool {
