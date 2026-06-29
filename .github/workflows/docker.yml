@@ -59,8 +59,12 @@ jobs:
           push: true
           platforms: ${{ steps.meta.outputs.platforms }}
           build-args: VERSION=${{ steps.meta.outputs.tag }}
+          # Rolling :beta tag lets a separate beta instance (Watchtower) auto-update
+          # on each beta tag. Crucially this step never touches :latest, so prod
+          # (which tracks :latest) is unaffected by beta pushes.
           tags: |
             awkto/ssh-to-go:${{ steps.meta.outputs.tag }}
+            awkto/ssh-to-go:beta
 
       - name: Build and push (release)
         if: steps.meta.outputs.is_beta == 'false'
