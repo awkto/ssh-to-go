@@ -170,7 +170,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	if err := h.Tmux.CreateSession(client, req.Name, h.Settings.TmuxWindowSize(), req.Cwd); err != nil {
+	if err := h.Tmux.CreateSession(client, req.Name, h.Settings.TmuxWindowSize(), req.Cwd, h.Settings.ScrollbackLines()); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -1090,7 +1090,7 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	if err := h.Tmux.CreateSession(client, createName, h.Settings.TmuxWindowSize(), entry.WorkingDir); err != nil {
+	if err := h.Tmux.CreateSession(client, createName, h.Settings.TmuxWindowSize(), entry.WorkingDir, h.Settings.ScrollbackLines()); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
 	}

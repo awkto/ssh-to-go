@@ -357,7 +357,7 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 			return toolError("SSH connect failed: " + err.Error())
 		}
 		defer client.Close()
-		if err := s.Tmux.CreateSession(client, sessionName, s.Settings.TmuxWindowSize(), cwd); err != nil {
+		if err := s.Tmux.CreateSession(client, sessionName, s.Settings.TmuxWindowSize(), cwd, s.Settings.ScrollbackLines()); err != nil {
 			return toolError("create session failed: " + err.Error())
 		}
 		return toolText(fmt.Sprintf("Session '%s' created on %s.", sessionName, host))

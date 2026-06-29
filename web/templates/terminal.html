@@ -251,6 +251,7 @@
     <script src="/static/js/terminal.js"></script>
     <script>
         window._tabTitleFormat = "{{.TabTitleFormat}}";
+        window._scrollbackLines = {{.ScrollbackLines}};
         initTerminal("{{.Host}}", "{{.Session}}");
 
         // Update favicon to match session/host icon

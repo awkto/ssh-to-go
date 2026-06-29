@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"golang.org/x/crypto/ssh"
 	"nhooyr.io/websocket"
 )
@@ -270,7 +271,7 @@ func tmuxQuote(s string) string {
 // relayControlMode bridges a WebSocket to a tmux session via control mode.
 // Mirrors RelayWithOptions' lifecycle (kick channel, close codes, teardown)
 // but speaks the -C line protocol instead of relaying a PTY byte stream.
-func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Client, sessionName, windowSize string) error {
+func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Client, sessionName, windowSize string, historyLimit int) error {
 	// No PTY: control mode is a line protocol over pipes. A PTY would add
 	// input echo and CRLF translation that corrupt parsing.
 	session, err := client.NewSession()
@@ -294,6 +295,19 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 
 	if windowSize == "" {
 		windowSize = "largest"
+	}
+
+	// Ensure the session exists with deep scrollback BEFORE attaching, so the
+	// control client's new-session -A just attaches to it. history-limit must
+	// be set in the SAME tmux invocation that creates the pane (a standalone
+	// `set -g` runs in a server that exits before the next command). If the
+	// session already exists this is a no-op. Best-effort; done outside the
+	// control stream so it can't disturb the connect-reply block ordering.
+	if historyLimit > 0 {
+		q := tmuxQuote(sessionName)
+		_, _ = sshutil.Exec(client, fmt.Sprintf(
+			`tmux has-session -t %s 2>/dev/null || tmux set-option -g history-limit %d \; new-session -d -s %s`,
+			q, historyLimit, q))
 	}
 
 	cmd := fmt.Sprintf(`exec tmux -C new-session -A -s %q`, sessionName)

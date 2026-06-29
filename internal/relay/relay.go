@@ -36,6 +36,11 @@ type Options struct {
 	// %output events. No screen repaints, so the browser emulator owns the
 	// scrollback with no duplicates or width clipping. See control.go.
 	Mode string
+
+	// HistoryLimit, when >0, is set globally on the tmux server before any
+	// session this relay creates, so new panes get deeper scrollback. tmux
+	// can't grow an existing pane's buffer, so this only helps fresh sessions.
+	HistoryLimit int
 }
 
 // Relay bridges a WebSocket connection to a tmux session over SSH.
@@ -57,7 +62,7 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	go sshutil.KeepAlive(client, 15_000_000_000, done) // 15s
 
 	if opts.Mode == "control" {
-		return relayControlMode(ctx, ws, client, sessionName, windowSize)
+		return relayControlMode(ctx, ws, client, sessionName, windowSize, opts.HistoryLimit)
 	}
 
 	// Default size, will be resized by first client message
@@ -98,20 +103,29 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	// over the wire BEFORE attaching, so the client's local emulator
 	// fills its scrollback with the real session history. tmux's attach
 	// then paints the live frame on top; the scrollback above it remains.
+	// Fold history-limit INTO the new-session invocations. A pane's scrollback
+	// depth is fixed at creation, and a standalone `tmux set -g history-limit`
+	// is useless here: with no session it starts a server that exits before
+	// the next command runs, so the pane is born in a fresh default server.
+	// Empty when HistoryLimit<=0.
+	histInline := ""
+	if opts.HistoryLimit > 0 {
+		histInline = fmt.Sprintf("set-option -g history-limit %d \\; ", opts.HistoryLimit)
+	}
 	var cmd string
 	if opts.Mouse == "off" {
 		cmd = fmt.Sprintf(
 			`printf '%%s\x00' "$(tty)"; `+
-				`tmux has-session -t %q 2>/dev/null || tmux new-session -d -s %q; `+
+				`tmux has-session -t %q 2>/dev/null || tmux %snew-session -d -s %q; `+
 				`tmux capture-pane -p -e -S -5000 -E -1 -t %q 2>/dev/null; `+
 				`printf '\x1b[0m'; `+
-				`exec tmux new-session -A -s %q \; set-option window-size %s`,
-			sessionName, sessionName, sessionName, sessionName, windowSize,
+				`exec tmux %snew-session -A -s %q \; set-option window-size %s`,
+			sessionName, histInline, sessionName, sessionName, histInline, sessionName, windowSize,
 		)
 	} else {
 		cmd = fmt.Sprintf(
-			`printf '%%s\x00' "$(tty)"; exec tmux %snew-session -A -s %q \; set-option window-size %s`,
-			mouseOpt, sessionName, windowSize,
+			`printf '%%s\x00' "$(tty)"; exec tmux %s%snew-session -A -s %q \; set-option window-size %s`,
+			histInline, mouseOpt, sessionName, windowSize,
 		)
 	}
 	if err := session.Start(cmd); err != nil {

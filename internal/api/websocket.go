@@ -40,7 +40,7 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 		r.Context(), ws,
 		hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg),
 		sessionName, h.Settings.TmuxWindowSize(),
-		relay.Options{Mouse: mouse, Mode: mode},
+		relay.Options{Mouse: mouse, Mode: mode, HistoryLimit: h.Settings.ScrollbackLines()},
 	)
 	if err != nil {
 		log.Printf("relay error: %v", err)
