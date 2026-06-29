@@ -307,7 +307,10 @@ function initTerminal(host, session) {
         fontSize: savedFontSize,
         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
         rightClickSelectsWord: true,
-        scrollback: 5000,
+        // Keep in sync with relay.HistoryLimit (internal/relay/relay.go): the
+        // control-mode relay can replay that many lines of tmux history, so the
+        // emulator must buffer at least as many to scroll all the way back.
+        scrollback: 50000,
         theme: initialTheme,
     });
 

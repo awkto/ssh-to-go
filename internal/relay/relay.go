@@ -21,6 +21,13 @@ type resizeMsg struct {
 	Rows int    `json:"rows"`
 }
 
+// HistoryLimit is the tmux scrollback depth (lines) ssh-to-go sets on sessions
+// it creates/attaches. tmux's default is only 2000, which is the ceiling on
+// what the control-mode relay can replay into the browser — so deep scrollback
+// requires raising it here. Kept in sync with the browser emulator's own
+// scrollback in web/static/js/terminal.js.
+const HistoryLimit = 50000
+
 // Options controls per-attach relay behavior.
 type Options struct {
 	// Mouse controls whether tmux mouse mode is enabled for this attach.
@@ -102,16 +109,17 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	if opts.Mouse == "off" {
 		cmd = fmt.Sprintf(
 			`printf '%%s\x00' "$(tty)"; `+
+				`tmux set-option -g history-limit %d 2>/dev/null; `+
 				`tmux has-session -t %q 2>/dev/null || tmux new-session -d -s %q; `+
 				`tmux capture-pane -p -e -S -5000 -E -1 -t %q 2>/dev/null; `+
 				`printf '\x1b[0m'; `+
 				`exec tmux new-session -A -s %q \; set-option window-size %s`,
-			sessionName, sessionName, sessionName, sessionName, windowSize,
+			HistoryLimit, sessionName, sessionName, sessionName, sessionName, windowSize,
 		)
 	} else {
 		cmd = fmt.Sprintf(
-			`printf '%%s\x00' "$(tty)"; exec tmux %snew-session -A -s %q \; set-option window-size %s`,
-			mouseOpt, sessionName, windowSize,
+			`printf '%%s\x00' "$(tty)"; tmux set-option -g history-limit %d 2>/dev/null; exec tmux %snew-session -A -s %q \; set-option window-size %s`,
+			HistoryLimit, mouseOpt, sessionName, windowSize,
 		)
 	}
 	if err := session.Start(cmd); err != nil {
