@@ -79,15 +79,29 @@ func (h *Handlers) missingFor(host hub.HostState) []sessionreg.Entry {
 	if len(tracked) == 0 {
 		return nil
 	}
+	// Compare by sanitized name. Sessions created/recreated through ssh-to-go
+	// are stored hyphenated (sanitizeSessionName), but a legacy or offloaded
+	// entry may still carry the original spaced name. Without normalizing, a
+	// live "Foo-Bar" and a tracked "Foo Bar" look distinct, so the same
+	// session shows up twice — once live, once as a phantom "missing" entry.
 	alive := make(map[string]struct{}, len(host.Sessions))
 	for _, s := range host.Sessions {
-		alive[s.Name] = struct{}{}
+		alive[sanitizeSessionName(s.Name)] = struct{}{}
 	}
 	var missing []sessionreg.Entry
+	seen := make(map[string]struct{}, len(tracked))
 	for _, e := range tracked {
-		if _, ok := alive[e.Name]; !ok {
-			missing = append(missing, e)
+		norm := sanitizeSessionName(e.Name)
+		if _, ok := alive[norm]; ok {
+			continue
 		}
+		// Collapse multiple tracked entries that normalize to the same name
+		// (e.g. a spaced legacy entry plus its sanitized recreation).
+		if _, dup := seen[norm]; dup {
+			continue
+		}
+		seen[norm] = struct{}{}
+		missing = append(missing, e)
 	}
 	return missing
 }
@@ -275,11 +289,17 @@ func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
+	// Registry is keyed by the sanitized name (the form Recreate/Create use),
+	// so an offloaded session round-trips to the same name instead of
+	// spawning a hyphenated duplicate. Live tmux ops below still use the real
+	// session name from the path.
+	regName := sanitizeSessionName(sessionName)
+
 	// If we're not yet tracking this session (it was created manually via
 	// tmux), claim it: discover its current working directory and write a
 	// registry entry. That way Offload works on any tmux session the user
 	// can see in the dashboard, not just ones spawned via this app.
-	if _, ok := h.Registry.Get(hostName, sessionName); !ok {
+	if _, ok := h.Registry.Get(hostName, regName); !ok {
 		cwd, cwdErr := h.Tmux.SessionCwd(client, sessionName)
 		if cwdErr != nil {
 			// Couldn't read cwd (session might not exist or have any panes).
@@ -287,8 +307,8 @@ func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
 			log.Printf("offload: get cwd %s/%s: %v", hostName, sessionName, cwdErr)
 			cwd = ""
 		}
-		if err := h.Registry.Add(hostName, sessionName, cwd); err != nil {
-			log.Printf("offload: registry add %s/%s: %v", hostName, sessionName, err)
+		if err := h.Registry.Add(hostName, regName, cwd); err != nil {
+			log.Printf("offload: registry add %s/%s: %v", hostName, regName, err)
 		}
 	}
 
@@ -1046,10 +1066,17 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Refuse if it's already alive on the host — nothing to recreate.
+	// The session is recreated under its sanitized name (the form Create
+	// uses), so a legacy spaced entry comes back as the canonical hyphenated
+	// session rather than spawning a second one.
+	createName := sanitizeSessionName(sessionName)
+
+	// Refuse if it's already alive on the host — nothing to recreate. Compare
+	// sanitized, since the live session may be hyphenated even when this
+	// tracked entry still carries the original spaced name.
 	if state, ok := h.Hub.GetHost(hostName); ok {
 		for _, s := range state.Sessions {
-			if s.Name == sessionName {
+			if sanitizeSessionName(s.Name) == createName {
 				http.Error(w, "session already exists", http.StatusConflict)
 				return
 			}
@@ -1063,20 +1090,24 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	if err := h.Tmux.CreateSession(client, sessionName, h.Settings.TmuxWindowSize(), entry.WorkingDir); err != nil {
+	if err := h.Tmux.CreateSession(client, createName, h.Settings.TmuxWindowSize(), entry.WorkingDir); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Refresh LastSeenAt; CreatedAt and WorkingDir are unchanged because
-	// Add() preserves them when the entry already exists.
-	if err := h.Registry.Add(hostName, sessionName, entry.WorkingDir); err != nil {
-		log.Printf("session registry touch %s/%s: %v", hostName, sessionName, err)
+	// Migrate a legacy spaced entry to its sanitized key so it stops
+	// appearing separately, then refresh LastSeenAt. Add() preserves
+	// CreatedAt and WorkingDir when the entry already exists.
+	if createName != sessionName {
+		_ = h.Registry.Remove(hostName, sessionName)
+	}
+	if err := h.Registry.Add(hostName, createName, entry.WorkingDir); err != nil {
+		log.Printf("session registry touch %s/%s: %v", hostName, createName, err)
 	}
 
 	writeJSON(w, map[string]string{
 		"status":      "recreated",
-		"name":        sessionName,
+		"name":        createName,
 		"working_dir": entry.WorkingDir,
 	})
 }
