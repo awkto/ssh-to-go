@@ -50,15 +50,11 @@ func (m *Manager) CreateSession(client *ssh.Client, name, windowSize, cwd string
 	if windowSize == "" {
 		windowSize = "largest"
 	}
-	// Raise history-limit GLOBALLY before new-session so the session's first
-	// pane inherits it (the pane's scrollback depth is fixed at creation, so
-	// setting it afterwards wouldn't grow that pane). This is the ceiling on
-	// what the control-mode relay's capture-pane can replay into the browser.
 	var cmd string
 	if cwd != "" {
-		cmd = fmt.Sprintf("tmux set-option -g history-limit %d \\; new-session -d -s %q -c %q \\; set-option -t %q window-size %s", relay.HistoryLimit, name, cwd, name, windowSize)
+		cmd = fmt.Sprintf("tmux new-session -d -s %q -c %q \\; set-option -t %q window-size %s", name, cwd, name, windowSize)
 	} else {
-		cmd = fmt.Sprintf("tmux set-option -g history-limit %d \\; new-session -d -s %q \\; set-option -t %q window-size %s", relay.HistoryLimit, name, name, windowSize)
+		cmd = fmt.Sprintf("tmux new-session -d -s %q \\; set-option -t %q window-size %s", name, name, windowSize)
 	}
 	_, err := sshutil.Exec(client, cmd)
 	if err != nil {

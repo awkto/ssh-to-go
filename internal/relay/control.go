@@ -343,12 +343,6 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	parser.pushCmd(cmdConnect)
 
 	sendCmd(cmdIgnore, fmt.Sprintf("set-option window-size %s", windowSize))
-	// Raise the global history-limit so any session newly created by the
-	// new-session -A above (and future panes) keeps deep scrollback. Sessions
-	// created via the dashboard already carry it from CreateSession; this
-	// covers the attach-or-create path. Set globally rather than on the
-	// command line so it doesn't displace the connect reply block.
-	sendCmd(cmdIgnore, fmt.Sprintf("set-option -g history-limit %d", HistoryLimit))
 	sendCmd(cmdMeta, fmt.Sprintf(`display-message -p -t %s "#{client_name},#{pane_id}"`, target))
 	sendCmd(cmdHistory, fmt.Sprintf("capture-pane -p -e -J -S - -E - -t %s", target))
 
