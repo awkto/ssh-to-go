@@ -398,6 +398,13 @@ function initTerminal(host, session) {
     // scrollback stays accurate. Add ?mode=legacy to the page URL to fall
     // back to the classic PTY attach pipeline for comparison.
     const relayMode = new URLSearchParams(location.search).get("mode") === "legacy" ? "" : "control";
+    // App/passthrough mode (spike): ?mouse=on passes through to the relay. With
+    // ?mode=legacy&mouse=on the relay does a plain PTY attach with NO alt-screen
+    // / mouse-tracking stripping, so xterm.js is a real terminal — the clean host
+    // for Claude Code's fullscreen (GPU/no-flicker) renderer, which owns the
+    // alt-screen and uses DECSET 2026 sync (which the stripper never touched).
+    // Defaults to "off" (today's scroll-first behaviour) — opt-in only.
+    const mouseParam = new URLSearchParams(location.search).get("mouse") === "on" ? "on" : "off";
 
     function connect() {
         const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -406,7 +413,7 @@ function initTerminal(host, session) {
         // sequences are stripped server-side. xterm.js then drives smooth
         // scrolling locally against its own scrollback instead of tmux's
         // row-quantised copy-mode wheel handler.
-        const url = `${proto}//${location.host}/ws/${encodeURIComponent(host)}/${encodeURIComponent(session)}?mouse=off${relayMode ? "&mode=" + relayMode : ""}`;
+        const url = `${proto}//${location.host}/ws/${encodeURIComponent(host)}/${encodeURIComponent(session)}?mouse=${mouseParam}${relayMode ? "&mode=" + relayMode : ""}`;
         const ws = new WebSocket(url);
         activeWs = ws;
         ws.binaryType = "arraybuffer";
