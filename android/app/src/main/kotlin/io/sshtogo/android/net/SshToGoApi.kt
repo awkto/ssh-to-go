@@ -2,7 +2,10 @@ package io.sshtogo.android.net
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Path
 
 @Serializable
 data class MeResponse(
@@ -28,6 +31,12 @@ interface SshToGoApi {
 
     @GET("api/sessions")
     suspend fun sessions(): List<HostSessionEntry>
+
+    // Create a new tmux session on a host. Mirrors the web UI's
+    // POST /api/hosts/{host}/sessions. The server sanitizes the name
+    // (spaces -> hyphens) and returns 409 if it already exists.
+    @POST("api/hosts/{host}/sessions")
+    suspend fun createSession(@Path("host") host: String, @Body req: CreateSessionRequest)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -86,6 +95,12 @@ data class TmuxSession(
     val activity: String = "",
     val attached: Boolean = false,
     @SerialName("attached_clients") val attachedClients: Int = 0,
+)
+
+@Serializable
+data class CreateSessionRequest(
+    val name: String,
+    val cwd: String = "",
 )
 
 @Serializable

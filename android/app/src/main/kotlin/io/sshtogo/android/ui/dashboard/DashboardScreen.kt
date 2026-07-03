@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -30,8 +31,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -168,6 +171,7 @@ fun DashboardScreen(
                     hosts = state.hosts,
                     sessions = state.sessions,
                     onOpenSession = onOpenSession,
+                    onCreateSession = { host, name, cwd, cb -> vm.createSession(host, name, cwd, cb) },
                 )
             }
         }
@@ -180,6 +184,7 @@ private fun DashboardList(
     hosts: List<HostState>,
     sessions: List<HostSession>,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
+    onCreateSession: (host: String, name: String, cwd: String, onResult: (String?) -> Unit) -> Unit,
 ) {
     val sessionsByHost = sessions.groupBy { it.host }
     // Reading this state-backed pref here re-sorts the list when toggled.
@@ -199,6 +204,7 @@ private fun DashboardList(
                     hostSessions.sortedByDescending { it.activityEpochMs }
                 else hostSessions,
                 onOpenSession = onOpenSession,
+                onCreateSession = onCreateSession,
             )
         }
     }
@@ -209,7 +215,62 @@ private fun HostCard(
     host: HostState,
     sessions: List<HostSession>,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
+    onCreateSession: (host: String, name: String, cwd: String, onResult: (String?) -> Unit) -> Unit,
 ) {
+    var showCreate by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var newCwd by remember { mutableStateOf("") }
+    var creating by remember { mutableStateOf(false) }
+    var createError by remember { mutableStateOf<String?>(null) }
+
+    if (showCreate) {
+        AlertDialog(
+            onDismissRequest = { if (!creating) showCreate = false },
+            title = { Text("New session on ${host.name}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it; createError = null },
+                        label = { Text("Session name") },
+                        singleLine = true,
+                        enabled = !creating,
+                    )
+                    OutlinedTextField(
+                        value = newCwd,
+                        onValueChange = { newCwd = it },
+                        label = { Text("Working directory (optional)") },
+                        singleLine = true,
+                        enabled = !creating,
+                    )
+                    createError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = newName.isNotBlank() && !creating,
+                    onClick = {
+                        creating = true
+                        createError = null
+                        onCreateSession(host.name, newName, newCwd) { err ->
+                            creating = false
+                            if (err == null) {
+                                showCreate = false; newName = ""; newCwd = ""
+                            } else {
+                                createError = err
+                            }
+                        }
+                    },
+                ) { Text(if (creating) "Creating…" else "Create") }
+            },
+            dismissButton = {
+                TextButton(enabled = !creating, onClick = { showCreate = false }) { Text("Cancel") }
+            },
+        )
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -219,6 +280,10 @@ private fun HostCard(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(start = 8.dp),
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = { newName = ""; newCwd = ""; createError = null; showCreate = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "New session on ${host.name}")
+                }
             }
             val subtitle = buildString {
                 if (host.user.isNotBlank()) append(host.user).append('@')

@@ -3,6 +3,7 @@ package io.sshtogo.android.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.sshtogo.android.data.ServerProfile
+import io.sshtogo.android.net.CreateSessionRequest
 import io.sshtogo.android.net.HostSession
 import io.sshtogo.android.net.HostState
 import io.sshtogo.android.net.SshToGoClient
@@ -38,6 +39,24 @@ class DashboardViewModel(private val profile: ServerProfile) : ViewModel() {
                 _state.value = DashboardState(loading = false, hosts = hosts, sessions = sessions)
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(loading = false, error = t.message ?: "Failed to load")
+            }
+        }
+    }
+
+    /**
+     * Create a new tmux session on [hostName]. Invokes [onResult] with null on
+     * success (and refreshes the list) or an error message on failure (e.g. a
+     * 409 when the name already exists).
+     */
+    fun createSession(hostName: String, name: String, cwd: String, onResult: (error: String?) -> Unit) {
+        viewModelScope.launch {
+            val api = SshToGoClient.forProfile(profile)
+            try {
+                api.createSession(hostName, CreateSessionRequest(name = name.trim(), cwd = cwd.trim()))
+                onResult(null)
+                refresh()
+            } catch (t: Throwable) {
+                onResult(t.message ?: "Failed to create session")
             }
         }
     }
