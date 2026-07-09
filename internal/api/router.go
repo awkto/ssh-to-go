@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/awkto/ssh-to-go/internal/auth"
+	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/mcp"
@@ -20,6 +21,7 @@ type RouterConfig struct {
 	SessionIcons *keystore.SessionIconStore
 	Registry     *sessionreg.Store
 	Auth         *auth.Manager
+	ExecJobs     *execjob.Store
 	StaticFS     http.FileSystem
 	ConfigPath   string
 	PollInterval time.Duration
@@ -37,6 +39,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 		SessionIcons: rc.SessionIcons,
 		Registry:     rc.Registry,
 		Auth:         rc.Auth,
+		ExecJobs:     rc.ExecJobs,
 		ConfigPath:   rc.ConfigPath,
 		PollInterval: rc.PollInterval,
 		PollResults:  rc.PollResults,
@@ -72,6 +75,14 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/clients", handlers.ListClients)
 	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/detach-clients", handlers.DetachClients)
 	mux.HandleFunc("POST /api/scan", handlers.ScanAll)
+
+	// One-off command execution (async jobs). Lets users and other apps —
+	// including LLM agents — run a shell command on a host and poll for
+	// status/exit code/output by id.
+	mux.HandleFunc("POST /api/exec", handlers.RunCommand)
+	mux.HandleFunc("GET /api/exec", handlers.ListExec)
+	mux.HandleFunc("GET /api/exec/{id}", handlers.GetExec)
+	mux.HandleFunc("GET /api/exec/{id}/output", handlers.GetExecOutput)
 	mux.HandleFunc("GET /api/pubkey", handlers.PubKey)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
 	mux.HandleFunc("GET /api/me", handlers.Me)
@@ -93,7 +104,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("PUT /api/session-icons/{host}/{session}", handlers.SetSessionIcon)
 
 	// MCP (Model Context Protocol)
-	mcpServer := mcp.NewServer(rc.Hub, rc.Tmux, rc.KeyStore, rc.Settings, rc.Auth, rc.Version)
+	mcpServer := mcp.NewServer(rc.Hub, rc.Tmux, rc.KeyStore, rc.Settings, rc.Auth, rc.ExecJobs, rc.Version)
 	mux.HandleFunc("GET /mcp/sse", mcpServer.HandleSSE)
 	mux.HandleFunc("POST /mcp/messages", mcpServer.HandleMessages)
 	mux.HandleFunc("GET /mcpdocs", mcpServer.HandleDocs)

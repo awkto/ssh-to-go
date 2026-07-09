@@ -77,6 +77,32 @@ See all tmux sessions across all your hosts at a glance.
 - First-run setup wizard
 - Optional auth bypass for trusted networks
 
+### Command Execution API
+Run a one-off shell command on a host and poll for the result by id — handy
+for scripts, other apps, and LLM agents that need quick access to an internal
+shell (e.g. curling an internal page, or running `claude -p "..."`
+non-interactively). The command runs in a throwaway, detached tmux session, so
+long tasks keep running after the request returns.
+
+```bash
+# Launch (host optional — falls back to the default/only host).
+# Returns { "id": "...", "status": "running", ... }
+curl -sX POST https://ssh.example/api/exec \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"command":"curl -s http://internal-service/health","timeout_seconds":30}'
+
+# Poll status + captured output (add ?output=false for status only).
+curl -s https://ssh.example/api/exec/<id> -H "Authorization: Bearer $TOKEN"
+# → { "status": "finished", "exit_code": 0, "output": "...", ... }
+
+# Or fetch just the raw output as text/plain.
+curl -s https://ssh.example/api/exec/<id>/output -H "Authorization: Bearer $TOKEN"
+```
+
+`status` is `running`, `finished`, or `gone` (job dir no longer on the host).
+Set a default host for host-less requests under **Settings → default host**
+(`default_host` in `settings.json`).
+
 ---
 
 ## Quick Start

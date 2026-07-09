@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/awkto/ssh-to-go/internal/auth"
+	"github.com/awkto/ssh-to-go/internal/config"
+	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
@@ -56,9 +58,9 @@ var tools = []Tool{
 		InputSchema: InputSchema{
 			Type: "object",
 			Properties: map[string]PropertySchema{
-				"host":    {Type: "string", Description: "Host name to create the session on"},
-				"name":    {Type: "string", Description: "Name for the new tmux session"},
-				"cwd":     {Type: "string", Description: "Optional working directory for the session"},
+				"host": {Type: "string", Description: "Host name to create the session on"},
+				"name": {Type: "string", Description: "Name for the new tmux session"},
+				"cwd":  {Type: "string", Description: "Optional working directory for the session"},
 			},
 			Required: []string{"host", "name"},
 		},
@@ -121,6 +123,31 @@ var tools = []Tool{
 		Description: "Check ssh-to-go service health and return host count and version.",
 		InputSchema: InputSchema{Type: "object", Properties: map[string]PropertySchema{}},
 	},
+	{
+		Name:        "run_command",
+		Description: "Run a one-off shell command on a host and return a job id immediately. The command runs in a throwaway detached tmux session, so long-running tasks (e.g. 'claude -p ...') keep running after this call returns. Use get_command with the returned id to poll status, exit code, and output.",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"command":         {Type: "string", Description: "Shell command to run (may be multi-line)"},
+				"host":            {Type: "string", Description: "Target host name. Optional — defaults to the configured default host, or the only host if just one is registered."},
+				"timeout_seconds": {Type: "number", Description: "Optional: kill the command after this many seconds (exit code 124 on timeout). 0 or omitted means no timeout."},
+			},
+			Required: []string{"command"},
+		},
+	},
+	{
+		Name:        "get_command",
+		Description: "Get the status, exit code, and captured output of a command launched with run_command. Status is 'running', 'finished', or 'gone' (job directory no longer on the host).",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"id":     {Type: "string", Description: "Job id returned by run_command"},
+				"output": {Type: "boolean", Description: "Include captured output (default true). Set false for status/exit code only."},
+			},
+			Required: []string{"id"},
+		},
+	},
 }
 
 // Session represents an active SSE connection.
@@ -137,6 +164,7 @@ type Server struct {
 	KeyStore *keystore.Store
 	Settings *keystore.SettingsManager
 	Auth     *auth.Manager
+	ExecJobs *execjob.Store
 	Version  string
 
 	mu       sync.Mutex
@@ -144,13 +172,14 @@ type Server struct {
 }
 
 func NewServer(h *hub.Hub, tm *tmux.Manager, ks *keystore.Store,
-	sm *keystore.SettingsManager, am *auth.Manager, version string) *Server {
+	sm *keystore.SettingsManager, am *auth.Manager, ej *execjob.Store, version string) *Server {
 	return &Server{
 		Hub:      h,
 		Tmux:     tm,
 		KeyStore: ks,
 		Settings: sm,
 		Auth:     am,
+		ExecJobs: ej,
 		Version:  version,
 		sessions: make(map[string]*Session),
 	}
@@ -275,8 +304,8 @@ func (s *Server) handleMessage(msg map[string]any) map[string]any {
 	case "initialize":
 		return jsonRPCResult(id, map[string]any{
 			"protocolVersion": "2024-11-05",
-			"capabilities":   map[string]any{"tools": map[string]any{"listChanged": false}},
-			"serverInfo":     map[string]any{"name": "ssh-to-go-mcp", "version": "1.0.0"},
+			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+			"serverInfo":      map[string]any{"name": "ssh-to-go-mcp", "version": "1.0.0"},
 		})
 
 	case "notifications/initialized":
@@ -475,9 +504,108 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 			"version": s.Version, "hosts": len(hosts), "hosts_online": online,
 		}, false)
 
+	case "run_command":
+		command, _ := args["command"].(string)
+		if command == "" {
+			return toolError("command is required")
+		}
+		if s.ExecJobs == nil {
+			return toolError("exec is not available")
+		}
+		hostArg, _ := args["host"].(string)
+		hostCfg, errMsg := s.resolveExecHost(hostArg)
+		if errMsg != "" {
+			return toolError(errMsg)
+		}
+		timeoutSecs := 0
+		if v, ok := args["timeout_seconds"].(float64); ok && v > 0 {
+			timeoutSecs = int(v)
+		}
+		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
+		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
+		if err != nil {
+			return toolError("SSH connect failed: " + err.Error())
+		}
+		defer client.Close()
+		id := execjob.NewID()
+		if _, err := sshutil.Exec(client, execjob.StartScript(id, command, timeoutSecs)); err != nil {
+			return toolError("launch failed: " + err.Error())
+		}
+		s.ExecJobs.Add(&execjob.Job{
+			ID: id, Host: hostCfg.Name, Command: command,
+			Session: execjob.SessionName(id), CreatedAt: time.Now(),
+		})
+		return toolResult(map[string]any{
+			"id": id, "host": hostCfg.Name, "status": string(execjob.StatusRunning),
+		}, false)
+
+	case "get_command":
+		id, _ := args["id"].(string)
+		if id == "" {
+			return toolError("id is required")
+		}
+		if s.ExecJobs == nil {
+			return toolError("exec is not available")
+		}
+		job, ok := s.ExecJobs.Get(id)
+		if !ok {
+			return toolError("job not found: " + id)
+		}
+		includeOutput := true
+		if v, ok := args["output"].(bool); ok {
+			includeOutput = v
+		}
+		hostCfg, ok := s.Hub.GetHostConfig(job.Host)
+		if !ok {
+			return toolError("host not found: " + job.Host)
+		}
+		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
+		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
+		if err != nil {
+			return toolError("SSH connect failed: " + err.Error())
+		}
+		defer client.Close()
+		statusOut, err := sshutil.Exec(client, execjob.StatusScript(id))
+		if err != nil {
+			return toolError("status query failed: " + err.Error())
+		}
+		res := execjob.ParseStatus(statusOut)
+		result := map[string]any{"id": id, "host": job.Host, "status": string(res.Status)}
+		if res.ExitCode != nil {
+			result["exit_code"] = *res.ExitCode
+		}
+		if includeOutput && res.Status != execjob.StatusGone {
+			output, _ := sshutil.Exec(client, execjob.OutputScript(id))
+			result["output"] = output
+		}
+		return toolResult(result, false)
+
 	default:
 		return toolError("Unknown tool: " + name)
 	}
+}
+
+// resolveExecHost mirrors the REST API's host resolution for the exec tools:
+// explicit name, else the configured default host, else the sole host.
+func (s *Server) resolveExecHost(name string) (config.Host, string) {
+	if name == "" {
+		name = s.Settings.DefaultHost()
+	}
+	if name == "" {
+		hosts := s.Hub.AllHosts()
+		if len(hosts) == 1 {
+			name = hosts[0].Config.Name
+		} else if len(hosts) == 0 {
+			return config.Host{}, "no hosts are configured"
+		} else {
+			return config.Host{}, "no host specified and no default host configured; pass \"host\""
+		}
+	}
+	cfg, ok := s.Hub.GetHostConfig(name)
+	if !ok {
+		return config.Host{}, "host not found: " + name
+	}
+	return cfg, ""
 }
 
 // HandleDocs serves GET /mcpdocs — tool documentation page.

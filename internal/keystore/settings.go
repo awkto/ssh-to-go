@@ -15,6 +15,10 @@ type Settings struct {
 	ShowPubKey      *bool  `json:"show_pub_key,omitempty"`
 	TabTitleFormat  string `json:"tab_title_format,omitempty"`
 	EnableMCP       bool   `json:"enable_mcp,omitempty"`
+	// DefaultHost is the host used by the one-off command exec API when a
+	// request omits "host". Empty means "no default" — exec then falls back
+	// to the sole host when exactly one is configured.
+	DefaultHost string `json:"default_host,omitempty"`
 	// ScrollbackLines is the tmux history-limit set on sessions ssh-to-go
 	// creates AND the browser emulator's scrollback target. 0 means "use
 	// DefaultScrollbackLines". It only affects newly-created tmux panes —
@@ -83,6 +87,7 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 		sm.settings.DefaultKeypair = s.DefaultKeypair
 	}
 	sm.settings.DefaultUsername = s.DefaultUsername
+	sm.settings.DefaultHost = s.DefaultHost
 	if s.TmuxWindowSize != "" {
 		switch s.TmuxWindowSize {
 		case "largest", "smallest", "latest":
@@ -145,6 +150,13 @@ func (sm *SettingsManager) ScrollbackLines() int {
 		return DefaultScrollbackLines
 	}
 	return sm.settings.ScrollbackLines
+}
+
+// DefaultHost returns the configured default host for the exec API, or "".
+func (sm *SettingsManager) DefaultHost() string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.settings.DefaultHost
 }
 
 func (sm *SettingsManager) MCPEnabled() bool {

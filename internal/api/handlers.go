@@ -10,6 +10,7 @@ import (
 
 	"github.com/awkto/ssh-to-go/internal/auth"
 	"github.com/awkto/ssh-to-go/internal/config"
+	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
@@ -25,6 +26,7 @@ type Handlers struct {
 	SessionIcons *keystore.SessionIconStore
 	Registry     *sessionreg.Store
 	Auth         *auth.Manager
+	ExecJobs     *execjob.Store
 	ConfigPath   string
 	PollInterval time.Duration
 	PollResults  chan<- tmux.PollResult

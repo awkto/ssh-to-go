@@ -13,6 +13,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/api"
 	"github.com/awkto/ssh-to-go/internal/auth"
 	"github.com/awkto/ssh-to-go/internal/config"
+	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
@@ -62,6 +63,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("session registry: %v", err)
 	}
+
+	// In-memory index for one-off exec jobs launched via /api/exec.
+	execJobs := execjob.NewStore()
 
 	// Initialize auth
 	noAuth := os.Getenv("SSH_TO_GO_NO_AUTH") == "1"
@@ -149,6 +153,7 @@ func main() {
 		SessionIcons: sis,
 		Registry:     reg,
 		Auth:         am,
+		ExecJobs:     execJobs,
 		StaticFS:     http.FS(staticSub),
 		ConfigPath:   *configPath,
 		PollInterval: cfg.PollInterval,

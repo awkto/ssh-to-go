@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/relay"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"golang.org/x/crypto/ssh"
@@ -41,7 +42,18 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 		}
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
-	return ParseSessions(out), nil
+	// Hide throwaway sessions created by the exec API: their pane output is
+	// redirected to a file (nothing to attach to) and they'd only clutter
+	// the dashboard's session/MRU list.
+	all := ParseSessions(out)
+	filtered := all[:0]
+	for _, s := range all {
+		if strings.HasPrefix(s.Name, execjob.SessionPrefix) {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	return filtered, nil
 }
 
 // CreateSession creates a new detached tmux session on the remote host.
