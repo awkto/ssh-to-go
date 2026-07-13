@@ -83,6 +83,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("GET /api/exec", handlers.ListExec)
 	mux.HandleFunc("GET /api/exec/{id}", handlers.GetExec)
 	mux.HandleFunc("GET /api/exec/{id}/output", handlers.GetExecOutput)
+	mux.HandleFunc("DELETE /api/exec/{id}", handlers.KillExec)
 	mux.HandleFunc("GET /api/pubkey", handlers.PubKey)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
 	mux.HandleFunc("GET /api/me", handlers.Me)

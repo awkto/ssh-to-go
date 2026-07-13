@@ -32,6 +32,10 @@ const (
 	StatusRunning Status = "running"
 	// StatusFinished: the session ended and an exit code was recorded.
 	StatusFinished Status = "finished"
+	// StatusCrashed: the runner died without recording an exit code (tmux
+	// server restart, OOM kill, host reboot mid-job). Reported with exit
+	// code -1 so a crash can never be mistaken for success.
+	StatusCrashed Status = "crashed"
 	// StatusGone: the job directory no longer exists on the host (host
 	// rebooted, /tmp-style cleanup, or never created). Output is lost.
 	StatusGone Status = "gone"

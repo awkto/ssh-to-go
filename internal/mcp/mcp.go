@@ -125,25 +125,56 @@ var tools = []Tool{
 	},
 	{
 		Name:        "run_command",
-		Description: "Run a one-off shell command on a host and return a job id immediately. The command runs in a throwaway detached tmux session, so long-running tasks (e.g. 'claude -p ...') keep running after this call returns. Use get_command with the returned id to poll status, exit code, and output.",
+		Description: "Run a one-off shell command on a host in a throwaway detached tmux session. Runs non-interactively (no shell profile, stdin from /dev/null unless 'stdin' is given), so long tasks (e.g. 'claude -p ...') keep running after this call returns. Pass wait_seconds to get short commands' full result (exit code + output) in this single call; otherwise poll with get_command using the returned job id.",
 		InputSchema: InputSchema{
 			Type: "object",
 			Properties: map[string]PropertySchema{
 				"command":         {Type: "string", Description: "Shell command to run (may be multi-line)"},
 				"host":            {Type: "string", Description: "Target host name. Optional — defaults to the configured default host, or the only host if just one is registered."},
-				"timeout_seconds": {Type: "number", Description: "Optional: kill the command after this many seconds (exit code 124 on timeout). 0 or omitted means no timeout."},
+				"timeout_seconds": {Type: "number", Description: "Kill the command after this many seconds (exit code 124, SIGKILL escalation after 10s). Default 3600. An explicit 0 disables the timeout — dangerous, the job can run forever."},
+				"cwd":             {Type: "string", Description: "Working directory for the command. Default $HOME. Fails the launch if it doesn't exist."},
+				"env":             {Type: "object", Description: "Extra environment variables (string values) exported before the command runs. Stored in a 0600 file on the host, never inlined into the command string — use this for tokens instead of interpolating them."},
+				"stdin":           {Type: "string", Description: "Text fed to the command's standard input. Omitted → /dev/null (prompting commands get EOF instead of hanging)."},
+				"wait_seconds":    {Type: "number", Description: "Long-poll server-side up to this many seconds (max 60). If the job finishes in time, the full result is returned in this call; otherwise you get the async {id, status: running} shape."},
 			},
 			Required: []string{"command"},
 		},
 	},
 	{
 		Name:        "get_command",
-		Description: "Get the status, exit code, and captured output of a command launched with run_command. Status is 'running', 'finished', or 'gone' (job directory no longer on the host).",
+		Description: "Get the status, exit code, and captured output of a command launched with run_command. Status is 'running', 'finished' (always with exit_code), 'crashed' (runner died without recording an exit code; exit_code -1), or 'gone' (job directory no longer on the host). Output is returned as separate stdout/stderr, capped at 256KB per stream by default with total sizes and a truncated flag.",
 		InputSchema: InputSchema{
 			Type: "object",
 			Properties: map[string]PropertySchema{
-				"id":     {Type: "string", Description: "Job id returned by run_command"},
-				"output": {Type: "boolean", Description: "Include captured output (default true). Set false for status/exit code only."},
+				"id":               {Type: "string", Description: "Job id returned by run_command"},
+				"output":           {Type: "boolean", Description: "Include captured output (default true). Set false for status/exit code only."},
+				"tail_lines":       {Type: "number", Description: "Return only the last N lines of each stream."},
+				"max_output_bytes": {Type: "number", Description: "Cap each returned stream at this many bytes (default 262144, max 4194304). The tail of the stream is kept."},
+				"wait_seconds":     {Type: "number", Description: "Long-poll up to this many seconds (max 60) for the job to reach a terminal state before responding."},
+			},
+			Required: []string{"id"},
+		},
+	},
+	{
+		Name:        "list_commands",
+		Description: "List exec jobs on a host by scanning its job directory — includes jobs launched by other clients or forgotten after a server restart. Returns id, status, exit code, output sizes, start time, and a command preview.",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"host":   {Type: "string", Description: "Host to scan. Optional — defaults like run_command."},
+				"status": {Type: "string", Description: "Filter: 'running', 'finished', or 'crashed'. Omit for all."},
+				"limit":  {Type: "number", Description: "Max jobs to return (default 20), newest first."},
+			},
+		},
+	},
+	{
+		Name:        "kill_command",
+		Description: "Stop a running exec job by signalling its process group (SIGTERM). The job resolves to a terminal state with a real exit code. Set force=true to escalate to SIGKILL after a short grace period.",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"id":    {Type: "string", Description: "Job id returned by run_command"},
+				"force": {Type: "boolean", Description: "Escalate to SIGKILL if the process ignores SIGTERM."},
 			},
 			Required: []string{"id"},
 		},
@@ -305,7 +336,7 @@ func (s *Server) handleMessage(msg map[string]any) map[string]any {
 		return jsonRPCResult(id, map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
-			"serverInfo":      map[string]any{"name": "ssh-to-go-mcp", "version": "1.0.0"},
+			"serverInfo":      map[string]any{"name": "ssh-to-go-mcp", "version": s.Version},
 		})
 
 	case "notifications/initialized":
@@ -317,7 +348,7 @@ func (s *Server) handleMessage(msg map[string]any) map[string]any {
 	case "tools/call":
 		name, _ := params["name"].(string)
 		args, _ := params["arguments"].(map[string]any)
-		result := s.callTool(name, args)
+		result := s.callToolSafe(name, args)
 		return jsonRPCResult(id, result)
 
 	case "ping":
@@ -333,6 +364,19 @@ func (s *Server) handleMessage(msg map[string]any) map[string]any {
 			"error":   map[string]any{"code": -32601, "message": "Method not found: " + method},
 		}
 	}
+}
+
+// callToolSafe wraps callTool with panic recovery so a bug in one tool
+// surfaces as a structured, logged error instead of an opaque transport
+// failure at the client.
+func (s *Server) callToolSafe(name string, args map[string]any) (result map[string]any) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("MCP tool %s panicked: %v", name, r)
+			result = toolFail("INTERNAL", fmt.Sprintf("internal error in %s: %v", name, r), true, nil)
+		}
+	}()
+	return s.callTool(name, args)
 }
 
 func (s *Server) callTool(name string, args map[string]any) map[string]any {
@@ -383,7 +427,8 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
 		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
 		if err != nil {
-			return toolError("SSH connect failed: " + err.Error())
+			return toolFail("HOST_UNREACHABLE", "SSH connect failed: "+err.Error(), true,
+				map[string]any{"host": host})
 		}
 		defer client.Close()
 		if err := s.Tmux.CreateSession(client, sessionName, s.Settings.TmuxWindowSize(), cwd, s.Settings.ScrollbackLines()); err != nil {
@@ -404,7 +449,8 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
 		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
 		if err != nil {
-			return toolError("SSH connect failed: " + err.Error())
+			return toolFail("HOST_UNREACHABLE", "SSH connect failed: "+err.Error(), true,
+				map[string]any{"host": host})
 		}
 		defer client.Close()
 		if err := s.Tmux.KillSession(client, session); err != nil {
@@ -426,7 +472,8 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
 		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
 		if err != nil {
-			return toolError("SSH connect failed: " + err.Error())
+			return toolFail("HOST_UNREACHABLE", "SSH connect failed: "+err.Error(), true,
+				map[string]any{"host": host})
 		}
 		defer client.Close()
 		if err := s.Tmux.RenameSession(client, session, newName); err != nil {
@@ -447,7 +494,8 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
 		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
 		if err != nil {
-			return toolError("SSH connect failed: " + err.Error())
+			return toolFail("HOST_UNREACHABLE", "SSH connect failed: "+err.Error(), true,
+				map[string]any{"host": host})
 		}
 		defer client.Close()
 		detached, err := s.Tmux.DetachClients(client, session, "")
@@ -507,34 +555,56 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 	case "run_command":
 		command, _ := args["command"].(string)
 		if command == "" {
-			return toolError("command is required")
+			return toolFail("BAD_REQUEST", "command is required", false, nil)
 		}
 		if s.ExecJobs == nil {
-			return toolError("exec is not available")
+			return toolFail("EXEC_UNAVAILABLE", "exec is not available", false, nil)
 		}
 		hostArg, _ := args["host"].(string)
 		hostCfg, errMsg := s.resolveExecHost(hostArg)
 		if errMsg != "" {
-			return toolError(errMsg)
+			return toolFail("HOST_NOT_FOUND", errMsg, false, nil)
 		}
-		timeoutSecs := 0
-		if v, ok := args["timeout_seconds"].(float64); ok && v > 0 {
-			timeoutSecs = int(v)
+		spec := execjob.RunSpec{Command: command, TimeoutSecs: execjob.DefaultTimeoutSecs}
+		if v, ok := args["timeout_seconds"].(float64); ok && v >= 0 {
+			spec.TimeoutSecs = int(v)
 		}
-		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
-		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
-		if err != nil {
-			return toolError("SSH connect failed: " + err.Error())
+		spec.Cwd, _ = args["cwd"].(string)
+		if envArg, ok := args["env"].(map[string]any); ok && len(envArg) > 0 {
+			spec.Env = make(map[string]string, len(envArg))
+			for k, v := range envArg {
+				sv, ok := v.(string)
+				if !ok {
+					return toolFail("BAD_REQUEST", fmt.Sprintf("env value for %q must be a string", k), false, nil)
+				}
+				spec.Env[k] = sv
+			}
 		}
-		defer client.Close()
+		if v, ok := args["stdin"].(string); ok {
+			spec.Stdin = &v
+		}
+		run, closer, fail := s.execerForHost(hostCfg)
+		if fail != nil {
+			return fail
+		}
+		defer closer()
 		id := execjob.NewID()
-		if _, err := sshutil.Exec(client, execjob.StartScript(id, command, timeoutSecs)); err != nil {
-			return toolError("launch failed: " + err.Error())
+		if err := execjob.Launch(run, id, spec); err != nil {
+			return toolFail("EXEC_LAUNCH_FAILED", "launch failed: "+err.Error(), false,
+				map[string]any{"host": hostCfg.Name})
 		}
 		s.ExecJobs.Add(&execjob.Job{
 			ID: id, Host: hostCfg.Name, Command: command,
 			Session: execjob.SessionName(id), CreatedAt: time.Now(),
 		})
+		if w, ok := args["wait_seconds"].(float64); ok && w > 0 {
+			res, err := execjob.PollStatus(run, id, time.Duration(w)*time.Second)
+			if err == nil && res.Terminal() {
+				return s.execResult(run, id, hostCfg.Name, res, true, execjob.OutputOpts{})
+			}
+			// Still running (or transient poll error): fall through to the
+			// async shape and let the caller poll with get_command.
+		}
 		return toolResult(map[string]any{
 			"id": id, "host": hostCfg.Name, "status": string(execjob.StatusRunning),
 		}, false)
@@ -542,47 +612,161 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 	case "get_command":
 		id, _ := args["id"].(string)
 		if id == "" {
-			return toolError("id is required")
+			return toolFail("BAD_REQUEST", "id is required", false, nil)
 		}
 		if s.ExecJobs == nil {
-			return toolError("exec is not available")
+			return toolFail("EXEC_UNAVAILABLE", "exec is not available", false, nil)
 		}
 		job, ok := s.ExecJobs.Get(id)
 		if !ok {
-			return toolError("job not found: " + id)
+			return toolFail("JOB_NOT_FOUND", "job not found: "+id, false,
+				map[string]any{"hint": "job ids don't survive a server restart; use list_commands to find jobs still on the host"})
 		}
 		includeOutput := true
 		if v, ok := args["output"].(bool); ok {
 			includeOutput = v
 		}
+		opts := execjob.OutputOpts{}
+		if v, ok := args["tail_lines"].(float64); ok && v > 0 {
+			opts.TailLines = int(v)
+		}
+		if v, ok := args["max_output_bytes"].(float64); ok && v > 0 {
+			opts.MaxBytes = int(v)
+		}
 		hostCfg, ok := s.Hub.GetHostConfig(job.Host)
 		if !ok {
-			return toolError("host not found: " + job.Host)
+			return toolFail("HOST_NOT_FOUND", "host not found: "+job.Host, false, nil)
 		}
-		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
-		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
+		run, closer, fail := s.execerForHost(hostCfg)
+		if fail != nil {
+			return fail
+		}
+		defer closer()
+		wait := time.Duration(0)
+		if v, ok := args["wait_seconds"].(float64); ok && v > 0 {
+			wait = time.Duration(v) * time.Second
+		}
+		res, err := execjob.PollStatus(run, id, wait)
 		if err != nil {
-			return toolError("SSH connect failed: " + err.Error())
+			return toolFail("STATUS_QUERY_FAILED", "status query failed: "+err.Error(), true,
+				map[string]any{"host": job.Host})
 		}
-		defer client.Close()
-		statusOut, err := sshutil.Exec(client, execjob.StatusScript(id))
+		return s.execResult(run, id, job.Host, res, includeOutput, opts)
+
+	case "list_commands":
+		if s.ExecJobs == nil {
+			return toolFail("EXEC_UNAVAILABLE", "exec is not available", false, nil)
+		}
+		hostArg, _ := args["host"].(string)
+		hostCfg, errMsg := s.resolveExecHost(hostArg)
+		if errMsg != "" {
+			return toolFail("HOST_NOT_FOUND", errMsg, false, nil)
+		}
+		run, closer, fail := s.execerForHost(hostCfg)
+		if fail != nil {
+			return fail
+		}
+		defer closer()
+		jobs, err := execjob.ListRemote(run)
 		if err != nil {
-			return toolError("status query failed: " + err.Error())
+			return toolFail("LIST_FAILED", "list failed: "+err.Error(), true,
+				map[string]any{"host": hostCfg.Name})
 		}
-		res := execjob.ParseStatus(statusOut)
-		result := map[string]any{"id": id, "host": job.Host, "status": string(res.Status)}
-		if res.ExitCode != nil {
-			result["exit_code"] = *res.ExitCode
+		if statusFilter, _ := args["status"].(string); statusFilter != "" {
+			filtered := jobs[:0]
+			for _, j := range jobs {
+				if string(j.Status) == statusFilter {
+					filtered = append(filtered, j)
+				}
+			}
+			jobs = filtered
 		}
-		if includeOutput && res.Status != execjob.StatusGone {
-			output, _ := sshutil.Exec(client, execjob.OutputScript(id))
-			result["output"] = output
+		limit := 20
+		if v, ok := args["limit"].(float64); ok && v > 0 {
+			limit = int(v)
 		}
-		return toolResult(result, false)
+		total := len(jobs)
+		if len(jobs) > limit {
+			jobs = jobs[:limit]
+		}
+		if jobs == nil {
+			jobs = []execjob.RemoteJob{}
+		}
+		return toolResult(map[string]any{
+			"host": hostCfg.Name, "total": total, "jobs": jobs,
+		}, false)
+
+	case "kill_command":
+		id, _ := args["id"].(string)
+		if id == "" {
+			return toolFail("BAD_REQUEST", "id is required", false, nil)
+		}
+		if s.ExecJobs == nil {
+			return toolFail("EXEC_UNAVAILABLE", "exec is not available", false, nil)
+		}
+		job, ok := s.ExecJobs.Get(id)
+		if !ok {
+			return toolFail("JOB_NOT_FOUND", "job not found: "+id, false, nil)
+		}
+		hostCfg, ok := s.Hub.GetHostConfig(job.Host)
+		if !ok {
+			return toolFail("HOST_NOT_FOUND", "host not found: "+job.Host, false, nil)
+		}
+		run, closer, fail := s.execerForHost(hostCfg)
+		if fail != nil {
+			return fail
+		}
+		defer closer()
+		force, _ := args["force"].(bool)
+		result, err := execjob.Kill(run, id, force)
+		if err != nil {
+			return toolFail("KILL_FAILED", "kill failed: "+err.Error(), true,
+				map[string]any{"host": job.Host})
+		}
+		return toolResult(map[string]any{"id": id, "host": job.Host, "result": result}, false)
 
 	default:
-		return toolError("Unknown tool: " + name)
+		return toolFail("UNKNOWN_TOOL", "Unknown tool: "+name, false, nil)
 	}
+}
+
+// execerForHost dials the host and wraps the SSH client as an
+// execjob.Execer. On failure it returns a ready-made structured tool error.
+func (s *Server) execerForHost(hostCfg config.Host) (execjob.Execer, func(), map[string]any) {
+	keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
+	client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
+	if err != nil {
+		return nil, nil, toolFail("HOST_UNREACHABLE", "SSH connect failed: "+err.Error(), true,
+			map[string]any{"host": hostCfg.Name})
+	}
+	run := func(script string) (string, error) { return sshutil.Exec(client, script) }
+	return run, func() { client.Close() }, nil
+}
+
+// execResult renders a job's status (and optionally a bounded slice of its
+// output) as a tool result.
+func (s *Server) execResult(run execjob.Execer, id, host string,
+	res execjob.StatusResult, includeOutput bool, opts execjob.OutputOpts) map[string]any {
+
+	result := map[string]any{"id": id, "host": host, "status": string(res.Status)}
+	if res.ExitCode != nil {
+		result["exit_code"] = *res.ExitCode
+	}
+	if includeOutput && res.Status != execjob.StatusGone {
+		out, err := execjob.FetchOutput(run, id, opts)
+		if err != nil {
+			return toolFail("OUTPUT_FETCH_FAILED", "output fetch failed: "+err.Error(), true,
+				map[string]any{"host": host, "id": id, "status": string(res.Status)})
+		}
+		result["stdout"] = out.Stdout
+		result["stderr"] = out.Stderr
+		result["stdout_bytes"] = out.StdoutBytes
+		result["stderr_bytes"] = out.StderrBytes
+		if out.Truncated() {
+			result["truncated"] = true
+		}
+	}
+	return toolResult(result, false)
 }
 
 // resolveExecHost mirrors the REST API's host resolution for the exec tools:
@@ -660,6 +844,22 @@ func toolText(msg string) map[string]any {
 func toolError(msg string) map[string]any {
 	return map[string]any{
 		"content": []map[string]any{{"type": "text", "text": msg}},
+		"isError": true,
+	}
+}
+
+// toolFail returns a structured error payload. The retryable flag is the
+// single most useful field for an agent consumer: it distinguishes
+// "transient, try again" (SSH dial timeout, host briefly offline) from
+// "broken, stop" (unknown host, bad arguments).
+func toolFail(code, msg string, retryable bool, extra map[string]any) map[string]any {
+	payload := map[string]any{"error": msg, "code": code, "retryable": retryable}
+	for k, v := range extra {
+		payload[k] = v
+	}
+	text, _ := json.MarshalIndent(payload, "", "  ")
+	return map[string]any{
+		"content": []map[string]any{{"type": "text", "text": string(text)}},
 		"isError": true,
 	}
 }

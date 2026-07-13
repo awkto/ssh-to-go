@@ -86,22 +86,65 @@ long tasks keep running after the request returns.
 
 ```bash
 # Launch (host optional — falls back to the default/only host).
-# Returns { "id": "...", "status": "running", ... }
+# wait_seconds long-polls: short commands return their full result in one call.
 curl -sX POST https://ssh.example/api/exec \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"command":"curl -s http://internal-service/health","timeout_seconds":30}'
+  -d '{"command":"curl -s http://internal-service/health","timeout_seconds":30,"wait_seconds":10}'
+# → { "status": "finished", "exit_code": 0, "stdout": "...", "stderr": "", ... }
 
-# Poll status + captured output (add ?output=false for status only).
-curl -s https://ssh.example/api/exec/<id> -H "Authorization: Bearer $TOKEN"
-# → { "status": "finished", "exit_code": 0, "output": "...", ... }
+# Long jobs return 202 { "id": "...", "status": "running" } — poll by id.
+# Query params: output=false, tail_lines=N, max_output_bytes=N, wait_seconds=N.
+curl -s "https://ssh.example/api/exec/<id>?tail_lines=50" -H "Authorization: Bearer $TOKEN"
 
-# Or fetch just the raw output as text/plain.
-curl -s https://ssh.example/api/exec/<id>/output -H "Authorization: Bearer $TOKEN"
+# Raw output as text/plain (stream=out|err).
+curl -s "https://ssh.example/api/exec/<id>/output?stream=err" -H "Authorization: Bearer $TOKEN"
+
+# Stop a running job (its process group gets SIGTERM; ?force=true adds SIGKILL).
+curl -sX DELETE "https://ssh.example/api/exec/<id>" -H "Authorization: Bearer $TOKEN"
+
+# List jobs. ?remote=true scans the host's job dir (survives server restarts).
+curl -s "https://ssh.example/api/exec?remote=true" -H "Authorization: Bearer $TOKEN"
 ```
 
-`status` is `running`, `finished`, or `gone` (job dir no longer on the host).
+Launch options: `host`, `timeout_seconds` (default 3600, exit 124 on expiry
+with SIGKILL escalation; an explicit `0` disables the timeout), `cwd`
+(validated, launch fails if missing), `env` (object; written to a private file
+on the host, never inlined into the command — use it for tokens), `stdin`
+(string; otherwise stdin is `/dev/null`), `wait_seconds` (max 60).
+
+`status` is `running`, `finished` (always with `exit_code`), `crashed` (the
+runner died without recording an exit code — reported as `exit_code: -1`, never
+as success), or `gone` (job dir no longer on the host). Output is returned as
+separate `stdout`/`stderr`, capped at 256 KB per stream by default, with
+`stdout_bytes`/`stderr_bytes` totals and a `truncated` flag.
+
 Set a default host for host-less requests under **Settings → default host**
 (`default_host` in `settings.json`).
+
+#### Job execution environment (the contract)
+
+Jobs run in a deliberately minimal, non-interactive environment — closer to a
+CI runner than to your login shell:
+
+- **Shell:** `bash`, non-interactive. No `~/.bashrc`, `~/.profile`, or
+  `~/.bash_profile` is sourced, so aliases, functions, and env vars from your
+  profile (e.g. `ANTHROPIC_API_KEY`) are **not** present. Pass what you need
+  via `env`.
+- **PATH:** the system default plus `$HOME/.local/bin` and `$HOME/bin`
+  prepended. Version-manager shims (`nvm`, `mise`, `~/.cargo/bin`) are not
+  loaded — if "it works over SSH but not via exec", it's almost always PATH;
+  use an absolute path or set `PATH` via `env`.
+- **stdin:** `/dev/null` (or your `stdin` string). Prompting commands
+  (`apt install` without `-y`, `git` asking for credentials) get EOF and fail
+  fast instead of hanging.
+- **stdout/stderr:** captured to files; not a TTY, so no ANSI color or
+  progress-bar output.
+- **cwd:** `$HOME` unless `cwd` is given.
+- **Lifetime:** the whole process group is killed when the job ends or times
+  out. To deliberately outlive the job, `setsid` your daemon.
+- **Artifacts:** command, output, and exit code live in
+  `~/.ssh-to-go/exec/<id>/` on the host (mode `0700`/`0600`), and are
+  garbage-collected 24h after completion.
 
 ---
 
