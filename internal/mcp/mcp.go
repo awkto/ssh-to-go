@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,10 +17,13 @@ import (
 	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
+	"github.com/awkto/ssh-to-go/internal/relay"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
+	"golang.org/x/crypto/ssh"
 
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 )
 
@@ -54,15 +58,69 @@ var tools = []Tool{
 	},
 	{
 		Name:        "create_session",
-		Description: "Create a new tmux session on a host.",
+		Description: "Create a new tmux session on a host. MCP-created sessions default to a 200x50 pane (agents drive a TUI, not a phone) — override with width/height.",
 		InputSchema: InputSchema{
 			Type: "object",
 			Properties: map[string]PropertySchema{
-				"host": {Type: "string", Description: "Host name to create the session on"},
-				"name": {Type: "string", Description: "Name for the new tmux session"},
-				"cwd":  {Type: "string", Description: "Optional working directory for the session"},
+				"host":          {Type: "string", Description: "Host name to create the session on"},
+				"name":          {Type: "string", Description: "Name for the new tmux session"},
+				"cwd":           {Type: "string", Description: "Optional working directory for the session"},
+				"width":         {Type: "number", Description: "Pane width in columns. Default 200. Requires height."},
+				"height":        {Type: "number", Description: "Pane height in rows. Default 50. Requires width."},
+				"history_limit": {Type: "number", Description: "Scrollback depth (lines) for the session's first pane. Defaults to the server's configured scrollback."},
 			},
 			Required: []string{"host", "name"},
+		},
+	},
+	{
+		Name:        "send_keys",
+		Description: "Type into an interactive tmux session (Claude Code TUI, vim, psql, …). Literal `text` is hex-encoded and typed exactly (a prompt containing the word 'Enter' or 'C-c' is typed, never executed); `keys` are tmux key NAMES (Enter, Escape, Tab, C-c, C-d, Up …). By default the Enter that submits is sent as a SEPARATE keystroke after a short delay — required for Ink/React TUIs (Claude Code) that ignore text+Enter arriving in one burst.",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"host":            {Type: "string", Description: "Target host. Optional — defaults like run_command."},
+				"session":         {Type: "string", Description: "Target tmux session name."},
+				"text":            {Type: "string", Description: "Literal text to type. Hex-encoded and sent verbatim; never interpreted as key names."},
+				"keys":            {Type: "array", Description: "tmux key names to send after the text, e.g. [\"Escape\",\"Down\",\"Enter\"]. Sent as key names, not literal characters."},
+				"submit":          {Type: "boolean", Description: "Send a final Enter as a separate keystroke to submit (default true)."},
+				"submit_delay_ms": {Type: "number", Description: "Delay before the separate submit Enter (default 120)."},
+				"literal":         {Type: "boolean", Description: "Type `text` exactly, hex-encoded (default true). false = let tmux interpret key names inside `text`."},
+			},
+			Required: []string{"session"},
+		},
+	},
+	{
+		Name:        "read_pane",
+		Description: "Read the current contents of an interactive session's pane (capture-pane). Returns a content hash as `cursor`; pass it back as `since` to get {changed:false} with an empty body when nothing has changed — the token-saving path while a TUI is mid-render. ANSI colour is stripped by default. Output is capped at 256KB (tail kept) with a `truncated` flag.",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"host":         {Type: "string", Description: "Target host. Optional — defaults like run_command."},
+				"session":      {Type: "string", Description: "Target tmux session name."},
+				"lines":        {Type: "number", Description: "Return only the last N lines of the capture."},
+				"scrollback":   {Type: "number", Description: "Lines of scrollback to include (default 0 = visible pane only)."},
+				"ansi":         {Type: "boolean", Description: "Keep ANSI colour escapes (default false = plain text)."},
+				"join_wrapped": {Type: "boolean", Description: "Join wrapped lines so the reader re-wraps at its own width (default true)."},
+				"since":        {Type: "string", Description: "A cursor from a previous read_pane. If the pane is unchanged, returns {changed:false} with an empty body."},
+			},
+			Required: []string{"session"},
+		},
+	},
+	{
+		Name:        "wait_for_pane",
+		Description: "Block server-side (one MCP round trip) until an interactive session's pane goes idle or a regex matches, then return its contents. Poll the pane server-side ~5x/sec instead of the client burning round trips. Timeout is a normal return (reason:\"timeout\") WITH the current content, not an error.",
+		InputSchema: InputSchema{
+			Type: "object",
+			Properties: map[string]PropertySchema{
+				"host":            {Type: "string", Description: "Target host. Optional — defaults like run_command."},
+				"session":         {Type: "string", Description: "Target tmux session name."},
+				"until":           {Type: "string", Description: "\"idle\" (pane stops changing) or \"pattern\" (regex matches). Default \"idle\"."},
+				"pattern":         {Type: "string", Description: "Regular expression to match the visible pane. Required when until=\"pattern\"."},
+				"quiet_ms":        {Type: "number", Description: "For until=idle: how long the pane must be unchanged to count as idle (default 750)."},
+				"timeout_seconds": {Type: "number", Description: "Give up after this many seconds and return reason:\"timeout\" with current content (default 120, max 600)."},
+				"lines":           {Type: "number", Description: "Return the last N lines of the pane (default 40)."},
+			},
+			Required: []string{"session"},
 		},
 	},
 	{
@@ -431,10 +489,213 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 				map[string]any{"host": host})
 		}
 		defer client.Close()
-		if err := s.Tmux.CreateSession(client, sessionName, s.Settings.TmuxWindowSize(), cwd, s.Settings.ScrollbackLines()); err != nil {
+		// MCP consumers are agents driving a TUI — default to a roomy 200x50
+		// pane rather than the web/Android enum window-size. width+height
+		// override; history_limit overrides the server default scrollback.
+		windowSize := "200x50"
+		if w, okW := args["width"].(float64); okW {
+			if hgt, okH := args["height"].(float64); okH && w > 0 && hgt > 0 {
+				windowSize = fmt.Sprintf("%dx%d", int(w), int(hgt))
+			}
+		}
+		historyLimit := s.Settings.ScrollbackLines()
+		if v, ok := args["history_limit"].(float64); ok && v > 0 {
+			historyLimit = int(v)
+		}
+		if err := s.Tmux.CreateSession(client, sessionName, windowSize, cwd, historyLimit); err != nil {
 			return toolError("create session failed: " + err.Error())
 		}
-		return toolText(fmt.Sprintf("Session '%s' created on %s.", sessionName, host))
+		return toolText(fmt.Sprintf("Session '%s' created on %s (%s).", sessionName, host, windowSize))
+
+	case "send_keys":
+		hostArg, _ := args["host"].(string)
+		session, _ := args["session"].(string)
+		text, hasText := args["text"].(string)
+		var keys []string
+		if raw, ok := args["keys"].([]any); ok {
+			for _, k := range raw {
+				if ks, ok := k.(string); ok && ks != "" {
+					keys = append(keys, ks)
+				}
+			}
+		}
+		if (!hasText || text == "") && len(keys) == 0 {
+			return toolFail("BAD_REQUEST", "at least one of text or keys is required", false, nil)
+		}
+		client, target, closer, fail := s.tmuxSession(hostArg, session)
+		if fail != nil {
+			return fail
+		}
+		defer closer()
+		// Literal text: hex-encode so it is TYPED exactly, never interpreted as
+		// key names (a prompt containing "Enter"/"C-c" must land in the box).
+		if hasText && text != "" {
+			literal := true
+			if v, ok := args["literal"].(bool); ok {
+				literal = v
+			}
+			var cmd string
+			if literal {
+				cmd = "tmux send-keys -t " + target + " -H " + relay.HexWords([]byte(text))
+			} else {
+				cmd = "tmux send-keys -t " + target + " " + relay.TmuxQuote(text)
+			}
+			if _, err := sshutil.Exec(client, cmd); err != nil {
+				return toolFail("SEND_FAILED", "send text failed: "+err.Error(), true,
+					map[string]any{"session": session})
+			}
+		}
+		// Key names: sent as tmux names (quoted only to defuse shell injection;
+		// tmux still looks each up as a key).
+		for _, k := range keys {
+			if _, err := sshutil.Exec(client, "tmux send-keys -t "+target+" "+relay.TmuxQuote(k)); err != nil {
+				return toolFail("SEND_FAILED", "send key failed: "+err.Error(), true,
+					map[string]any{"session": session, "key": k})
+			}
+		}
+		// Submit is a SEPARATE send-keys after a short delay — Ink/React TUIs
+		// (Claude Code) drop the submit if text+Enter arrive in one burst.
+		submit := true
+		if v, ok := args["submit"].(bool); ok {
+			submit = v
+		}
+		if submit {
+			delayMs := 120
+			if v, ok := args["submit_delay_ms"].(float64); ok && v >= 0 {
+				delayMs = int(v)
+			}
+			time.Sleep(time.Duration(delayMs) * time.Millisecond)
+			if _, err := sshutil.Exec(client, "tmux send-keys -t "+target+" Enter"); err != nil {
+				return toolFail("SEND_FAILED", "submit failed: "+err.Error(), true,
+					map[string]any{"session": session})
+			}
+		}
+		return toolResult(map[string]any{"session": session, "sent": true}, false)
+
+	case "read_pane":
+		hostArg, _ := args["host"].(string)
+		session, _ := args["session"].(string)
+		client, target, closer, fail := s.tmuxSession(hostArg, session)
+		if fail != nil {
+			return fail
+		}
+		defer closer()
+		ansi, _ := args["ansi"].(bool)
+		joinWrapped := true
+		if v, ok := args["join_wrapped"].(bool); ok {
+			joinWrapped = v
+		}
+		scrollback := 0
+		if v, ok := args["scrollback"].(float64); ok && v > 0 {
+			scrollback = int(v)
+		}
+		raw, err := capturePane(client, target, ansi, joinWrapped, scrollback)
+		if err != nil {
+			return toolFail("CAPTURE_FAILED", "capture-pane failed: "+err.Error(), true,
+				map[string]any{"session": session})
+		}
+		lines := 0
+		if v, ok := args["lines"].(float64); ok && v > 0 {
+			lines = int(v)
+		}
+		content := lastLines(raw, lines)
+		content, truncated := capPane(content)
+		cursor := paneCursor(content)
+		if since, _ := args["since"].(string); since != "" && since == cursor {
+			return toolResult(map[string]any{"changed": false, "content": "", "cursor": cursor}, false)
+		}
+		result := map[string]any{"changed": true, "content": content, "cursor": cursor}
+		if truncated {
+			result["truncated"] = true
+		}
+		return toolResult(result, false)
+
+	case "wait_for_pane":
+		hostArg, _ := args["host"].(string)
+		session, _ := args["session"].(string)
+		until := "idle"
+		if v, ok := args["until"].(string); ok && v != "" {
+			until = v
+		}
+		var re *regexp.Regexp
+		switch until {
+		case "idle":
+		case "pattern":
+			pat, _ := args["pattern"].(string)
+			if pat == "" {
+				return toolFail("BAD_REQUEST", "pattern is required when until=pattern", false, nil)
+			}
+			compiled, err := regexp.Compile(pat)
+			if err != nil {
+				return toolFail("BAD_REQUEST", "invalid pattern: "+err.Error(), false, nil)
+			}
+			re = compiled
+		default:
+			return toolFail("BAD_REQUEST", "until must be \"idle\" or \"pattern\"", false, nil)
+		}
+		quietMs := 750
+		if v, ok := args["quiet_ms"].(float64); ok && v > 0 {
+			quietMs = int(v)
+		}
+		timeoutSec := 120
+		if v, ok := args["timeout_seconds"].(float64); ok && v > 0 {
+			timeoutSec = int(v)
+		}
+		if timeoutSec > 600 {
+			timeoutSec = 600
+		}
+		lines := 40
+		if v, ok := args["lines"].(float64); ok && v > 0 {
+			lines = int(v)
+		}
+		client, target, closer, fail := s.tmuxSession(hostArg, session)
+		if fail != nil {
+			return fail
+		}
+		defer closer()
+
+		start := time.Now()
+		deadline := start.Add(time.Duration(timeoutSec) * time.Second)
+		quiet := time.Duration(quietMs) * time.Millisecond
+		var lastHash string
+		lastChange := start
+		var lastContent string
+		reason := "timeout"
+		for {
+			raw, err := capturePane(client, target, false, true, 0)
+			if err != nil {
+				return toolFail("CAPTURE_FAILED", "capture-pane failed: "+err.Error(), true,
+					map[string]any{"session": session})
+			}
+			lastContent, _ = capPane(lastLines(raw, lines))
+			now := time.Now()
+			if until == "pattern" {
+				if re.MatchString(raw) {
+					reason = "pattern"
+					break
+				}
+			} else {
+				h := paneCursor(lastContent)
+				if h != lastHash {
+					lastHash = h
+					lastChange = now
+				} else if now.Sub(lastChange) >= quiet {
+					reason = "idle"
+					break
+				}
+			}
+			if !now.Before(deadline) {
+				reason = "timeout"
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		return toolResult(map[string]any{
+			"reason":    reason,
+			"waited_ms": time.Since(start).Milliseconds(),
+			"content":   lastContent,
+			"cursor":    paneCursor(lastContent),
+		}, false)
 
 	case "kill_session":
 		host, _ := args["host"].(string)
@@ -792,6 +1053,82 @@ func (s *Server) resolveExecHost(name string) (config.Host, string) {
 	return cfg, ""
 }
 
+// paneMaxBytes caps read_pane / wait_for_pane output so a huge scrollback can't
+// return megabytes in a single tool result (mirrors the exec API's #39 cap).
+const paneMaxBytes = 256 * 1024
+
+// tmuxSession resolves the host for an interactive-TUI tool exactly like
+// run_command, dials it, and verifies the session exists. On any failure it
+// returns a ready-made structured tool error (fail != nil); otherwise the
+// caller owns closer(). target is the single-quoted session name for -t.
+func (s *Server) tmuxSession(hostArg, session string) (client *ssh.Client, target string, closer func(), fail map[string]any) {
+	if session == "" {
+		return nil, "", nil, toolFail("BAD_REQUEST", "session is required", false, nil)
+	}
+	hostCfg, errMsg := s.resolveExecHost(hostArg)
+	if errMsg != "" {
+		return nil, "", nil, toolFail("HOST_NOT_FOUND", errMsg, false, nil)
+	}
+	keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
+	c, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
+	if err != nil {
+		return nil, "", nil, toolFail("HOST_UNREACHABLE", "SSH connect failed: "+err.Error(), true,
+			map[string]any{"host": hostCfg.Name})
+	}
+	target = relay.TmuxQuote(session)
+	if _, err := sshutil.Exec(c, "tmux has-session -t "+target); err != nil {
+		c.Close()
+		return nil, "", nil, toolFail("SESSION_NOT_FOUND", "session not found: "+session, false,
+			map[string]any{"host": hostCfg.Name, "session": session})
+	}
+	return c, target, func() { c.Close() }, nil
+}
+
+// capturePane runs capture-pane on a session target. Without -e (ansi=false)
+// tmux emits plain text, so colour is "stripped" simply by not requesting it.
+func capturePane(client *ssh.Client, target string, ansi, joinWrapped bool, scrollback int) (string, error) {
+	var b strings.Builder
+	b.WriteString("tmux capture-pane -p")
+	if ansi {
+		b.WriteString(" -e")
+	}
+	if joinWrapped {
+		b.WriteString(" -J")
+	}
+	if scrollback > 0 {
+		fmt.Fprintf(&b, " -S -%d", scrollback)
+	}
+	b.WriteString(" -t " + target)
+	return sshutil.Exec(client, b.String())
+}
+
+// lastLines keeps the last n lines of s (n<=0 keeps everything).
+func lastLines(s string, n int) string {
+	if n <= 0 {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
+}
+
+// capPane bounds pane content to paneMaxBytes, keeping the tail (most recent).
+func capPane(s string) (string, bool) {
+	if len(s) > paneMaxBytes {
+		return s[len(s)-paneMaxBytes:], true
+	}
+	return s, false
+}
+
+// paneCursor is the content hash returned to clients as an opaque cursor; an
+// unchanged pane yields the same cursor, enabling the read_pane no-op path.
+func paneCursor(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
 // HandleDocs serves GET /mcpdocs — tool documentation page.
 func (s *Server) HandleDocs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -946,6 +1283,15 @@ func renderMCPDocs(enabled bool) string {
   <strong>SSE Endpoint:</strong> <code>GET /mcp/sse</code><br>
   <strong>Messages Endpoint:</strong> <code>POST /mcp/messages?session_id=...</code><br>
   <strong>Auth:</strong> Bearer token required (same API tokens as REST API). Create tokens in <a href="/settings">Settings</a>.
+</div>
+<div class="endpoint-info">
+  <strong>Driving an interactive TUI (Claude Code, vim, psql):</strong> create a roomy
+  session, type into it, wait for it to settle, then read the pane —
+  <code>send_keys</code> submits with a <em>separate</em> Enter so Ink/React TUIs don't drop it.
+  <pre style="margin-top:0.5rem;white-space:pre-wrap;color:var(--muted)">create_session(name:"cc", width:200, height:50)
+send_keys(session:"cc", text:"echo hi")      # types text, then a separate Enter
+wait_for_pane(session:"cc", until:"idle")    # blocks server-side until the pane settles
+read_pane(session:"cc")                       # returns the pane + a cursor; pass it back as since:</pre>
 </div>
 %s
 </body>

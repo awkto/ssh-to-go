@@ -121,6 +121,44 @@ separate `stdout`/`stderr`, capped at 256 KB per stream by default, with
 Set a default host for host-less requests under **Settings → default host**
 (`default_host` in `settings.json`).
 
+### MCP Server (interactive TUIs)
+
+An MCP server (SSE at `/mcp/sse`, docs at `/mcpdocs`, enable it in Settings)
+exposes the session/host/exec tools to AI clients, plus tools for driving a
+**long-lived interactive tmux session** — a Claude Code TUI, `vim`, `psql`, a
+REPL — over a single tmux pane:
+
+- **`create_session`** — MCP-created sessions default to a roomy **200x50**
+  pane (agents drive a TUI, not a phone); override with `width`/`height`, and
+  set `history_limit` for deeper scrollback.
+- **`send_keys`** — type into a session. Literal `text` is hex-encoded and
+  typed *exactly* (a prompt containing the word "Enter" or "C-c" is typed, not
+  executed); `keys` are tmux key names (`Enter`, `Escape`, `C-c`, `Up`, …). The
+  submitting Enter is sent as a **separate** keystroke after `submit_delay_ms`
+  (default 120) — Ink/React TUIs like Claude Code drop the submit if text+Enter
+  arrive in one burst.
+- **`read_pane`** — capture the pane (ANSI stripped by default). Returns a
+  content-hash `cursor`; pass it back as `since` to get `{changed:false}` with
+  an empty body while a TUI is mid-render. Capped at 256 KB (tail kept).
+- **`wait_for_pane`** — block **server-side** (one round trip) until the pane
+  goes `idle` (unchanged for `quiet_ms`) or a `pattern` regex matches, then
+  return the pane. A `timeout_seconds` (default 120, max 600) elapse is a normal
+  return (`reason:"timeout"`) with the current content, not an error.
+
+End-to-end (create → type → wait → read):
+
+```text
+create_session(name:"cc", width:200, height:50)
+send_keys(session:"cc", text:"echo hi")     # types the text, then a separate Enter
+wait_for_pane(session:"cc", until:"idle")   # returns when the pane settles
+read_pane(session:"cc")                      # → { changed, content, cursor }
+```
+
+Errors follow the structured `{code, error, retryable}` contract (e.g.
+`SESSION_NOT_FOUND` is `retryable:false`). These tools run commands as a
+root-equivalent user — intended for interactive/human-driven use, not
+unattended webhooks.
+
 #### Job execution environment (the contract)
 
 Jobs run in a deliberately minimal, non-interactive environment — closer to a

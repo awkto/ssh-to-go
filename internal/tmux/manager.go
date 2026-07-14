@@ -57,7 +57,14 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 }
 
 // CreateSession creates a new detached tmux session on the remote host.
-// Sets window-size so multiple clients behave as configured (largest/smallest/latest).
+//
+// windowSize is either a window-size *option* value (largest/smallest/latest —
+// how the pane tracks attaching clients, used by the web/Android terminals) or
+// a concrete "WIDTHxHEIGHT" geometry. A geometry is applied via new-session
+// -x/-y with window-size set to "manual" (the window-size option itself only
+// accepts the enum values), giving a stable pane size for MCP-created agent
+// sessions that no interactive client attaches to.
+//
 // historyLimit (>0) is applied globally BEFORE new-session so the session's
 // first pane inherits the deeper scrollback — a pane's depth is fixed at
 // creation, so setting it afterwards wouldn't grow that pane.
@@ -71,17 +78,37 @@ func (m *Manager) CreateSession(client *ssh.Client, name, windowSize, cwd string
 	if historyLimit > 0 {
 		hist = fmt.Sprintf("set-option -g history-limit %d \\; ", historyLimit)
 	}
-	var cmd string
-	if cwd != "" {
-		cmd = fmt.Sprintf("tmux %snew-session -d -s %q -c %q \\; set-option -t %q window-size %s", hist, name, cwd, name, windowSize)
-	} else {
-		cmd = fmt.Sprintf("tmux %snew-session -d -s %q \\; set-option -t %q window-size %s", hist, name, name, windowSize)
+	geom, sizeOpt := "", windowSize
+	if w, h, ok := parseWxH(windowSize); ok {
+		geom = fmt.Sprintf(" -x %d -y %d", w, h)
+		sizeOpt = "manual"
 	}
+	base := fmt.Sprintf("tmux %snew-session -d -s %q%s", hist, name, geom)
+	if cwd != "" {
+		base += fmt.Sprintf(" -c %q", cwd)
+	}
+	cmd := fmt.Sprintf("%s \\; set-option -t %q window-size %s", base, name, sizeOpt)
 	_, err := sshutil.Exec(client, cmd)
 	if err != nil {
 		return fmt.Errorf("create session %q: %w", name, err)
 	}
 	return nil
+}
+
+// parseWxH parses a concrete "WIDTHxHEIGHT" geometry (e.g. "200x50"). It
+// returns ok=false for the window-size enum values (largest/smallest/latest)
+// so those keep the original set-option path.
+func parseWxH(s string) (int, int, bool) {
+	i := strings.IndexByte(s, 'x')
+	if i <= 0 || i >= len(s)-1 {
+		return 0, 0, false
+	}
+	w, err1 := strconv.Atoi(s[:i])
+	h, err2 := strconv.Atoi(s[i+1:])
+	if err1 != nil || err2 != nil || w <= 0 || h <= 0 {
+		return 0, 0, false
+	}
+	return w, h, true
 }
 
 // SessionCwd returns the current working directory of the active pane in a session.
