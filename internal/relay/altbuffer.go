@@ -3,34 +3,39 @@ package relay
 import "bytes"
 
 // altBufferStripper is a stateful byte-stream filter that removes the
-// xterm/VT escape sequences that would prevent a native client from
-// scrolling its own local scrollback smoothly. Without this filter the
-// client emulator (Android TerminalView, or xterm.js when it opts into
-// mouse=off) ends up forwarding wheel events to tmux as mouse-button
-// reports and tmux falls back to its 5-line-per-wheel copy-mode scroll,
-// which the user perceives as jerky.
+// mouse-tracking DECSET escape sequences that would otherwise make the
+// client forward wheel events to tmux as mouse-button reports (tmux then
+// falls back to its 5-line-per-wheel copy-mode scroll, which the user
+// perceives as jerky).
 //
-// Two families of sequences are stripped:
-//
-//   - Alt-screen buffer switches. TUI programs (claude code, vim, htop,
-//     less, …) emit \x1b[?1049h on attach which flips the emulator to
-//     the alt buffer — a buffer with NO scrollback by design — instantly
-//     killing the user's ability to scroll into the history that was
-//     just prefilled via tmux capture-pane. Sequences: \x1b[?47h/l,
-//     \x1b[?1047h/l, \x1b[?1049h/l.
+// Only ONE family of sequences is stripped:
 //
 //   - Mouse-tracking enables. tmux with mouse mode on, and most TUIs,
 //     send DECSET 1000/1002/1003/etc to ask the terminal to report wheel
 //     and click events as escape codes. Stripping these means the client
 //     never enters mouse-tracking mode, so its native scroll handler
 //     (xterm.js viewport scrollbar, Android smooth-scroll view) keeps
-//     working. Sequences: \x1b[?9h/l, ?1000–?1003 h/l, ?1005/?1006/?1015
-//     h/l.
+//     working for line-oriented shell output. Sequences: \x1b[?9h/l,
+//     ?1000–?1003 h/l, ?1005/?1006/?1015 h/l.
 //
-// Trade-offs: TUI apps' mouse interactions (vim with `:set mouse=a`,
-// htop click-to-focus, etc.) stop working — acceptable for our
-// scroll-first use case. When a TUI exits, the shell prompt isn't
-// auto-restored; the TUI's last frame stays in scrollback. Cosmetic.
+// Alt-screen buffer switches (\x1b[?47h/l, ?1047h/l, ?1049h/l) are NO
+// LONGER stripped, and this is deliberate. Fullscreen TUIs (claude code,
+// vim, htop, less, …) repaint their whole frame IN PLACE using absolute
+// cursor addressing and partial line-clears, on the assumption they own an
+// alternate screen buffer. When we stripped the ?1049h switch, all that
+// in-place drawing landed on the client's normal (scrolling) buffer, where
+// successive frames stacked on top of each other instead of replacing —
+// producing duplicated lines, box-rules struck through text, and dropped
+// characters (issue #59). Passing the switch through lets xterm.js /
+// TerminalView follow the app into its alt buffer and render each frame
+// cleanly, exactly like a native tmux client. control.go additionally
+// syncs the alt-buffer state on attach (via #{alternate_on}) so a TUI that
+// was ALREADY running when the browser connects is entered correctly.
+//
+// Trade-off: while a fullscreen app is active the client is in the alt
+// buffer, which has no scrollback — wheel scrolls the app (via xterm's
+// alternate-scroll → arrow keys), not local history. That matches native
+// terminal behavior and is the correct contract for a fullscreen app.
 //
 // Other CSI ? sequences pass through untouched.
 type altBufferStripper struct {
@@ -41,18 +46,12 @@ type altBufferStripper struct {
 	pending []byte
 }
 
-// maxSeqLen is the longest sequence we strip ("\x1b[?1049h" / "...l" = 8 bytes).
+// maxSeqLen is the longest sequence we strip ("\x1b[?1000h" / "...l" = 8 bytes).
 const maxSeqLen = 8
 
 var stripSequences = [][]byte{
-	// Alt-screen buffer switches.
-	[]byte("\x1b[?47h"),
-	[]byte("\x1b[?47l"),
-	[]byte("\x1b[?1047h"),
-	[]byte("\x1b[?1047l"),
-	[]byte("\x1b[?1049h"),
-	[]byte("\x1b[?1049l"),
-	// Mouse-tracking enable/disable.
+	// Mouse-tracking enable/disable. Alt-screen buffer switches are
+	// intentionally NOT stripped — see the type doc above.
 	[]byte("\x1b[?9h"),
 	[]byte("\x1b[?9l"),
 	[]byte("\x1b[?1000h"),

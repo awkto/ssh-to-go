@@ -50,6 +50,7 @@ const (
 	cmdIgnore                        // reply carries nothing we need (send-keys, refresh-client, ...)
 	cmdMeta                          // display-message reply: "<client_name>,<pane_id>"
 	cmdPane                          // display-message reply: "<pane_id>" (active window changed)
+	cmdAlt                           // display-message reply: "<alternate_on>" (0/1)
 	cmdHistory                       // capture-pane reply: scrollback prefill
 )
 
@@ -201,6 +202,17 @@ func (p *controlParser) dispatchBlock(isErr bool) {
 	case cmdPane:
 		if !isErr && len(lines) > 0 && strings.HasPrefix(lines[0], "%") {
 			p.paneID = strings.TrimSpace(lines[0])
+		}
+
+	case cmdAlt:
+		// If the pane's app was already in the alternate screen buffer when
+		// we attached (e.g. Claude Code already running), enter the alt
+		// buffer on the client BEFORE the capture-pane frame is painted, so
+		// the app's in-place, absolute-positioned live repaints land in the
+		// alt buffer and align instead of stacking on the normal buffer.
+		// This reply is queued ahead of cmdHistory, so ordering holds.
+		if !isErr && len(lines) > 0 && strings.TrimSpace(lines[0]) == "1" && p.emit != nil {
+			p.emit([]byte("\x1b[?1049h"))
 		}
 
 	default: // cmdConnect, cmdIgnore
@@ -358,6 +370,10 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 
 	sendCmd(cmdIgnore, fmt.Sprintf("set-option window-size %s", windowSize))
 	sendCmd(cmdMeta, fmt.Sprintf(`display-message -p -t %s "#{client_name},#{pane_id}"`, target))
+	// Query alt-buffer state BEFORE the history capture so, if a fullscreen
+	// TUI is already running, we can enter the client's alt buffer ahead of
+	// painting the captured frame (see cmdAlt in dispatchBlock).
+	sendCmd(cmdAlt, fmt.Sprintf(`display-message -p -t %s "#{alternate_on}"`, target))
 	sendCmd(cmdHistory, fmt.Sprintf("capture-pane -p -e -J -S - -E - -t %s", target))
 
 	var wg sync.WaitGroup
