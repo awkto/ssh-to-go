@@ -1,6 +1,9 @@
 package keystore
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestScrollbackLinesDefault(t *testing.T) {
 	sm := &SettingsManager{} // zero value: ScrollbackLines unset
@@ -45,5 +48,57 @@ func TestUpdateValidatesScrollback(t *testing.T) {
 	}
 	if got := sm.ScrollbackLines(); got != 80000 {
 		t.Errorf("after no-op update ScrollbackLines() = %d, want unchanged 80000", got)
+	}
+}
+
+func TestNewSessionIconDefaultsToRandom(t *testing.T) {
+	sm := &SettingsManager{} // zero value: SessionIconMode unset
+
+	// Unset mode → random palette entries. Assert both fields are always a
+	// valid palette member (never empty) across many draws.
+	for i := 0; i < 200; i++ {
+		icon := sm.NewSessionIcon()
+		if !slices.Contains(iconPalette, icon.Icon) {
+			t.Fatalf("random icon %q not in palette", icon.Icon)
+		}
+		if !slices.Contains(colorPalette, icon.Color) {
+			t.Fatalf("random color %q not in palette", icon.Color)
+		}
+	}
+}
+
+func TestNewSessionIconFixed(t *testing.T) {
+	sm := &SettingsManager{}
+	sm.settings.SessionIconMode = "fixed"
+	sm.settings.SessionIconName = "server"
+	sm.settings.SessionIconColor = "emerald"
+	if got := sm.NewSessionIcon(); got.Icon != "server" || got.Color != "emerald" {
+		t.Errorf("fixed NewSessionIcon() = %+v, want server/emerald", got)
+	}
+
+	// Fixed mode with unset icon/color falls back to terminal/default.
+	sm.settings.SessionIconName = ""
+	sm.settings.SessionIconColor = ""
+	if got := sm.NewSessionIcon(); got.Icon != "terminal" || got.Color != "default" {
+		t.Errorf("fixed NewSessionIcon() fallback = %+v, want terminal/default", got)
+	}
+}
+
+func TestUpdateValidatesSessionIconMode(t *testing.T) {
+	dir := t.TempDir()
+	sm, err := NewSettingsManager(dir)
+	if err != nil {
+		t.Fatalf("NewSettingsManager: %v", err)
+	}
+	ks := &Store{}
+
+	if err := sm.Update(Settings{SessionIconMode: "bogus"}, ks); err == nil {
+		t.Error("Update(SessionIconMode=bogus) = nil error, want validation error")
+	}
+	if err := sm.Update(Settings{SessionIconMode: "fixed", SessionIconName: "cpu", SessionIconColor: "sky"}, ks); err != nil {
+		t.Fatalf("Update(fixed): %v", err)
+	}
+	if got := sm.NewSessionIcon(); got.Icon != "cpu" || got.Color != "sky" {
+		t.Errorf("after Update NewSessionIcon() = %+v, want cpu/sky", got)
 	}
 }

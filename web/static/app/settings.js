@@ -142,7 +142,35 @@ const Settings = ({
     onChange: e => set({
       show_pub_key: e.target.checked
     })
-  }), " Show on dashboard")))), React.createElement("div", {
+  }), " Show on dashboard"))), React.createElement("div", {
+    className: "setting-row"
+  }, React.createElement("div", {
+    className: "setting-label"
+  }, React.createElement("h4", null, "New session icon"), React.createElement("p", null, "The icon & color a session gets when it's created.")), React.createElement("div", null, React.createElement("select", {
+    className: "select",
+    value: draft.session_icon_mode || 'random',
+    onChange: e => set({
+      session_icon_mode: e.target.value
+    })
+  }, React.createElement("option", {
+    value: "random"
+  }, "Random each time"), React.createElement("option", {
+    value: "fixed"
+  }, "Fixed icon & color")))), (draft.session_icon_mode || 'random') === 'fixed' && React.createElement("div", {
+    className: "setting-row"
+  }, React.createElement("div", {
+    className: "setting-label"
+  }, React.createElement("h4", null, "Fixed icon & color"), React.createElement("p", null, "Applied to every new session. Click to choose.")), React.createElement("div", null, React.createElement("button", {
+    className: "sess-icon-btn",
+    title: "Choose icon & color",
+    onClick: e => window.showIconPicker(e.currentTarget, draft.session_icon_name || 'terminal', (icon, color) => set({
+      session_icon_name: icon,
+      session_icon_color: color
+    }), draft.session_icon_color || 'default')
+  }, React.createElement(SessIcon, {
+    kind: draft.session_icon_name || 'terminal',
+    color: draft.session_icon_color || 'default'
+  }))))), React.createElement("div", {
     className: "panel-head",
     style: {
       borderTop: '1px solid var(--hairline)',

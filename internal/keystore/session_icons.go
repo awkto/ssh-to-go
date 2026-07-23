@@ -3,11 +3,47 @@ package keystore
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 )
+
+// iconPalette and colorPalette mirror the icon/color names defined in
+// web/static/js/icons.js. They exist so the server can assign a random
+// icon+color to a newly created session (see Settings.SessionIconMode).
+// Keep in sync when icons/colors are added or removed on the web side.
+var iconPalette = []string{
+	"terminal", "code", "git-commit", "git-branch", "cloud", "hash", "at-sign",
+	"heart", "star", "home", "bookmark", "flag", "tag", "user", "users",
+	"briefcase", "calendar", "clock", "map-pin", "compass", "sun", "moon",
+	"coffee", "anchor", "truck", "package", "crosshair", "award", "feather",
+	"hexagon", "droplet", "scissors", "paperclip", "server", "database",
+	"monitor", "laptop", "smartphone", "tablet", "cpu", "hard-drive", "wifi",
+	"globe", "lock", "unlock", "shield", "key", "folder", "file", "file-text",
+	"bug", "zap", "activity", "layers", "box", "settings", "tool", "command",
+	"link", "eye", "bell", "send", "download", "upload", "refresh", "power",
+	"bluetooth", "radio", "router", "gamepad", "music", "camera",
+}
+
+var colorPalette = []string{
+	"default", "green", "red", "orange", "purple", "pink", "cyan", "gray",
+	"amber", "yellow", "lime", "emerald", "rose", "crimson", "coral", "bronze",
+	"teal", "sky", "indigo", "violet", "fuchsia", "magenta", "midnight",
+	"forest", "mint", "peach", "lavender", "blush", "sand", "slate",
+	"charcoal", "white",
+}
+
+// RandomSessionIcon returns a SessionIcon with a randomly chosen icon and
+// color from the built-in palettes. Go's global rand is auto-seeded, so
+// successive sessions get an unpredictable spread.
+func RandomSessionIcon() SessionIcon {
+	return SessionIcon{
+		Icon:  iconPalette[rand.Intn(len(iconPalette))],
+		Color: colorPalette[rand.Intn(len(colorPalette))],
+	}
+}
 
 type SessionIcon struct {
 	Icon         string `json:"icon,omitempty"`

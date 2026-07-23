@@ -183,6 +183,15 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Assign the session's icon/color per the configured mode (random by
+	// default, or a fixed icon/color). Non-fatal: a session without an
+	// override just renders with the default terminal icon.
+	if h.SessionIcons != nil {
+		if err := h.SessionIcons.Set(hostName, req.Name, h.Settings.NewSessionIcon()); err != nil {
+			log.Printf("session icon assign %s/%s: %v", hostName, req.Name, err)
+		}
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "created", "name": req.Name})
 }

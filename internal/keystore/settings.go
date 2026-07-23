@@ -24,6 +24,14 @@ type Settings struct {
 	// DefaultScrollbackLines". It only affects newly-created tmux panes —
 	// tmux can't grow an existing pane's history buffer.
 	ScrollbackLines int `json:"scrollback_lines,omitempty"`
+	// SessionIconMode controls the icon/color assigned to a session when it
+	// is created: "random" (the default when empty) picks a random icon+color
+	// from the built-in palette; "fixed" assigns SessionIconName/Color to
+	// every new session. SessionIconName/Color are only consulted in "fixed"
+	// mode and fall back to terminal/default when empty.
+	SessionIconMode  string `json:"session_icon_mode,omitempty"`
+	SessionIconName  string `json:"session_icon_name,omitempty"`
+	SessionIconColor string `json:"session_icon_color,omitempty"`
 }
 
 // DefaultScrollbackLines is the scrollback depth used when the setting is
@@ -113,6 +121,16 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 		}
 		sm.settings.ScrollbackLines = s.ScrollbackLines
 	}
+	if s.SessionIconMode != "" {
+		switch s.SessionIconMode {
+		case "random", "fixed":
+			sm.settings.SessionIconMode = s.SessionIconMode
+		default:
+			return fmt.Errorf("invalid session_icon_mode %q: must be random or fixed", s.SessionIconMode)
+		}
+	}
+	sm.settings.SessionIconName = s.SessionIconName
+	sm.settings.SessionIconColor = s.SessionIconColor
 
 	return sm.save()
 }
@@ -157,6 +175,29 @@ func (sm *SettingsManager) DefaultHost() string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return sm.settings.DefaultHost
+}
+
+// NewSessionIcon returns the icon/color to assign to a freshly created
+// session. In "fixed" mode it returns the configured icon/color (falling
+// back to terminal/default when unset); otherwise — the default — it
+// returns a random palette entry so each new session looks distinct.
+func (sm *SettingsManager) NewSessionIcon() SessionIcon {
+	sm.mu.RLock()
+	mode := sm.settings.SessionIconMode
+	name := sm.settings.SessionIconName
+	color := sm.settings.SessionIconColor
+	sm.mu.RUnlock()
+
+	if mode == "fixed" {
+		if name == "" {
+			name = "terminal"
+		}
+		if color == "" {
+			color = "default"
+		}
+		return SessionIcon{Icon: name, Color: color}
+	}
+	return RandomSessionIcon()
 }
 
 func (sm *SettingsManager) MCPEnabled() bool {

@@ -118,6 +118,40 @@ const Settings = ({ store }) => {
                 </label>
               </div>
             </div>
+            <div className="setting-row">
+              <div className="setting-label">
+                <h4>New session icon</h4>
+                <p>The icon &amp; color a session gets when it's created.</p>
+              </div>
+              <div>
+                <select className="select" value={draft.session_icon_mode || 'random'} onChange={e => set({session_icon_mode: e.target.value})}>
+                  <option value="random">Random each time</option>
+                  <option value="fixed">Fixed icon &amp; color</option>
+                </select>
+              </div>
+            </div>
+            {(draft.session_icon_mode || 'random') === 'fixed' && (
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>Fixed icon &amp; color</h4>
+                  <p>Applied to every new session. Click to choose.</p>
+                </div>
+                <div>
+                  <button
+                    className="sess-icon-btn"
+                    title="Choose icon &amp; color"
+                    onClick={e => window.showIconPicker(
+                      e.currentTarget,
+                      draft.session_icon_name || 'terminal',
+                      (icon, color) => set({session_icon_name: icon, session_icon_color: color}),
+                      draft.session_icon_color || 'default'
+                    )}
+                  >
+                    <SessIcon kind={draft.session_icon_name || 'terminal'} color={draft.session_icon_color || 'default'} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="panel-head" style={{borderTop:'1px solid var(--hairline)', borderBottom:0, background:'var(--bg-elev-2)', justifyContent:'flex-end', gap:10}}>
             <span className="muted" style={{fontSize:12}}>{saveMsg}</span>
