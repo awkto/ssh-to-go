@@ -105,14 +105,16 @@ const Sessions = ({
   }, filtered.length)), React.createElement("div", {
     className: "panel"
   }, React.createElement("table", {
-    className: "tbl"
+    className: "tbl tbl-fixed"
   }, React.createElement("thead", null, React.createElement("tr", null, React.createElement("th", {
     style: {
       width: '26%'
     }
   }, "Session"), React.createElement("th", {
     className: "col-h3"
-  }, "Host"), React.createElement("th", null, "Activity"), React.createElement("th", {
+  }, "Host"), React.createElement("th", {
+    className: "col-act"
+  }, "Activity"), React.createElement("th", {
     className: "col-h2"
   }, "Clients"), React.createElement("th", {
     className: "col-h1"
@@ -120,7 +122,7 @@ const Sessions = ({
     className: "col-h1"
   }, "PID"), React.createElement("th", {
     className: "col-h4"
-  }, "Uptime"), React.createElement("th", {
+  }, "Up"), React.createElement("th", {
     style: {
       textAlign: 'right'
     }
@@ -303,7 +305,7 @@ const FullSessionRow = ({
         className: "muted mono", style: { fontSize: 11, marginTop: 2, paddingLeft: 28 }
       }, "resume in ", s.workingDir)),
     React.createElement("td", { className: "muted mono col-h3", style: { fontSize: 12.5 } }, s.host),
-    React.createElement("td", null,
+    React.createElement("td", { className: "col-act" },
       offloaded ? React.createElement("span", { className: "muted", style: { fontSize: 12 } }, "—")
                 : React.createElement(ActivityCell, { session: s })),
     React.createElement("td", { className: "col-h2" },

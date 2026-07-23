@@ -66,16 +66,16 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
       </div>
 
       <div className="panel">
-        <table className="tbl">
+        <table className="tbl tbl-fixed">
           <thead>
             <tr>
               <th style={{width:'26%'}}>Session</th>
               <th className="col-h3">Host</th>
-              <th>Activity</th>
+              <th className="col-act">Activity</th>
               <th className="col-h2">Clients</th>
               <th className="col-h1">Window</th>
               <th className="col-h1">PID</th>
-              <th className="col-h4">Uptime</th>
+              <th className="col-h4">Up</th>
               <th style={{textAlign:'right'}}>Actions</th>
             </tr>
           </thead>
@@ -217,7 +217,7 @@ const FullSessionRow = ({ session: s, onOpen }) => {
         )}
       </td>
       <td className="muted mono col-h3" style={{fontSize:12.5}}>{s.host}</td>
-      <td>{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
+      <td className="col-act">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
       <td className="col-h2">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <Presence clients={s.clients} />}</td>
       <td className="mono num muted col-h1" style={{fontSize:12}}>{offloaded ? '—' : s.win}</td>
       <td className="mono num muted col-h1" style={{fontSize:12}}>{offloaded ? '—' : s.pid}</td>

@@ -76,14 +76,14 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
             </button>
           </div>
           <div className="tbl-scroll" style={{maxHeight: 640, overflowY:'auto'}}>
-            <table className="tbl">
+            <table className="tbl tbl-fixed">
               <thead>
                 <tr>
                   <th style={{width: '30%'}}>Session</th>
                   <th className="col-h3">Host</th>
-                  <th>Activity</th>
+                  <th className="col-act">Activity</th>
                   <th className="col-h2">Clients</th>
-                  <th className="col-h4">Uptime</th>
+                  <th className="col-h4">Up</th>
                   <th style={{textAlign:'right'}}>Actions</th>
                 </tr>
               </thead>
@@ -322,7 +322,7 @@ const SessionRow = ({ session: s, onOpen }) => {
         )}
       </td>
       <td className="muted mono col-h3" style={{fontSize:12.5}}>{s.host}</td>
-      <td>{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
+      <td className="col-act">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
       <td className="col-h2">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <Presence clients={s.clients} />}</td>
       <td className="muted num col-h4">{s.uptime}</td>
       <td>

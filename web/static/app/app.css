@@ -508,20 +508,59 @@ a { color: inherit; text-decoration: none; }
    Session, Activity and Actions always stay; the rest drop as the panel
    shrinks: PID + Window first, then Clients, then Host, and Uptime last. */
 .panel:has(> .tbl), .tbl-scroll { container-type: inline-size; }
-@container (max-width: 900px) { .tbl th.col-h1, .tbl td.col-h1 { display: none; } } /* PID, Window */
-@container (max-width: 760px) { .tbl th.col-h2, .tbl td.col-h2 { display: none; } } /* Clients */
-@container (max-width: 620px) {
+@container (max-width: 940px) { .tbl th.col-h1, .tbl td.col-h1 { display: none; } } /* PID, Window */
+@container (max-width: 840px) { .tbl th.col-h2, .tbl td.col-h2 { display: none; } } /* Clients */
+@container (max-width: 720px) {
   .tbl th.col-h3, .tbl td.col-h3 { display: none; }                                 /* Host */
   /* Enough columns are gone by now that the 640px floor only forces needless
      scroll — let the table shrink to fit its panel instead. */
   .panel:has(> .tbl) > .tbl { min-width: 0; }
 }
-@container (max-width: 480px) { .tbl th.col-h4, .tbl td.col-h4 { display: none; } } /* Uptime */
+@container (max-width: 500px) { .tbl th.col-h4, .tbl td.col-h4 { display: none; } } /* Uptime */
 
 .cell-session {
   display: flex; align-items: center; gap: 10px;
+  min-width: 0;
 }
 .cell-session .name { font-weight: 500; }
+/* A long session title is the one column with unbounded content — left as-is it
+   grew the table wider than its panel and forced a horizontal scrollbar. Let it
+   (and the offloaded "resume in …" subtitle) ellipsize instead. */
+.tbl .cell-session .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tbl .cell-session + div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Sessions + dashboard Recent-sessions use fixed layout so a long title can
+   never grow the table past its panel (the cause of the horizontal scrollbar):
+   the table is always exactly its panel width, columns size from their headers,
+   and any overflowing cell text ellipsizes instead of widening the column. */
+.tbl-fixed { table-layout: fixed; }
+.tbl-fixed td { overflow: hidden; text-overflow: ellipsis; }
+/* Session is the flexible column: it absorbs the width freed as other columns
+   hide on narrow panels, so the title stays as legible as possible. Every other
+   column is fixed-width (Session's inline width:26/30% is overridden to auto). */
+.tbl-fixed th:first-child { width: auto !important; }
+.tbl-fixed .col-act { width: 116px; } /* Activity */
+.tbl-fixed .col-h3  { width: 96px; }  /* Host */
+.tbl-fixed .col-h2  { width: 66px; }  /* Clients */
+.tbl-fixed .col-h1  { width: 58px; }  /* Window / PID */
+.tbl-fixed .col-h4  { width: 62px; }  /* Up */
+.tbl-fixed th:last-child { width: 148px; } /* Actions — fits 4 icon btns / Recreate+Forget */
+@container (max-width: 520px) {
+  .tbl-fixed .col-act { width: 84px; }
+  .tbl-fixed th:last-child { width: 128px; }
+  /* Reclaim horizontal space for the title on phones: tighter cell padding and
+     drop the hover-only rename affordance (unreachable on touch anyway). */
+  .tbl-fixed td, .tbl-fixed th { padding-left: 10px; padding-right: 10px; }
+  .tbl-fixed .cell-session .rename-btn { display: none; }
+}
 .cell-session .icon-bg {
   width: 22px; height: 22px;
   border-radius: 5px;
