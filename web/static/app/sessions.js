@@ -90,24 +90,19 @@ const Sessions = ({
     style: {
       flex: 1
     }
-  }), React.createElement("label", {
-    className: "muted",
-    style: { fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }
-  }, "Sort:", React.createElement("select", {
-    className: "select",
-    style: { padding: '2px 6px', fontSize: 12 },
-    value: sortBy,
-    onChange: e => setSortBy(e.target.value)
-  }, React.createElement("option", { value: "activity" }, "Recent activity"),
-     React.createElement("option", { value: "opened" }, "Recently opened"),
-     React.createElement("option", { value: "created" }, "Newest created"),
-     React.createElement("option", { value: "name" }, "Name (A–Z)"))),
+  }), React.createElement(SortMenu, {
+    sortBy: sortBy,
+    setSortBy: setSortBy
+  }),
   React.createElement("span", {
     className: "muted",
+    title: `${filtered.length} shown`,
     style: {
-      fontSize: 12
+      fontSize: 12,
+      whiteSpace: 'nowrap',
+      flexShrink: 0
     }
-  }, filtered.length, " shown")), React.createElement("div", {
+  }, filtered.length)), React.createElement("div", {
     className: "panel"
   }, React.createElement("table", {
     className: "tbl"
@@ -136,6 +131,76 @@ const Sessions = ({
     session: s,
     onOpen: () => openSession(s)
   }))))));
+};
+const SORT_OPTS = [{
+  value: 'activity',
+  label: 'Recent activity'
+}, {
+  value: 'opened',
+  label: 'Recently opened'
+}, {
+  value: 'created',
+  label: 'Newest created'
+}, {
+  value: 'name',
+  label: 'Name (A\u2013Z)'
+}];
+const SortMenu = ({
+  sortBy,
+  setSortBy
+}) => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = e => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return React.createElement("div", {
+    className: "sort-menu",
+    ref: ref
+  }, React.createElement("button", {
+    className: `btn btn-secondary btn-sm ${open ? 'open' : ''}`,
+    onClick: () => setOpen(o => !o),
+    title: "Sort sessions",
+    "aria-haspopup": "listbox",
+    "aria-expanded": open
+  }, React.createElement("svg", {
+    width: "14", height: "14", viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
+  }, React.createElement("line", { x1: "4", y1: "6", x2: "13", y2: "6" }),
+     React.createElement("line", { x1: "4", y1: "12", x2: "11", y2: "12" }),
+     React.createElement("line", { x1: "4", y1: "18", x2: "9", y2: "18" }),
+     React.createElement("polyline", { points: "17 8 20 5 23 8" }),
+     React.createElement("line", { x1: "20", y1: "5", x2: "20", y2: "19" }),
+     React.createElement("polyline", { points: "17 16 20 19 23 16" })),
+     React.createElement("span", null, "Sort"),
+     React.createElement("svg", {
+       className: "caret", width: "12", height: "12", viewBox: "0 0 24 24", fill: "none",
+       stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
+     }, React.createElement("polyline", { points: "6 9 12 15 18 9" }))),
+  open && React.createElement("div", {
+    className: "sort-pop",
+    role: "listbox"
+  }, React.createElement("div", { className: "sort-pop-label" }, "Sort by"),
+     SORT_OPTS.map(o => React.createElement("button", {
+       key: o.value,
+       className: `sort-opt ${o.value === sortBy ? 'active' : ''}`,
+       role: "option",
+       "aria-selected": o.value === sortBy,
+       onClick: () => { setSortBy(o.value); setOpen(false); }
+     }, React.createElement("span", null, o.label),
+        o.value === sortBy && React.createElement(IconCheck, { size: 14 })))));
 };
 const FullSessionRow = ({
   session: s,

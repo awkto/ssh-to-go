@@ -61,16 +61,8 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
           <input placeholder="Filter sessions…" value={search} onChange={e=>setSearch(e.target.value)} />
         </div>
         <div style={{flex:1}}></div>
-        <label className="muted" style={{fontSize:12, display:'flex', alignItems:'center', gap:6}}>
-          Sort:
-          <select className="select" style={{padding:'2px 6px', fontSize:12}} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
-            <option value="activity">Recent activity</option>
-            <option value="opened">Recently opened</option>
-            <option value="created">Newest created</option>
-            <option value="name">Name (A–Z)</option>
-          </select>
-        </label>
-        <span className="muted" style={{fontSize:12}}>{filtered.length} shown</span>
+        <SortMenu sortBy={sortBy} setSortBy={setSortBy} />
+        <span className="muted" title={`${filtered.length} shown`} style={{fontSize:12, whiteSpace:'nowrap', flexShrink:0}}>{filtered.length}</span>
       </div>
 
       <div className="panel">
@@ -92,6 +84,54 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+};
+
+const SORT_OPTS = [
+  { value: 'activity', label: 'Recent activity' },
+  { value: 'opened', label: 'Recently opened' },
+  { value: 'created', label: 'Newest created' },
+  { value: 'name', label: 'Name (A–Z)' },
+];
+
+// Compact sort control: the trigger button always reads "Sort" so it never
+// gets truncated in a tight filter bar; the current selection is shown (with a
+// check) inside the popover instead.
+const SortMenu = ({ sortBy, setSortBy }) => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  return (
+    <div className="sort-menu" ref={ref}>
+      <button className={`btn btn-secondary btn-sm ${open ? 'open' : ''}`} onClick={() => setOpen(o => !o)}
+              title="Sort sessions" aria-haspopup="listbox" aria-expanded={open}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="4" y1="6" x2="13" y2="6"/><line x1="4" y1="12" x2="11" y2="12"/><line x1="4" y1="18" x2="9" y2="18"/>
+          <polyline points="17 8 20 5 23 8"/><line x1="20" y1="5" x2="20" y2="19"/><polyline points="17 16 20 19 23 16"/>
+        </svg>
+        <span>Sort</span>
+        <svg className="caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      {open && (
+        <div className="sort-pop" role="listbox">
+          <div className="sort-pop-label">Sort by</div>
+          {SORT_OPTS.map(o => (
+            <button key={o.value} className={`sort-opt ${o.value === sortBy ? 'active' : ''}`} role="option"
+                    aria-selected={o.value === sortBy} onClick={() => { setSortBy(o.value); setOpen(false); }}>
+              <span>{o.label}</span>
+              {o.value === sortBy && <IconCheck size={14} />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
