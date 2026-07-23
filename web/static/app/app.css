@@ -501,6 +501,23 @@ a { color: inherit; text-decoration: none; }
    scroll container before it decides to scroll. */
 .panel:has(> .tbl) > .tbl { min-width: 640px; }
 
+/* Progressive column hiding. Keyed to each table panel's OWN width via a
+   container query (not the viewport) so it degrades correctly for both the
+   full-width Sessions/Hosts tables and the half-width dashboard "Recent
+   sessions" column, where the viewport can be wide while the column is narrow.
+   Session, Activity and Actions always stay; the rest drop as the panel
+   shrinks: PID + Window first, then Clients, then Host, and Uptime last. */
+.panel:has(> .tbl), .tbl-scroll { container-type: inline-size; }
+@container (max-width: 900px) { .tbl th.col-h1, .tbl td.col-h1 { display: none; } } /* PID, Window */
+@container (max-width: 760px) { .tbl th.col-h2, .tbl td.col-h2 { display: none; } } /* Clients */
+@container (max-width: 620px) {
+  .tbl th.col-h3, .tbl td.col-h3 { display: none; }                                 /* Host */
+  /* Enough columns are gone by now that the 640px floor only forces needless
+     scroll — let the table shrink to fit its panel instead. */
+  .panel:has(> .tbl) > .tbl { min-width: 0; }
+}
+@container (max-width: 480px) { .tbl th.col-h4, .tbl td.col-h4 { display: none; } } /* Uptime */
+
 .cell-session {
   display: flex; align-items: center; gap: 10px;
 }
@@ -597,8 +614,20 @@ a { color: inherit; text-decoration: none; }
 .action-btn:hover { color: var(--fg); background: var(--row-hover); border-color: var(--hairline); }
 .action-btn.primary { color: var(--accent); background: var(--accent-soft); }
 .action-btn.primary:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); }
-.action-btn.danger:hover { color: var(--err); border-color: var(--err-soft); }
+.action-btn.danger:hover { color: var(--err); background: var(--err-soft); border-color: transparent; }
 .action-btn.star.starred { color: var(--warn); }
+.action-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Icon-only row actions — square buttons so the Actions column stays compact
+   on narrow viewports (Handoff→clipboard, Offload→moon/sleep, End→✕). */
+.action-btn.icon {
+  width: 28px; height: 28px;
+  padding: 0; gap: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.action-btn.icon.busy { animation: pulse-op 1s ease-in-out infinite; }
+@keyframes pulse-op { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
 
 /* ==========================================================================
    Command palette

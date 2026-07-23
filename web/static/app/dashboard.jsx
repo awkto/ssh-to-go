@@ -75,15 +75,15 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
               View all <IconArrowRight size={12} />
             </button>
           </div>
-          <div style={{maxHeight: 640, overflowY:'auto'}}>
+          <div className="tbl-scroll" style={{maxHeight: 640, overflowY:'auto'}}>
             <table className="tbl">
               <thead>
                 <tr>
                   <th style={{width: '30%'}}>Session</th>
-                  <th className="hide-mobile">Host</th>
-                  <th className="hide-mobile">Activity</th>
-                  <th className="hide-mobile">Clients</th>
-                  <th className="hide-mobile">Uptime</th>
+                  <th className="col-h3">Host</th>
+                  <th>Activity</th>
+                  <th className="col-h2">Clients</th>
+                  <th className="col-h4">Uptime</th>
                   <th style={{textAlign:'right'}}>Actions</th>
                 </tr>
               </thead>
@@ -321,10 +321,10 @@ const SessionRow = ({ session: s, onOpen }) => {
           <div className="muted mono" style={{fontSize:11, marginTop:2, paddingLeft:28}}>resume in {s.workingDir}</div>
         )}
       </td>
-      <td className="muted mono hide-mobile" style={{fontSize:12.5}}>{s.host}</td>
-      <td className="hide-mobile">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
-      <td className="hide-mobile">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <Presence clients={s.clients} />}</td>
-      <td className="muted num hide-mobile">{s.uptime}</td>
+      <td className="muted mono col-h3" style={{fontSize:12.5}}>{s.host}</td>
+      <td>{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
+      <td className="col-h2">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <Presence clients={s.clients} />}</td>
+      <td className="muted num col-h4">{s.uptime}</td>
       <td>
         <div className="actions-cell">
           {offloaded ? (
@@ -337,17 +337,18 @@ const SessionRow = ({ session: s, onOpen }) => {
             </React.Fragment>
           ) : (
             <React.Fragment>
-              <button className={`action-btn star ${starred ? 'starred' : ''}`} onClick={toggleStar} disabled={!!busy}>
-                <IconStar size={13} fill={starred ? 'currentColor' : 'none'} />
+              <button className={`action-btn icon star ${starred ? 'starred' : ''}`} onClick={toggleStar} disabled={!!busy} title={starred ? 'Unstar' : 'Star'}>
+                <IconStar size={14} fill={starred ? 'currentColor' : 'none'} />
               </button>
-              <button className="action-btn primary" onClick={onOpen} disabled={!!busy}>Open</button>
-              <button className="action-btn" onClick={onHandoff} disabled={!!busy} title="Copy SSH handoff command">Handoff</button>
-              <button className="action-btn" onClick={onOffload} disabled={!!busy}
-                      title="Stop tmux but keep tracked so you can resume from the same directory">
-                {busy === 'offloading' ? 'Offloading…' : 'Offload'}
+              <button className="action-btn icon" onClick={onHandoff} disabled={!!busy} title="Copy SSH handoff command">
+                <IconCopy size={14} />
               </button>
-              <button className="action-btn danger" onClick={onKill} disabled={!!busy}>
-                {busy === 'ending' ? 'Ending…' : 'End'}
+              <button className={`action-btn icon ${busy === 'offloading' ? 'busy' : ''}`} onClick={onOffload} disabled={!!busy}
+                      title="Offload — stop tmux but keep it resumable from the same directory">
+                <IconMoon size={14} />
+              </button>
+              <button className={`action-btn icon danger ${busy === 'ending' ? 'busy' : ''}`} onClick={onKill} disabled={!!busy} title="End session (forgets it entirely)">
+                <IconClose size={14} />
               </button>
             </React.Fragment>
           )}

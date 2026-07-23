@@ -111,17 +111,15 @@ const Sessions = ({
       width: '26%'
     }
   }, "Session"), React.createElement("th", {
-    className: "hide-mobile"
-  }, "Host"), React.createElement("th", {
-    className: "hide-mobile"
-  }, "Activity"), React.createElement("th", {
-    className: "hide-mobile"
+    className: "col-h3"
+  }, "Host"), React.createElement("th", null, "Activity"), React.createElement("th", {
+    className: "col-h2"
   }, "Clients"), React.createElement("th", {
-    className: "hide-mobile"
+    className: "col-h1"
   }, "Window"), React.createElement("th", {
-    className: "hide-mobile"
+    className: "col-h1"
   }, "PID"), React.createElement("th", {
-    className: "hide-mobile"
+    className: "col-h4"
   }, "Uptime"), React.createElement("th", {
     style: {
       textAlign: 'right'
@@ -304,16 +302,16 @@ const FullSessionRow = ({
       offloaded && s.workingDir && React.createElement("div", {
         className: "muted mono", style: { fontSize: 11, marginTop: 2, paddingLeft: 28 }
       }, "resume in ", s.workingDir)),
-    React.createElement("td", { className: "muted mono hide-mobile", style: { fontSize: 12.5 } }, s.host),
-    React.createElement("td", { className: "hide-mobile" },
+    React.createElement("td", { className: "muted mono col-h3", style: { fontSize: 12.5 } }, s.host),
+    React.createElement("td", null,
       offloaded ? React.createElement("span", { className: "muted", style: { fontSize: 12 } }, "—")
                 : React.createElement(ActivityCell, { session: s })),
-    React.createElement("td", { className: "hide-mobile" },
+    React.createElement("td", { className: "col-h2" },
       offloaded ? React.createElement("span", { className: "muted", style: { fontSize: 12 } }, "—")
                 : React.createElement(Presence, { clients: s.clients })),
-    React.createElement("td", { className: "mono num muted hide-mobile", style: { fontSize: 12 } }, offloaded ? "—" : s.win),
-    React.createElement("td", { className: "mono num muted hide-mobile", style: { fontSize: 12 } }, offloaded ? "—" : s.pid),
-    React.createElement("td", { className: "muted num hide-mobile" }, s.uptime),
+    React.createElement("td", { className: "mono num muted col-h1", style: { fontSize: 12 } }, offloaded ? "—" : s.win),
+    React.createElement("td", { className: "mono num muted col-h1", style: { fontSize: 12 } }, offloaded ? "—" : s.pid),
+    React.createElement("td", { className: "muted num col-h4" }, s.uptime),
     React.createElement("td", null, React.createElement("div", { className: "actions-cell" },
       offloaded
         ? [
@@ -323,14 +321,14 @@ const FullSessionRow = ({
             React.createElement("button", { key: "fgt", className: "action-btn", onClick: onForget, disabled: recreating, title: "Forget the saved working directory" }, "Forget"),
           ]
         : [
-            React.createElement("button", { key: "star", className: `action-btn star ${starred ? 'starred' : ''}`, onClick: toggleStar, disabled: !!busy },
-              React.createElement(IconStar, { size: 13, fill: starred ? 'currentColor' : 'none' })),
-            React.createElement("button", { key: "open", className: "action-btn primary", onClick: onOpen, disabled: !!busy }, "Open"),
-            React.createElement("button", { key: "h", className: "action-btn", onClick: onHandoff, disabled: !!busy, title: "Copy SSH handoff command" }, "Handoff"),
-            React.createElement("button", { key: "off", className: "action-btn", onClick: onOffload, disabled: !!busy, title: "Stop tmux but keep tracked so you can resume from the same directory" },
-              busy === 'offloading' ? "Offloading…" : "Offload"),
-            React.createElement("button", { key: "end", className: "action-btn danger", onClick: onKill, disabled: !!busy },
-              busy === 'ending' ? "Ending…" : "End"),
+            React.createElement("button", { key: "star", className: `action-btn icon star ${starred ? 'starred' : ''}`, onClick: toggleStar, disabled: !!busy, title: starred ? 'Unstar' : 'Star' },
+              React.createElement(IconStar, { size: 14, fill: starred ? 'currentColor' : 'none' })),
+            React.createElement("button", { key: "h", className: "action-btn icon", onClick: onHandoff, disabled: !!busy, title: "Copy SSH handoff command" },
+              React.createElement(IconCopy, { size: 14 })),
+            React.createElement("button", { key: "off", className: `action-btn icon ${busy === 'offloading' ? 'busy' : ''}`, onClick: onOffload, disabled: !!busy, title: "Offload — stop tmux but keep it resumable from the same directory" },
+              React.createElement(IconMoon, { size: 14 })),
+            React.createElement("button", { key: "end", className: `action-btn icon danger ${busy === 'ending' ? 'busy' : ''}`, onClick: onKill, disabled: !!busy, title: "End session (forgets it entirely)" },
+              React.createElement(IconClose, { size: 14 })),
           ])));
 };
 Object.assign(window, {
