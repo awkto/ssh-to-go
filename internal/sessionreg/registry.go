@@ -22,6 +22,23 @@ type Entry struct {
 	WorkingDir string    `json:"working_dir,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 	LastSeenAt time.Time `json:"last_seen_at,omitempty"`
+	// Throwaway sessions are collected once nothing is attached — see
+	// Flags. LastAttachedAt drives that idle clock: it is the last moment
+	// a client was observed on the session, or the creation time if one
+	// never has been.
+	Throwaway      bool      `json:"throwaway,omitempty"`
+	LastAttachedAt time.Time `json:"last_attached_at,omitempty"`
+	// Incognito hides the session from every UI surface. The entry still
+	// exists — hiding something requires knowing it is there, and the tmux
+	// session outlives this process, so the flag has to be on disk.
+	Incognito bool `json:"incognito,omitempty"`
+}
+
+// Flags are the session flavours chosen at creation. Zero value is an
+// ordinary session, so existing callers are unaffected.
+type Flags struct {
+	Throwaway bool
+	Incognito bool
 }
 
 // Store is a thread-safe JSON-backed map of registered sessions.
@@ -85,6 +102,13 @@ func (s *Store) saveLocked() error {
 // Add records a newly-created session. If one already exists with the same
 // (host, name), its WorkingDir is updated and CreatedAt is left untouched.
 func (s *Store) Add(host, name, workingDir string) error {
+	return s.AddWithFlags(host, name, workingDir, Flags{})
+}
+
+// AddWithFlags is Add with the session flavours set. Flags only apply to a
+// NEW entry: re-adding an existing session (rename, recreate) keeps whatever
+// it was created as, so a throwaway can't quietly become permanent.
+func (s *Store) AddWithFlags(host, name, workingDir string, flags Flags) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key(host, name)
@@ -102,9 +126,78 @@ func (s *Store) Add(host, name, workingDir string) error {
 			WorkingDir: workingDir,
 			CreatedAt:  now,
 			LastSeenAt: now,
+			Throwaway:  flags.Throwaway,
+			Incognito:  flags.Incognito,
+			// Never attached yet — the idle clock starts now, so a session
+			// created and forgotten is still collected.
+			LastAttachedAt: now,
 		}
 	}
 	return s.saveLocked()
+}
+
+// MarkAttached records that a client is (or just was) on the session,
+// resetting the throwaway idle clock. Cheap no-op for untracked sessions.
+func (s *Store) MarkAttached(host, name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := key(host, name)
+	e, ok := s.entries[k]
+	if !ok {
+		return
+	}
+	now := time.Now().UTC()
+	// Persist at most once a minute: this fires on every poll cycle for
+	// every attached session, and the idle threshold is minutes wide.
+	shouldSave := now.Sub(e.LastAttachedAt) > time.Minute
+	e.LastAttachedAt = now
+	e.LastSeenAt = now
+	s.entries[k] = e
+	if shouldSave {
+		_ = s.saveLocked()
+	}
+}
+
+// HiddenNames returns the incognito session names on a host, for the UI
+// filter. Returned as a set so callers can test membership directly.
+func (s *Store) HiddenNames(host string) map[string]bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var hidden map[string]bool
+	for _, e := range s.entries {
+		if e.Host == host && e.Incognito {
+			if hidden == nil {
+				hidden = make(map[string]bool)
+			}
+			hidden[e.Name] = true
+		}
+	}
+	return hidden
+}
+
+// Throwaways returns a copy of every throwaway entry, for the idle sweeper.
+func (s *Store) Throwaways() []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []Entry
+	for _, e := range s.entries {
+		if e.Throwaway {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// Flavours returns the flags recorded for a session. Missing entries report
+// the zero value (an ordinary session).
+func (s *Store) Flavours(host, name string) Flags {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	e, ok := s.entries[key(host, name)]
+	if !ok {
+		return Flags{}
+	}
+	return Flags{Throwaway: e.Throwaway, Incognito: e.Incognito}
 }
 
 // Remove drops an entry. Missing entries are not an error.

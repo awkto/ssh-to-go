@@ -93,6 +93,12 @@ func (h *Handlers) missingFor(host hub.HostState) []sessionreg.Entry {
 	var missing []sessionreg.Entry
 	seen := make(map[string]struct{}, len(tracked))
 	for _, e := range tracked {
+		// Incognito sessions are filtered out of host.Sessions, so without
+		// this they'd resurface here as phantom "resumable" entries — the
+		// one place a hidden session would leak back into the UI.
+		if e.Incognito {
+			continue
+		}
 		norm := sanitizeSessionName(e.Name)
 		if _, ok := alive[norm]; ok {
 			continue
@@ -127,6 +133,10 @@ type createSessionReq struct {
 	// "claude"). The shell outlives it, so exiting the command leaves a
 	// prompt in Cwd rather than killing the session.
 	Command string `json:"command,omitempty"`
+	// Throwaway sessions are killed and purged once nothing is attached.
+	Throwaway bool `json:"throwaway,omitempty"`
+	// Incognito sessions run normally but never appear in the UI.
+	Incognito bool `json:"incognito,omitempty"`
 }
 
 func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
@@ -191,8 +201,15 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.Registry != nil {
-		if err := h.Registry.Add(hostName, req.Name, req.Cwd); err != nil {
+		// Incognito sessions are registered too. Hiding one requires knowing
+		// it exists, and the tmux session outlives this process — the entry
+		// is simply never surfaced (see Hub's hidden filter).
+		flags := sessionreg.Flags{Throwaway: req.Throwaway, Incognito: req.Incognito}
+		if err := h.Registry.AddWithFlags(hostName, req.Name, req.Cwd, flags); err != nil {
 			log.Printf("session registry add %s/%s: %v", hostName, req.Name, err)
+		}
+		if req.Incognito {
+			h.Hub.SetHidden(hostName, h.Registry.HiddenNames(hostName))
 		}
 	}
 
@@ -410,7 +427,11 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 	if h.Registry != nil {
 		if entry, ok := h.Registry.Get(hostName, sessionName); ok {
 			_ = h.Registry.Remove(hostName, sessionName)
-			_ = h.Registry.Add(hostName, req.NewName, entry.WorkingDir)
+			// Carry the flavours across: renaming a throwaway must not
+			// quietly promote it to a permanent session (nor un-hide an
+			// incognito one).
+			_ = h.Registry.AddWithFlags(hostName, req.NewName, entry.WorkingDir,
+				sessionreg.Flags{Throwaway: entry.Throwaway, Incognito: entry.Incognito})
 		}
 	}
 

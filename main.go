@@ -122,6 +122,15 @@ func main() {
 		return keystore.ResolveKeyPath(host, ks, sm)
 	}
 
+	// Restore the incognito hide-list before the first poll lands, so a
+	// hidden session never flashes into the dashboard after a restart.
+	for _, host := range cfg.Hosts {
+		if hidden := reg.HiddenNames(host.Name); len(hidden) > 0 {
+			h.SetHidden(host.Name, hidden)
+			log.Printf("hiding %d incognito session(s) on %s", len(hidden), host.Name)
+		}
+	}
+
 	for _, host := range cfg.Hosts {
 		log.Printf("starting poller for %s (%s@%s)", host.Name, host.User, host.DialAddress())
 		tmux.StartPoller(host, cfg.PollInterval, resolveKey, reg, pollResults, done)

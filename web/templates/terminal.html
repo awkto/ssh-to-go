@@ -74,6 +74,56 @@
         }
         .btn-small:hover { background: #3a3a5a; }
 
+        /* Icon-only toolbar buttons — theme, handoff, menu. Square so the
+           three read as one group regardless of glyph width. */
+        .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px; height: 24px;
+            background: #2a2a4a;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 0;
+            touch-action: manipulation;
+        }
+        .btn-icon:hover { background: #3a3a5a; color: #fff; }
+        .btn-icon svg { display: block; }
+        .btn-icon.ok { color: #4ade80; border-color: #4ade80; }
+
+        /* Font-size row inside the menu, laid out like a browser's zoom
+           control: label on the left, − [value] + on the right. */
+        .menu-zoom {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px;
+            padding: 8px 12px 8px 14px;
+        }
+        .menu-zoom-label { font-size: 13px; color: #e0e0e8; white-space: nowrap; }
+        .menu-zoom-ctl { display: inline-flex; align-items: center; gap: 2px; }
+        .menu-zoom-ctl button {
+            background: #2a2a4a;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1;
+            padding: 4px 0;
+            width: 26px;
+            text-align: center;
+            font-family: inherit;
+            touch-action: manipulation;
+        }
+        .menu-zoom-ctl button:hover { background: #3a3a5a; color: #fff; }
+        /* Reset button is wider — it holds the current size. */
+        .menu-zoom-ctl button#zoom-reset-btn {
+            width: 34px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+        }
+
         /* Host badge — only visible on wide screens */
         .host-badge {
             display: none;
@@ -235,21 +285,48 @@
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <div style="position:relative;">
-                <button class="btn-small" id="theme-btn" title="Terminal theme"><span id="theme-label">Theme</span></button>
+                <!-- Swatch grid doubles as a preview: applyTheme() paints these
+                     four squares with muted colours from the active theme. -->
+                <button class="btn-icon" id="theme-btn" title="Terminal theme" aria-label="Terminal theme">
+                    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                        <rect id="sw-1" x="1.5" y="1.5" width="5.6" height="5.6" rx="1.4"/>
+                        <rect id="sw-2" x="8.9" y="1.5" width="5.6" height="5.6" rx="1.4"/>
+                        <rect id="sw-3" x="1.5" y="8.9" width="5.6" height="5.6" rx="1.4"/>
+                        <rect id="sw-4" x="8.9" y="8.9" width="5.6" height="5.6" rx="1.4"/>
+                    </svg>
+                </button>
                 <div id="theme-dropdown" class="toolbar-dropdown theme-dropdown" style="display:none;"></div>
             </div>
-            <span style="display:flex;gap:2px;align-items:center;">
-                <button class="btn-small" id="zoom-out-btn" title="Decrease font size">A-</button>
-                <button class="btn-small" id="zoom-reset-btn" title="Reset font size" style="min-width:28px"><span id="zoom-level">14</span></button>
-                <button class="btn-small" id="zoom-in-btn" title="Increase font size">A+</button>
-            </span>
+            <button class="btn-icon" id="handoff-btn" title="Copy the SSH command for this session" aria-label="Handoff">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <polyline points="6 9 9 12 6 15"/>
+                    <line x1="12" y1="15" x2="17" y2="15"/>
+                </svg>
+            </button>
             <div style="position:relative;">
-                <button class="btn-small" id="toolbar-burger" title="More actions" style="font-size:14px;line-height:1;padding:3px 12px;">&#9776;</button>
+                <button class="btn-icon" id="toolbar-burger" title="More actions" aria-label="More actions">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <line x1="3" y1="6" x2="21" y2="6"/>
+                        <line x1="3" y1="12" x2="21" y2="12"/>
+                        <line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                </button>
                 <div id="toolbar-menu" class="toolbar-dropdown" style="display:none;">
+                    <div class="menu-zoom">
+                        <span class="menu-zoom-label">Font size</span>
+                        <div class="menu-zoom-ctl">
+                            <button type="button" id="zoom-out-btn" title="Smaller">&#8722;</button>
+                            <button type="button" id="zoom-reset-btn" title="Reset"><span id="zoom-level">14</span></button>
+                            <button type="button" id="zoom-in-btn" title="Larger">+</button>
+                        </div>
+                    </div>
+                    <div class="toolbar-menu-divider"></div>
                     <button class="toolbar-menu-item" id="paste-btn">Paste</button>
                     <button class="toolbar-menu-item" id="rename-btn">Rename</button>
                     <button class="toolbar-menu-item" id="duplicate-btn">Duplicate</button>
-                    <button class="toolbar-menu-item" id="handoff-btn">Handoff</button>
                     <button class="toolbar-menu-item" id="detach-btn">Kick Other Clients</button>
                     <div class="toolbar-menu-divider"></div>
                     <button class="toolbar-menu-item" id="ctrl-c-btn">Send Ctrl-C</button>

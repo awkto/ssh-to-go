@@ -28,6 +28,8 @@ const NewSession = ({
   const [createDir, setCreateDir] = React.useState(nsGet(NS_LS.createDir, '1') === '1');
   const [launch, setLaunch] = React.useState(nsGet(NS_LS.launch, 'shell') === 'command' ? 'command' : 'shell');
   const [command, setCommand] = React.useState(nsGet(NS_LS.command, ''));
+  const [throwaway, setThrowaway] = React.useState(false);
+  const [incognito, setIncognito] = React.useState(false);
   const [attach, setAttach] = React.useState(true);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -74,7 +76,9 @@ const NewSession = ({
       const finalName = name.trim() || `session-${Math.random().toString(36).slice(2, 7)}`;
       await createSession(host, finalName, cwd.trim() || '', {
         createDir,
-        command: runCmd
+        command: runCmd,
+        throwaway,
+        incognito
       });
       onClose();
       if (attach) openTerminal(host, finalName);
@@ -174,7 +178,27 @@ const NewSession = ({
     spellCheck: false
   }), React.createElement("div", {
     className: "hint"
-  }, launch === 'command' ? 'Typed into the session once it starts — the shell stays alive when the command exits.' : 'Just a shell, nothing typed for you.')), HOSTS.length === 0 && React.createElement("div", {
+  }, launch === 'command' ? 'Typed into the session once it starts — the shell stays alive when the command exits.' : 'Just a shell, nothing typed for you.')), React.createElement("div", {
+    className: "field"
+  }, React.createElement("div", {
+    className: "flavour-row"
+  }, React.createElement("label", {
+    className: "checkbox flavour",
+    title: "Removes session on disconnect"
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: throwaway,
+    onChange: e => setThrowaway(e.target.checked)
+  }), " Throwaway"), React.createElement("label", {
+    className: "checkbox flavour",
+    title: "Hides session from dashboard"
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: incognito,
+    onChange: e => setIncognito(e.target.checked)
+  }), " Incognito")), (throwaway || incognito) && React.createElement("div", {
+    className: "hint"
+  }, throwaway && incognito ? 'Hidden from the dashboard, and deleted once you disconnect or leave it idle 15 minutes.' : throwaway ? 'Killed and forgotten once you disconnect, or after 15 minutes with nothing attached.' : 'Runs normally but never appears in the app — only tmux on the host will show it.')), HOSTS.length === 0 && React.createElement("div", {
     className: "muted",
     style: {
       fontSize: 12.5,

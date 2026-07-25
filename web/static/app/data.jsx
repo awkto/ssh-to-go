@@ -268,13 +268,18 @@ function useStore() {
 }
 
 // opts: { createDir } makes cwd when missing, { command } is typed into the
-// session once it starts. Both omitted keeps the old behaviour.
+// session once it starts, { throwaway } self-destructs it once nothing is
+// attached, { incognito } hides it from the UI. All omitted keeps the old
+// behaviour.
 async function createSession(hostName, name, cwd, opts) {
   const o = opts || {};
   const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, cwd: cwd || '', create_dir: !!o.createDir, command: o.command || '' }),
+    body: JSON.stringify({
+      name, cwd: cwd || '', create_dir: !!o.createDir, command: o.command || '',
+      throwaway: !!o.throwaway, incognito: !!o.incognito,
+    }),
   });
   if (!r.ok) throw new Error(await r.text());
   await refresh();

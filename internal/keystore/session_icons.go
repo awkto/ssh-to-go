@@ -122,6 +122,20 @@ func (s *SessionIconStore) Set(host, session string, icon SessionIcon) error {
 	return s.save()
 }
 
+// Delete drops all icon/color/star/theme data for a session. Used when a
+// session is collected and must leave no trace behind. Missing keys are not
+// an error.
+func (s *SessionIconStore) Delete(host, session string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := sessionKey(host, session)
+	if _, ok := s.icons[key]; !ok {
+		return nil
+	}
+	delete(s.icons, key)
+	return s.save()
+}
+
 // Rename migrates icon data from one session name to another.
 func (s *SessionIconStore) Rename(host, oldSession, newSession string) error {
 	s.mu.Lock()

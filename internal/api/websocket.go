@@ -47,4 +47,8 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	// relay.Relay already sends close code 4000; don't send another close
 	log.Printf("terminal detached: host=%s session=%s", hostName, sessionName)
+	// A throwaway is collected once the LAST client leaves. This fires per
+	// connection, so the check asks tmux how many are left rather than
+	// assuming this was the only one.
+	h.onClientDetached(hostName, sessionName)
 }

@@ -46,6 +46,12 @@ func NewRouter(rc RouterConfig) http.Handler {
 		Done:         rc.Done,
 		Version:      rc.Version,
 	}
+	// Collects throwaway sessions that have been sitting with nothing
+	// attached. The per-disconnect check handles the common case; this
+	// catches sessions abandoned without a clean detach, and survives a
+	// restart because the idle clock is persisted in the registry.
+	handlers.StartThrowawaySweeper()
+
 	mux := http.NewServeMux()
 
 	// Auth API (some routes are public, gated by middleware)

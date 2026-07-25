@@ -1144,6 +1144,20 @@ a { color: inherit; text-decoration: none; }
   color: var(--fg);
 }
 
+/* Session flavour checkboxes (Throwaway / Incognito). Same specificity
+   problem as .dir-create — `.field label` would stack box over text. */
+.flavour-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.flavour-row .flavour {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: help;
+}
+
 /* Two-state slide toggle (New Session → Launch). The thumb is a separate
    absolutely-positioned layer so it can transition between halves; the
    buttons stay in normal flow above it. */

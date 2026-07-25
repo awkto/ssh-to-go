@@ -510,14 +510,24 @@ function initTerminal(host, session) {
 
     }
 
-    // Handoff button
+    // Handoff button — icon-only now, so success is a transient check mark
+    // in place of the glyph instead of a text swap.
     document.getElementById("handoff-btn").addEventListener("click", async function () {
+        const btn = this;
         try {
             const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/handoff`);
             const data = await res.json();
             await clipCopy(data.command);
-            this.textContent = "Copied!";
-            setTimeout(() => { this.textContent = "Handoff"; }, 2000);
+            const original = btn.innerHTML;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
+                'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            btn.classList.add("ok");
+            btn.title = "SSH command copied";
+            setTimeout(function () {
+                btn.innerHTML = original;
+                btn.classList.remove("ok");
+                btn.title = "Copy the SSH command for this session";
+            }, 2000);
         } catch (e) {
             alert("Failed to copy: " + e.message);
         }
@@ -618,14 +628,19 @@ function initTerminal(host, session) {
         fitAddon.fit();
     }
     document.getElementById("zoom-level").textContent = savedFontSize;
+    // The font row lives inside the burger menu now. Browsers keep their menu
+    // open while you step the zoom, so swallow the click before the
+    // document-level handler closes ours — and don't steal focus back to the
+    // terminal, which would close it too.
+    document.querySelector(".menu-zoom").addEventListener("click", function (e) { e.stopPropagation(); });
     document.getElementById("zoom-in-btn").addEventListener("click", function () {
-        setFontSize(term.options.fontSize + 2); term.focus();
+        setFontSize(term.options.fontSize + 2);
     });
     document.getElementById("zoom-out-btn").addEventListener("click", function () {
-        setFontSize(term.options.fontSize - 2); term.focus();
+        setFontSize(term.options.fontSize - 2);
     });
     document.getElementById("zoom-reset-btn").addEventListener("click", function () {
-        setFontSize(DEFAULT_FONT_SIZE); term.focus();
+        setFontSize(DEFAULT_FONT_SIZE);
     });
 
     // ── Theme switching ──
@@ -644,9 +659,15 @@ function initTerminal(host, session) {
         if (mobileBar) {
             mobileBar.style.background = darkenColor(entry.theme.background, 0.15);
         }
-        // Update the theme label in toolbar
-        var themeLabel = document.getElementById("theme-label");
-        if (themeLabel) themeLabel.textContent = entry.name;
+        // The theme button is a 2x2 swatch grid that previews the active
+        // theme. Colors are pulled toward the toolbar background so the icon
+        // reads as UI chrome rather than a row of highlighter pens.
+        var chrome = darkenColor(entry.theme.background, 0.15);
+        var swatches = [entry.theme.blue, entry.theme.green, entry.theme.magenta || entry.theme.red, entry.theme.yellow];
+        swatches.forEach(function (color, i) {
+            var el = document.getElementById("sw-" + (i + 1));
+            if (el) el.setAttribute("fill", mixColor(color || entry.theme.foreground, chrome, 0.35));
+        });
         applyScrollbarTheme(entry.theme);
         // Persist locally for instant load next time
         localStorage.setItem("term-theme:" + host + ":" + session, themeId);

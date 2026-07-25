@@ -264,7 +264,9 @@ async function createSession(hostName, name, cwd, opts) {
       name,
       cwd: cwd || '',
       create_dir: !!o.createDir,
-      command: o.command || ''
+      command: o.command || '',
+      throwaway: !!o.throwaway,
+      incognito: !!o.incognito
     })
   });
   if (!r.ok) throw new Error(await r.text());

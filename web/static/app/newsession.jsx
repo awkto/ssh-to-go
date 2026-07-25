@@ -25,6 +25,11 @@ const NewSession = ({ store, onClose }) => {
   const [createDir, setCreateDir] = React.useState(nsGet(NS_LS.createDir, '1') === '1');
   const [launch, setLaunch] = React.useState(nsGet(NS_LS.launch, 'shell') === 'command' ? 'command' : 'shell');
   const [command, setCommand] = React.useState(nsGet(NS_LS.command, ''));
+  // Deliberately NOT persisted, unlike the fields above: both are
+  // consequential enough that they should be a per-create decision rather
+  // than something yesterday's session left switched on.
+  const [throwaway, setThrowaway] = React.useState(false);
+  const [incognito, setIncognito] = React.useState(false);
   const [attach, setAttach] = React.useState(true);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -61,7 +66,7 @@ const NewSession = ({ store, onClose }) => {
     setErr(''); setBusy(true);
     try {
       const finalName = name.trim() || `session-${Math.random().toString(36).slice(2, 7)}`;
-      await createSession(host, finalName, cwd.trim() || '', { createDir, command: runCmd });
+      await createSession(host, finalName, cwd.trim() || '', { createDir, command: runCmd, throwaway, incognito });
       onClose();
       if (attach) openTerminal(host, finalName);
     } catch (ex) {
@@ -132,6 +137,26 @@ const NewSession = ({ store, onClose }) => {
                   ? 'Typed into the session once it starts — the shell stays alive when the command exits.'
                   : 'Just a shell, nothing typed for you.'}
               </div>
+            </div>
+
+            <div className="field">
+              <div className="flavour-row">
+                <label className="checkbox flavour" title="Removes session on disconnect">
+                  <input type="checkbox" checked={throwaway} onChange={e=>setThrowaway(e.target.checked)} /> Throwaway
+                </label>
+                <label className="checkbox flavour" title="Hides session from dashboard">
+                  <input type="checkbox" checked={incognito} onChange={e=>setIncognito(e.target.checked)} /> Incognito
+                </label>
+              </div>
+              {(throwaway || incognito) && (
+                <div className="hint">
+                  {throwaway && incognito
+                    ? 'Hidden from the dashboard, and deleted once you disconnect or leave it idle 15 minutes.'
+                    : throwaway
+                      ? 'Killed and forgotten once you disconnect, or after 15 minutes with nothing attached.'
+                      : 'Runs normally but never appears in the app — only tmux on the host will show it.'}
+                </div>
+              )}
             </div>
 
             {HOSTS.length === 0 && (

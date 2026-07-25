@@ -39,16 +39,56 @@ type HostSession struct {
 type Hub struct {
 	mu    sync.RWMutex
 	hosts map[string]*HostState
+	// hidden is host -> set of incognito session names. Listings are built
+	// from live tmux state, not the registry, so this is where a session
+	// gets withheld from the UI. Kept here because it is the one place both
+	// /api/sessions and /api/hosts read from.
+	hidden map[string]map[string]bool
 }
 
 func New(hosts []config.Host) *Hub {
 	h := &Hub{
-		hosts: make(map[string]*HostState, len(hosts)),
+		hosts:  make(map[string]*HostState, len(hosts)),
+		hidden: make(map[string]map[string]bool),
 	}
 	for _, host := range hosts {
 		h.hosts[host.Name] = &HostState{Config: host}
 	}
 	return h
+}
+
+// SetHidden replaces the incognito set for a host. Passing nil clears it.
+func (h *Hub) SetHidden(host string, names map[string]bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(names) == 0 {
+		delete(h.hidden, host)
+		return
+	}
+	h.hidden[host] = names
+}
+
+// IsHidden reports whether a session is incognito on the given host.
+func (h *Hub) IsHidden(host, session string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.hidden[host][session]
+}
+
+// visibleLocked drops incognito sessions from a host's session list. Callers
+// must hold at least a read lock.
+func (h *Hub) visibleLocked(host string, sessions []tmux.Session) []tmux.Session {
+	hidden := h.hidden[host]
+	if len(hidden) == 0 {
+		return sessions
+	}
+	out := make([]tmux.Session, 0, len(sessions))
+	for _, s := range sessions {
+		if !hidden[s.Name] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // Update applies a poll result to the hub state.
@@ -94,7 +134,7 @@ func (h *Hub) AllSessions() []HostSession {
 
 	var all []HostSession
 	for _, state := range h.hosts {
-		for _, s := range state.Sessions {
+		for _, s := range h.visibleLocked(state.Config.Name, state.Sessions) {
 			all = append(all, HostSession{
 				HostName: state.Config.Name,
 				Host:     state.Config,
@@ -112,7 +152,11 @@ func (h *Hub) AllHosts() []HostState {
 
 	all := make([]HostState, 0, len(h.hosts))
 	for _, state := range h.hosts {
-		all = append(all, *state)
+		// Copy before filtering: HostState is returned by value but Sessions
+		// is a slice header sharing the hub's backing array.
+		s := *state
+		s.Sessions = h.visibleLocked(state.Config.Name, state.Sessions)
+		all = append(all, s)
 	}
 	sort.Slice(all, func(i, j int) bool {
 		return all[i].Config.Name < all[j].Config.Name
