@@ -6,7 +6,7 @@
 >
 > **ssh-to-go** keeps your sessions alive on the server. Pick up exactly where you left off — from another computer, your phone on the bus, or anywhere with a web browser.
 
-https://github.com/user-attachments/assets/2bf89cff-01a8-441a-8341-f0c211a1e9bc
+https://github.com/user-attachments/assets/e689e010-4df3-4308-b6c3-fc3f9a460cfe
 
 ---
 
