@@ -9,6 +9,38 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; background: #1a1a2e; overflow: hidden; }
+
+        /* Scrollbars — same slim, low-contrast treatment as the dashboard,
+           but the colors are derived from the active terminal theme in
+           applyTheme() so they re-tint whenever the theme changes. The
+           values here are the "Default" theme's, used until JS runs. */
+        :root {
+            color-scheme: dark;
+            --sb-thumb: #4c4c66;
+            --sb-thumb-hover: #6a6a85;
+        }
+        *::-webkit-scrollbar { width: 10px; height: 10px; }
+        *::-webkit-scrollbar-track { background: transparent; }
+        *::-webkit-scrollbar-thumb {
+            background: var(--sb-thumb);
+            border-radius: 10px;
+            /* Transparent border + padding-box clip insets the thumb without
+               having to paint a track color that matches the backdrop. */
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
+        *::-webkit-scrollbar-thumb:hover { background: var(--sb-thumb-hover); background-clip: padding-box; }
+        *::-webkit-scrollbar-corner { background: transparent; }
+        /* The toolbar dropdowns keep their own dark chrome whatever the
+           terminal theme is, so their scrollbar stays dark too. */
+        .toolbar-dropdown { --sb-thumb: #3f3f5f; --sb-thumb-hover: #56567d; }
+        /* Firefox (and anything without the -webkit- pseudo-elements). Chrome
+           ignores ::-webkit-scrollbar on any element that also sets these, so
+           they must NOT apply where the rules above do. */
+        @supports not selector(::-webkit-scrollbar) {
+            * { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
+        }
+
         body {
             position: fixed;
             inset: 0;

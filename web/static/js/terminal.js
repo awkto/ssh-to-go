@@ -637,8 +637,48 @@ function initTerminal(host, session) {
         // Update the theme label in toolbar
         var themeLabel = document.getElementById("theme-label");
         if (themeLabel) themeLabel.textContent = entry.name;
+        applyScrollbarTheme(entry.theme);
         // Persist locally for instant load next time
         localStorage.setItem("term-theme:" + host + ":" + session, themeId);
+    }
+
+    // Tint the scrollbars (xterm's scrollback viewport, the theme dropdown,
+    // the mobile key bar) to the active theme. The thumb is the terminal
+    // background blended toward the foreground, so it stays low-contrast on
+    // dark and light themes alike instead of the bright browser default.
+    function applyScrollbarTheme(theme) {
+        var bg = theme.background || "#1a1a2e";
+        var fg = theme.foreground || "#e0e0e8";
+        var root = document.documentElement;
+        root.style.setProperty("--sb-thumb", mixColor(bg, fg, 0.28));
+        root.style.setProperty("--sb-thumb-hover", mixColor(bg, fg, 0.5));
+        // Keeps any unstyled native UI (Firefox, form controls) on the same side.
+        root.style.colorScheme = luminance(bg) < 0.5 ? "dark" : "light";
+    }
+
+    function parseHex(hex) {
+        hex = String(hex).replace("#", "");
+        if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        return [
+            parseInt(hex.substring(0, 2), 16) || 0,
+            parseInt(hex.substring(2, 4), 16) || 0,
+            parseInt(hex.substring(4, 6), 16) || 0,
+        ];
+    }
+
+    // Linear blend of two hex colors; amount 0 = a, 1 = b.
+    function mixColor(a, b, amount) {
+        var ca = parseHex(a), cb = parseHex(b);
+        var r = Math.round(ca[0] + (cb[0] - ca[0]) * amount);
+        var g = Math.round(ca[1] + (cb[1] - ca[1]) * amount);
+        var bl = Math.round(ca[2] + (cb[2] - ca[2]) * amount);
+        return "#" + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+    }
+
+    // Rough perceptual brightness, 0..1.
+    function luminance(hex) {
+        var c = parseHex(hex);
+        return (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
     }
 
     function darkenColor(hex, amount) {
