@@ -69,14 +69,75 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 // first pane inherits the deeper scrollback — a pane's depth is fixed at
 // creation, so setting it afterwards wouldn't grow that pane.
 func (m *Manager) CreateSession(client *ssh.Client, name, windowSize, cwd string, historyLimit int) error {
+	return m.CreateSessionWith(client, name, CreateOptions{
+		WindowSize:   windowSize,
+		Cwd:          cwd,
+		HistoryLimit: historyLimit,
+	})
+}
+
+// CreateOptions carries the optional knobs of session creation. Zero value
+// behaves exactly like the old positional CreateSession.
+type CreateOptions struct {
+	WindowSize   string
+	Cwd          string
+	HistoryLimit int
+	// CreateDir makes the working directory before starting tmux, instead
+	// of failing when it doesn't exist yet. Only meaningful with Cwd.
+	CreateDir bool
+	// Command, when set, is typed into the new session's shell after it
+	// starts. Sent with send-keys rather than passed to new-session so the
+	// shell OUTLIVES the command — when claude/codex/vim exits the user is
+	// left at a prompt in the right directory, not with a dead session.
+	Command string
+}
+
+// CreateSessionWith is CreateSession with the optional knobs. See CreateOptions.
+func (m *Manager) CreateSessionWith(client *ssh.Client, name string, opts CreateOptions) error {
+	out, err := sshutil.Exec(client, buildCreateCmd(name, opts))
+	if err != nil {
+		// sshutil.Exec embeds the whole command in its error, which for a
+		// plain "that directory isn't there" is a wall of shell noise in the
+		// UI. Surface the guard's own message when it fired.
+		if msg := guardFailure(out + err.Error()); msg != "" {
+			return fmt.Errorf("%s", msg)
+		}
+		return fmt.Errorf("create session %q: %w", name, err)
+	}
+	return nil
+}
+
+// missingDirMarker is echoed by the pre-flight check in buildCreateCmd.
+const missingDirMarker = "working directory does not exist: "
+
+// guardFailure pulls the pre-flight message out of a failed exec, or "".
+// Uses the LAST occurrence: sshutil.Exec echoes the command it ran (which
+// contains the marker as literal text) before appending the real output.
+func guardFailure(s string) string {
+	i := strings.LastIndex(s, missingDirMarker)
+	if i < 0 {
+		return ""
+	}
+	rest := s[i:]
+	if j := strings.IndexAny(rest, "\r\n"); j >= 0 {
+		rest = rest[:j]
+	}
+	return strings.TrimSpace(rest)
+}
+
+// buildCreateCmd renders the remote shell command that creates the session.
+// Split out from CreateSessionWith so the quoting and ordering are testable
+// without an SSH connection.
+func buildCreateCmd(name string, opts CreateOptions) string {
+	windowSize := opts.WindowSize
 	if windowSize == "" {
 		windowSize = "largest"
 	}
 	// One tmux invocation; commands separated by tmux's own "\;". The
 	// history-limit set-option must come first so the new pane inherits it.
 	hist := ""
-	if historyLimit > 0 {
-		hist = fmt.Sprintf("set-option -g history-limit %d \\; ", historyLimit)
+	if opts.HistoryLimit > 0 {
+		hist = fmt.Sprintf("set-option -g history-limit %d \\; ", opts.HistoryLimit)
 	}
 	geom, sizeOpt := "", windowSize
 	if w, h, ok := parseWxH(windowSize); ok {
@@ -84,15 +145,56 @@ func (m *Manager) CreateSession(client *ssh.Client, name, windowSize, cwd string
 		sizeOpt = "manual"
 	}
 	base := fmt.Sprintf("tmux %snew-session -d -s %q%s", hist, name, geom)
-	if cwd != "" {
-		base += fmt.Sprintf(" -c %q", cwd)
+	dir := remotePath(opts.Cwd)
+	if dir != "" {
+		base += " -c " + dir
 	}
 	cmd := fmt.Sprintf("%s \\; set-option -t %q window-size %s", base, name, sizeOpt)
-	_, err := sshutil.Exec(client, cmd)
-	if err != nil {
-		return fmt.Errorf("create session %q: %w", name, err)
+	if dir != "" {
+		if opts.CreateDir {
+			// && so a failed mkdir (permissions, a file in the way) surfaces
+			// as a create error instead of silently starting elsewhere.
+			cmd = "mkdir -p " + dir + " && " + cmd
+		} else {
+			// tmux does NOT fail on a missing -c directory — it quietly falls
+			// back to $HOME, so the session comes up in the wrong place with
+			// no indication. Check first and fail with a usable message.
+			cmd = "{ [ -d " + dir + " ] || { echo " + shellSingleQuote(missingDirMarker) + dir + " >&2; exit 3; }; } && " + cmd
+		}
 	}
-	return nil
+	if c := strings.TrimSpace(opts.Command); c != "" {
+		cmd += fmt.Sprintf(" \\; send-keys -t %q %s Enter", name, shellSingleQuote(c))
+	}
+	return cmd
+}
+
+// remotePath renders a user-supplied directory for the remote shell. A
+// leading ~ is expanded to "$HOME" OUTSIDE the quotes — inside them the
+// shell would take it literally and tmux would create a directory actually
+// named "~". The rest is single-quoted so spaces and $ in the path stay
+// literal. Returns "" for an empty path (meaning "let tmux pick").
+func remotePath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if p == "~" {
+		return `"$HOME"`
+	}
+	if strings.HasPrefix(p, "~/") {
+		rest := strings.TrimPrefix(p, "~/")
+		if rest == "" {
+			return `"$HOME"`
+		}
+		return `"$HOME"/` + shellSingleQuote(rest)
+	}
+	return shellSingleQuote(p)
+}
+
+// shellSingleQuote wraps s in single quotes, escaping embedded quotes, so it
+// survives the remote shell verbatim.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // parseWxH parses a concrete "WIDTHxHEIGHT" geometry (e.g. "200x50"). It

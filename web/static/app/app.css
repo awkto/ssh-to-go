@@ -1123,6 +1123,67 @@ a { color: inherit; text-decoration: none; }
 .seg-btn .count { font-family: var(--font-mono); color: var(--fg-subtle); font-size: 11px; }
 .seg-btn.active .count { color: var(--fg-muted); }
 
+/* Working-directory row: path grows, "Create" sits beside it and only drops
+   below on a genuinely narrow modal. */
+.dir-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.dir-row .input { flex: 1 1 220px; min-width: 0; }
+/* The display/margin here are not redundant: `.field label` (0,1,1) sets
+   display:block and a bottom margin, which outranks `.checkbox` (0,1,0) and
+   stacks the box above its text. This selector (0,2,0) wins it back.
+   nowrap keeps box and label on one line once the input claims the slack. */
+.dir-row .dir-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--fg);
+}
+
+/* Two-state slide toggle (New Session → Launch). The thumb is a separate
+   absolutely-positioned layer so it can transition between halves; the
+   buttons stay in normal flow above it. */
+.slide-toggle {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-elev);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+.slide-thumb {
+  position: absolute;
+  top: 2px; bottom: 2px; left: 2px;
+  width: calc(50% - 3px);
+  background: var(--panel);
+  border-radius: 6px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 160ms cubic-bezier(.2,.7,.3,1);
+}
+.slide-toggle[data-state="command"] .slide-thumb { transform: translateX(calc(100% + 2px)); }
+.slide-opt {
+  position: relative;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  border-radius: 6px;
+  text-align: center;
+  transition: color 120ms;
+}
+.slide-opt.active { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) {
+  .slide-thumb { transition: none; }
+}
+
 /* Filter bar */
 .filter-bar {
   display: flex; align-items: center; gap: 10px;

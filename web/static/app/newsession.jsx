@@ -2,25 +2,66 @@
 // when only one exists). Name auto-generates if left empty. Everything else is
 // optional. Minimum path is one click of Create; Enter also submits.
 
+// Choices the user is likely to repeat are remembered locally rather than in
+// server settings: they're per-browser habits, not deployment config. The
+// working directory is the exception — it seeds from the server setting so it
+// is the same on every device.
+const NS_LS = {
+  createDir: 's2g:newsession:create-dir',
+  launch: 's2g:newsession:launch',
+  command: 's2g:newsession:command',
+};
+const nsGet = (k, fallback) => {
+  try { const v = localStorage.getItem(k); return v === null ? fallback : v; } catch (_) { return fallback; }
+};
+const nsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+
 const NewSession = ({ store, onClose }) => {
   const HOSTS = store.hosts;
+  const defaultDir = (store.settings && store.settings.new_session_dir) || '~/sessions/';
   const [host, setHost] = React.useState(HOSTS[0] ? HOSTS[0].id : '');
   const [name, setName] = React.useState('');
-  const [cwd, setCwd] = React.useState('');
+  const [cwd, setCwd] = React.useState(defaultDir);
+  const [createDir, setCreateDir] = React.useState(nsGet(NS_LS.createDir, '1') === '1');
+  const [launch, setLaunch] = React.useState(nsGet(NS_LS.launch, 'shell') === 'command' ? 'command' : 'shell');
+  const [command, setCommand] = React.useState(nsGet(NS_LS.command, ''));
   const [attach, setAttach] = React.useState(true);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
+  const cwdEdited = React.useRef(false);
 
   React.useEffect(() => { if (!host && HOSTS[0]) setHost(HOSTS[0].id); }, [HOSTS.length]);
+
+  // Settings can land after the modal mounts (first paint of a cold load).
+  // Adopt the configured default then — but never overwrite typing.
+  React.useEffect(() => { if (!cwdEdited.current) setCwd(defaultDir); }, [defaultDir]);
+
+  React.useEffect(() => { nsSet(NS_LS.createDir, createDir ? '1' : '0'); }, [createDir]);
+  React.useEffect(() => { nsSet(NS_LS.launch, launch); }, [launch]);
+  React.useEffect(() => { nsSet(NS_LS.command, command); }, [command]);
+
+  // Focusing the path field must never wipe it — the point of prefilling
+  // "~/sessions/" is that you type the project name onto the end. A click
+  // already lands the caret where you click; this only collapses the
+  // select-all that tab/programmatic focus produces.
+  const caretToEnd = (e) => {
+    const el = e.target;
+    if (el.selectionStart === 0 && el.selectionEnd === el.value.length) {
+      const n = el.value.length;
+      try { el.setSelectionRange(n, n); } catch (_) {}
+    }
+  };
 
   const submit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!host) { setErr('Pick a host first.'); return; }
+    const runCmd = launch === 'command' ? command.trim() : '';
+    if (launch === 'command' && !runCmd) { setErr('Type a command, or switch back to Start in shell.'); return; }
     setErr(''); setBusy(true);
     try {
       const finalName = name.trim() || `session-${Math.random().toString(36).slice(2, 7)}`;
-      await createSession(host, finalName, cwd.trim() || '');
+      await createSession(host, finalName, cwd.trim() || '', { createDir, command: runCmd });
       onClose();
       if (attach) openTerminal(host, finalName);
     } catch (ex) {
@@ -48,6 +89,49 @@ const NewSession = ({ store, onClose }) => {
             <div className="field">
               <label>Session name <span className="muted" style={{fontWeight:400, fontSize:11.5}}>(optional — auto-generated if empty)</span></label>
               <input className="input mono" placeholder="e.g. claude-code" value={name} onChange={e=>setName(e.target.value)} autoFocus />
+            </div>
+
+            <div className="field">
+              <label>Working directory</label>
+              <div className="dir-row">
+                <input
+                  className="input mono"
+                  value={cwd}
+                  onChange={e=>{ cwdEdited.current = true; setCwd(e.target.value); }}
+                  onFocus={caretToEnd}
+                  placeholder="~/"
+                  spellCheck={false}
+                />
+                <label className="checkbox dir-create" title="Create the directory if it doesn't exist yet">
+                  <input type="checkbox" checked={createDir} onChange={e=>setCreateDir(e.target.checked)} /> Create
+                </label>
+              </div>
+              <div className="hint">The session starts here. Change the default in Settings → Defaults.</div>
+            </div>
+
+            <div className="field">
+              <label>Launch</label>
+              <div className="slide-toggle" data-state={launch}>
+                <span className="slide-thumb" aria-hidden="true" />
+                <button type="button" className={`slide-opt ${launch==='shell'?'active':''}`} onClick={()=>setLaunch('shell')}>Start in shell</button>
+                <button type="button" className={`slide-opt ${launch==='command'?'active':''}`} onClick={()=>setLaunch('command')}>Command</button>
+              </div>
+              {launch === 'command' && (
+                <input
+                  className="input mono"
+                  style={{marginTop:8}}
+                  value={command}
+                  onChange={e=>setCommand(e.target.value)}
+                  onFocus={caretToEnd}
+                  placeholder="e.g. claude"
+                  spellCheck={false}
+                />
+              )}
+              <div className="hint">
+                {launch === 'command'
+                  ? 'Typed into the session once it starts — the shell stays alive when the command exits.'
+                  : 'Just a shell, nothing typed for you.'}
+              </div>
             </div>
 
             {HOSTS.length === 0 && (
@@ -89,11 +173,6 @@ const NewSession = ({ store, onClose }) => {
 
             {showAdvanced && (
               <div style={{marginTop: 10}}>
-                <div className="field">
-                  <label>Working directory</label>
-                  <input className="input mono" value={cwd} onChange={e=>setCwd(e.target.value)} placeholder="~/" />
-                  <div className="hint">Defaults to the user's home. The tmux session is blank — run any command after attach.</div>
-                </div>
                 <div className="field">
                   <label className="checkbox">
                     <input type="checkbox" checked={attach} onChange={e=>setAttach(e.target.checked)} /> Attach immediately

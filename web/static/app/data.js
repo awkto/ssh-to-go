@@ -154,10 +154,6 @@ function adaptSessions() {
       _raw: entry
     };
   });
-  // Append offloaded / resumable sessions (sessionreg entries the poller no
-  // longer sees in tmux) into the same flat list so the table can render
-  // and sort them alongside live sessions. status:'offloaded' distinguishes
-  // them; sort comparators put offloaded last.
   const offloaded = [];
   for (const h of STORE.hosts || []) {
     const hostName = h.config && h.config.name;
@@ -257,7 +253,8 @@ function useStore() {
     raw: STORE
   };
 }
-async function createSession(hostName, name, cwd) {
+async function createSession(hostName, name, cwd, opts) {
+  const o = opts || {};
   const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions`, {
     method: 'POST',
     headers: {
@@ -265,7 +262,9 @@ async function createSession(hostName, name, cwd) {
     },
     body: JSON.stringify({
       name,
-      cwd: cwd || ''
+      cwd: cwd || '',
+      create_dir: !!o.createDir,
+      command: o.command || ''
     })
   });
   if (!r.ok) throw new Error(await r.text());

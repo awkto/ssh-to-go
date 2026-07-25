@@ -72,6 +72,15 @@ const Settings = ({ store }) => {
             </div>
             <div className="setting-row">
               <div className="setting-label">
+                <h4>New session directory</h4>
+                <p>Prefills the working directory on the New Session form. Leave empty for ~/sessions/.</p>
+              </div>
+              <div>
+                <input className="input mono" value={draft.new_session_dir || ''} onChange={e => set({new_session_dir: e.target.value})} placeholder="~/sessions/" />
+              </div>
+            </div>
+            <div className="setting-row">
+              <div className="setting-label">
                 <h4>Default keypair</h4>
                 <p>Which key is offered first when authenticating to new hosts.</p>
               </div>

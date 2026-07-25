@@ -120,6 +120,13 @@ func (h *Handlers) ListHosts(w http.ResponseWriter, r *http.Request) {
 type createSessionReq struct {
 	Name string `json:"name"`
 	Cwd  string `json:"cwd,omitempty"`
+	// CreateDir makes Cwd first when it doesn't exist. Without it a missing
+	// directory fails the create, which is the safer default for API callers.
+	CreateDir bool `json:"create_dir,omitempty"`
+	// Command is typed into the new session's shell once it starts (e.g.
+	// "claude"). The shell outlives it, so exiting the command leaves a
+	// prompt in Cwd rather than killing the session.
+	Command string `json:"command,omitempty"`
 }
 
 func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +179,13 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	if err := h.Tmux.CreateSession(client, req.Name, h.Settings.TmuxWindowSize(), req.Cwd, h.Settings.ScrollbackLines()); err != nil {
+	if err := h.Tmux.CreateSessionWith(client, req.Name, tmux.CreateOptions{
+		WindowSize:   h.Settings.TmuxWindowSize(),
+		Cwd:          req.Cwd,
+		HistoryLimit: h.Settings.ScrollbackLines(),
+		CreateDir:    req.CreateDir,
+		Command:      req.Command,
+	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
 	}

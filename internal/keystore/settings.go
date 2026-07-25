@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -32,11 +33,21 @@ type Settings struct {
 	SessionIconMode  string `json:"session_icon_mode,omitempty"`
 	SessionIconName  string `json:"session_icon_name,omitempty"`
 	SessionIconColor string `json:"session_icon_color,omitempty"`
+	// NewSessionDir prefills the working-directory field of the New Session
+	// form. Empty means DefaultNewSessionDir. It is a UI default only — the
+	// API still treats an omitted cwd as "the SSH user's home", so MCP and
+	// direct API callers are unaffected.
+	NewSessionDir string `json:"new_session_dir,omitempty"`
 }
 
 // DefaultScrollbackLines is the scrollback depth used when the setting is
 // unset. Large enough for deep history; bounded by validation in Update.
 const DefaultScrollbackLines = 50000
+
+// DefaultNewSessionDir prefills the New Session working-directory field.
+// The trailing slash is deliberate: the field is meant to be clicked into
+// and typed at, so the common case is appending a project name.
+const DefaultNewSessionDir = "~/sessions/"
 
 type SettingsManager struct {
 	mu       sync.RWMutex
@@ -131,8 +142,22 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 	}
 	sm.settings.SessionIconName = s.SessionIconName
 	sm.settings.SessionIconColor = s.SessionIconColor
+	// Assigned unconditionally so clearing the field in the UI resets it to
+	// DefaultNewSessionDir rather than pinning the old value forever.
+	sm.settings.NewSessionDir = strings.TrimSpace(s.NewSessionDir)
 
 	return sm.save()
+}
+
+// NewSessionDir returns the working directory to prefill the New Session
+// form with, or DefaultNewSessionDir when unset.
+func (sm *SettingsManager) NewSessionDir() string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if sm.settings.NewSessionDir == "" {
+		return DefaultNewSessionDir
+	}
+	return sm.settings.NewSessionDir
 }
 
 func (sm *SettingsManager) DefaultKeypairName() string {
