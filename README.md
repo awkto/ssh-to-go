@@ -6,7 +6,11 @@
 >
 > **ssh-to-go** keeps your sessions alive on the server. Pick up exactly where you left off — from another computer, your phone on the bus, or anywhere with a web browser.
 
-https://github.com/user-attachments/assets/2bf89cff-01a8-441a-8341-f0c211a1e9bc
+
+
+https://github.com/user-attachments/assets/121820de-ce71-42c9-be3b-66e05ba05477
+
+
 
 ---
 
@@ -24,6 +28,7 @@ https://github.com/user-attachments/assets/2bf89cff-01a8-441a-8341-f0c211a1e9bc
 
 ### Web Terminal
 Full terminal emulation in the browser via xterm.js with WebSocket relay.
+<img width="1486" height="1158" alt="image" src="https://github.com/user-attachments/assets/ba6bff1c-a315-4baf-8464-6f171ff403a0" />
 
 <p align="center">
   <img src="screenshots/terminal-solarized.png" width="48%" alt="Terminal - Solarized Dark" />
@@ -38,8 +43,9 @@ Full terminal emulation in the browser via xterm.js with WebSocket relay.
 
 ### Dashboard
 See all tmux sessions across all your hosts at a glance.
-<img width="1389" height="1095" alt="image" src="https://github.com/user-attachments/assets/7e9ae86c-1c42-420f-81c8-d07e98afd052" />
-<img width="1389" height="1095" alt="image" src="https://github.com/user-attachments/assets/8eb82295-9dc0-4b51-abb2-454c45540f3e" />
+<img width="1486" height="1158" alt="image" src="https://github.com/user-attachments/assets/2e7941b8-7c4e-4a1f-a0cf-e09cfd292748" />
+<img width="1486" height="1158" alt="image" src="https://github.com/user-attachments/assets/e1b9565c-6ee0-4b71-b67e-c0804f6197db" />
+
 
 
 - Real-time host status (online/offline) with OS detection
