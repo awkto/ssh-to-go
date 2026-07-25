@@ -57,4 +57,65 @@ const ActivityCell = ({ session }) => {
   );
 };
 
+// Tooltips for icon-only controls, via a `data-tip` attribute.
+//
+// The native title= tooltip waits about 1.5s before appearing and is easy to
+// miss entirely — not good enough for a row of buttons whose only label is a
+// glyph. This shows the same text promptly, in the app's own styling.
+//
+// The popup is a single element on <body> positioned against the viewport,
+// not an ::after on the button: the table panel sets `overflow-x: auto`,
+// which makes overflow-y compute to auto as well, so an absolutely
+// positioned tooltip would be clipped on the first and last rows.
+//
+// Listeners are delegated from document, so React re-renders need no wiring.
+(function () {
+  const DELAY = 250;
+  let pop = null, timer = null;
+
+  const place = (target) => {
+    const tip = target.getAttribute('data-tip');
+    if (!tip) return;
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.className = 'tip-pop';
+      document.body.appendChild(pop);
+    }
+    pop.textContent = tip;
+    // Measure before showing: visibility:hidden still takes layout.
+    pop.classList.remove('show');
+    pop.style.visibility = 'hidden';
+    pop.style.left = '0px';
+    pop.style.top = '0px';
+    const btn = target.getBoundingClientRect();
+    const box = pop.getBoundingClientRect();
+    const left = Math.max(8, Math.min(
+      btn.left + btn.width / 2 - box.width / 2,
+      window.innerWidth - box.width - 8));
+    // Above by default, flipping below when the control is near the top.
+    const above = btn.top - box.height - 8;
+    pop.style.left = left + 'px';
+    pop.style.top = (above < 8 ? btn.bottom + 8 : above) + 'px';
+    pop.style.visibility = '';
+    pop.classList.add('show');
+  };
+
+  const hide = () => { clearTimeout(timer); if (pop) pop.classList.remove('show'); };
+  const targetOf = (e) => e.target && e.target.closest && e.target.closest('[data-tip]');
+
+  document.addEventListener('mouseover', (e) => {
+    const t = targetOf(e);
+    if (!t) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => place(t), DELAY);
+  });
+  document.addEventListener('mouseout', (e) => { if (targetOf(e)) hide(); });
+  // Keyboard users get it without the delay.
+  document.addEventListener('focusin', (e) => { const t = targetOf(e); if (t) place(t); });
+  document.addEventListener('focusout', hide);
+  // Clicking a button acts on it; leaving the tooltip up would just be litter.
+  document.addEventListener('click', hide);
+  window.addEventListener('scroll', hide, true);
+})();
+
 Object.assign(window, { Button, Pill, Kbd, StatusDot, Presence, ActivityCell });

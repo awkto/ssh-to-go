@@ -100,6 +100,54 @@ const ActivityCell = ({
     }
   }, session.lastInput));
 };
+(function () {
+  const DELAY = 250;
+  let pop = null,
+    timer = null;
+  const place = target => {
+    const tip = target.getAttribute('data-tip');
+    if (!tip) return;
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.className = 'tip-pop';
+      document.body.appendChild(pop);
+    }
+    pop.textContent = tip;
+    pop.classList.remove('show');
+    pop.style.visibility = 'hidden';
+    pop.style.left = '0px';
+    pop.style.top = '0px';
+    const btn = target.getBoundingClientRect();
+    const box = pop.getBoundingClientRect();
+    const left = Math.max(8, Math.min(btn.left + btn.width / 2 - box.width / 2, window.innerWidth - box.width - 8));
+    const above = btn.top - box.height - 8;
+    pop.style.left = left + 'px';
+    pop.style.top = (above < 8 ? btn.bottom + 8 : above) + 'px';
+    pop.style.visibility = '';
+    pop.classList.add('show');
+  };
+  const hide = () => {
+    clearTimeout(timer);
+    if (pop) pop.classList.remove('show');
+  };
+  const targetOf = e => e.target && e.target.closest && e.target.closest('[data-tip]');
+  document.addEventListener('mouseover', e => {
+    const t = targetOf(e);
+    if (!t) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => place(t), DELAY);
+  });
+  document.addEventListener('mouseout', e => {
+    if (targetOf(e)) hide();
+  });
+  document.addEventListener('focusin', e => {
+    const t = targetOf(e);
+    if (t) place(t);
+  });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('click', hide);
+  window.addEventListener('scroll', hide, true);
+})();
 Object.assign(window, {
   Button,
   Pill,

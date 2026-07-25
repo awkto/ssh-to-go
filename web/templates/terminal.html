@@ -92,6 +92,35 @@
         .btn-icon:hover { background: #3a3a5a; color: #fff; }
         .btn-icon svg { display: block; }
         .btn-icon.ok { color: #4ade80; border-color: #4ade80; }
+        /* Tooltips for the icon-only toolbar buttons. Below and right-aligned:
+           the toolbar is at the very top of the window and these sit at its
+           right edge, so there is no room above and none to the right. */
+        .btn-icon[data-tip] { position: relative; }
+        .btn-icon[data-tip]::after {
+            content: attr(data-tip);
+            position: absolute;
+            top: 100%; right: 0;
+            margin-top: 6px;
+            background: #1e1e38;
+            border: 1px solid #3a3a5a;
+            border-radius: 6px;
+            padding: 5px 9px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #e0e0e8;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 120ms ease 250ms;
+            z-index: 1002;
+        }
+        .btn-icon[data-tip]:hover::after,
+        .btn-icon[data-tip]:focus-visible::after { opacity: 1; }
+        /* The theme picker and the theme-name flash occupy this exact spot —
+           don't stack a tooltip on top of either. */
+        .btn-icon[data-tip][aria-expanded="true"]::after { opacity: 0; transition: none; }
+        div:has(> #theme-flash.show) > .btn-icon[data-tip]::after { opacity: 0; transition: none; }
+        @media (prefers-reduced-motion: reduce) { .btn-icon[data-tip]::after { transition: none; } }
 
         /* Font-size row inside the menu, laid out like a browser's zoom
            control: label on the left, − [value] + on the right. */
@@ -311,7 +340,7 @@
             <div style="position:relative;">
                 <!-- Swatch grid doubles as a preview: applyTheme() paints these
                      four squares with muted colours from the active theme. -->
-                <button class="btn-icon" id="theme-btn" title="Terminal theme — middle-click to cycle, shift+middle to go back" aria-label="Terminal theme">
+                <button class="btn-icon" id="theme-btn" data-tip="Change the terminal theme — middle-click to cycle" aria-label="Terminal theme" aria-expanded="false">
                     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
                         <rect id="sw-1" x="1.5" y="1.5" width="5.6" height="5.6" rx="1.4"/>
                         <rect id="sw-2" x="8.9" y="1.5" width="5.6" height="5.6" rx="1.4"/>
@@ -324,7 +353,7 @@
                      many to step through blind. -->
                 <div id="theme-flash" class="theme-flash" aria-live="polite"></div>
             </div>
-            <button class="btn-icon" id="handoff-btn" title="Copy the SSH command for this session" aria-label="Handoff">
+            <button class="btn-icon" id="handoff-btn" data-tip="Copy the SSH command to attach from your own terminal" aria-label="Copy SSH command">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="2" y="4" width="20" height="16" rx="2"/>
@@ -333,7 +362,7 @@
                 </svg>
             </button>
             <div style="position:relative;">
-                <button class="btn-icon" id="toolbar-burger" title="More actions" aria-label="More actions">
+                <button class="btn-icon" id="toolbar-burger" title="More actions" aria-label="More actions" aria-expanded="false">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
                          stroke-width="2" stroke-linecap="round" aria-hidden="true">
                         <line x1="3" y1="6" x2="21" y2="6"/>

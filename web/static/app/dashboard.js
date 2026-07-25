@@ -155,8 +155,7 @@ const Dashboard = ({
       textAlign: 'right'
     }
   }, "Actions"))), React.createElement("tbody", null, SESSIONS.slice().sort((a, b) => {
-    // Offloaded sessions always sink to the bottom of the table.
-    if ((a.status === 'offloaded') !== (b.status === 'offloaded')) {
+    if (a.status === 'offloaded' !== (b.status === 'offloaded')) {
       return a.status === 'offloaded' ? 1 : -1;
     }
     if (a.starred !== b.starred) return a.starred ? -1 : 1;
@@ -273,45 +272,77 @@ const MissingSessionsPanel = ({
   const [busy, setBusy] = React.useState({});
   const action = async (fn, m, label) => {
     const key = `${m.hostName}:${m.name}`;
-    setBusy(b => ({ ...b, [key]: label }));
-    try { await fn(m.hostName, m.name); }
-    catch (err) { alert(`${label} failed: ${err.message}`); }
-    finally { setBusy(b => { const n = { ...b }; delete n[key]; return n; }); }
+    setBusy(b => ({
+      ...b,
+      [key]: label
+    }));
+    try {
+      await fn(m.hostName, m.name);
+    } catch (err) {
+      alert(`${label} failed: ${err.message}`);
+    } finally {
+      setBusy(b => {
+        const n = {
+          ...b
+        };
+        delete n[key];
+        return n;
+      });
+    }
   };
   return React.createElement("div", {
     className: "panel",
-    style: { marginBottom: 16, borderColor: 'var(--warn, #c89b3c)' }
+    style: {
+      marginBottom: 16,
+      borderColor: 'var(--warn, #c89b3c)'
+    }
   }, React.createElement("div", {
     className: "panel-head"
   }, React.createElement("div", {
     className: "row gap-3"
   }, React.createElement("h2", {
-    style: { color: 'var(--warn, #c89b3c)' }
+    style: {
+      color: 'var(--warn, #c89b3c)'
+    }
   }, "Resumable sessions"), React.createElement("span", {
     className: "muted",
-    style: { fontSize: 12 }
-  }, "tracked but not running — either you offloaded them or the host rebooted")), React.createElement("span", {
+    style: {
+      fontSize: 12
+    }
+  }, "tracked but not running \u2014 either you offloaded them or the host rebooted")), React.createElement("span", {
     className: "muted mono",
-    style: { fontSize: 12 }
+    style: {
+      fontSize: 12
+    }
   }, missing.length)), React.createElement("table", {
     className: "tbl"
   }, React.createElement("thead", null, React.createElement("tr", null, React.createElement("th", {
-    style: { width: '24%' }
+    style: {
+      width: '24%'
+    }
   }, "Session"), React.createElement("th", null, "Host"), React.createElement("th", {
     className: "hide-mobile"
   }, "Last working dir"), React.createElement("th", {
-    style: { textAlign: 'right' }
+    style: {
+      textAlign: 'right'
+    }
   }, "Actions"))), React.createElement("tbody", null, missing.map(m => {
     const key = `${m.hostName}:${m.name}`;
     const b = busy[key];
     return React.createElement("tr", {
-      key
-    }, React.createElement("td", null, React.createElement("span", { className: "mono" }, m.name)), React.createElement("td", {
+      key: key
+    }, React.createElement("td", null, React.createElement("span", {
+      className: "mono"
+    }, m.name)), React.createElement("td", {
       className: "muted mono",
-      style: { fontSize: 12.5 }
+      style: {
+        fontSize: 12.5
+      }
     }, m.host), React.createElement("td", {
       className: "mono muted hide-mobile",
-      style: { fontSize: 12 }
+      style: {
+        fontSize: 12
+      }
     }, m.workingDir || '—'), React.createElement("td", null, React.createElement("div", {
       className: "actions-cell"
     }, React.createElement("button", {
@@ -331,7 +362,6 @@ const SessionRow = ({
 }) => {
   const [starred, setStarred] = React.useState(s.starred);
   const [recreating, setRecreating] = React.useState(false);
-  // null | 'offloading' | 'ending'
   const [busy, setBusy] = React.useState(null);
   const toggleStar = e => {
     e.stopPropagation();
@@ -412,50 +442,119 @@ const SessionRow = ({
   const onForget = async e => {
     e.stopPropagation();
     if (!confirm(`Forget session "${s.id}"? ssh-to-go drops the saved working directory; it can't be resumed afterwards.`)) return;
-    try { await forgetSession(s.hostName, s.id); } catch (err) { alert('forget failed: ' + err.message); }
+    try {
+      await forgetSession(s.hostName, s.id);
+    } catch (err) {
+      alert('forget failed: ' + err.message);
+    }
   };
   const offloaded = s.status === 'offloaded';
-  return React.createElement("tr", { style: offloaded ? { opacity: 0.65 } : null },
-    React.createElement("td", null,
-      React.createElement("div", { className: "cell-session" },
-        React.createElement("button", { className: "sess-icon-btn", onClick: onPickIcon, title: "Change icon" },
-          React.createElement(SessIcon, { kind: s.iconKind, color: s.iconColor })),
-        React.createElement("span", { className: "mono name", onClick: offloaded ? onRecreate : onOpen, style: { cursor: 'pointer' } }, s.id),
-        !offloaded && React.createElement("button", { className: "rename-btn", onClick: onRename, title: "Rename" },
-          React.createElement(IconEdit, { size: 12 })),
-        offloaded && React.createElement(Pill, { variant: "muted" }, "offloaded"),
-      ),
-      offloaded && s.workingDir && React.createElement("div", {
-        className: "muted mono",
-        style: { fontSize: 11, marginTop: 2, paddingLeft: 28 }
-      }, "resume in ", s.workingDir),
-    ),
-    React.createElement("td", { className: "muted mono col-h3", style: { fontSize: 12.5 } }, s.host),
-    React.createElement("td", { className: "col-act" },
-      offloaded ? React.createElement("span", { className: "muted", style: { fontSize: 12 } }, "—")
-                : React.createElement(ActivityCell, { session: s })),
-    React.createElement("td", { className: "col-h2" },
-      offloaded ? React.createElement("span", { className: "muted", style: { fontSize: 12 } }, "—")
-                : React.createElement(Presence, { clients: s.clients })),
-    React.createElement("td", { className: "muted num col-h4" }, s.uptime),
-    React.createElement("td", null, React.createElement("div", { className: "actions-cell" },
-      offloaded
-        ? [
-            React.createElement("button", { key: "rec", className: "action-btn primary", onClick: onRecreate, disabled: recreating,
-                title: "Bring the tmux session back at its saved working directory and open it in a new tab" },
-              recreating ? "Recreating…" : "Recreate"),
-            React.createElement("button", { key: "fgt", className: "action-btn", onClick: onForget, disabled: recreating, title: "Forget the saved working directory" }, "Forget"),
-          ]
-        : [
-            React.createElement("button", { key: "star", className: `action-btn icon star ${starred ? 'starred' : ''}`, onClick: toggleStar, disabled: !!busy, title: starred ? 'Unstar' : 'Star' },
-              React.createElement(IconStar, { size: 14, fill: starred ? 'currentColor' : 'none' })),
-            React.createElement("button", { key: "h", className: "action-btn icon", onClick: onHandoff, disabled: !!busy, title: "Copy SSH handoff command" },
-              React.createElement(IconCopy, { size: 14 })),
-            React.createElement("button", { key: "off", className: `action-btn icon ${busy === 'offloading' ? 'busy' : ''}`, onClick: onOffload, disabled: !!busy, title: "Offload — stop tmux but keep it resumable from the same directory" },
-              React.createElement(IconMoon, { size: 14 })),
-            React.createElement("button", { key: "end", className: `action-btn icon danger ${busy === 'ending' ? 'busy' : ''}`, onClick: onKill, disabled: !!busy, title: "End session (forgets it entirely)" },
-              React.createElement(IconClose, { size: 14 })),
-          ])));
+  return React.createElement("tr", {
+    style: offloaded ? {
+      opacity: 0.65
+    } : null
+  }, React.createElement("td", null, React.createElement("div", {
+    className: "cell-session"
+  }, React.createElement("button", {
+    className: "sess-icon-btn",
+    onClick: onPickIcon,
+    title: "Change icon"
+  }, React.createElement(SessIcon, {
+    kind: s.iconKind,
+    color: s.iconColor
+  })), React.createElement("span", {
+    className: "mono name",
+    onClick: offloaded ? onRecreate : onOpen,
+    style: {
+      cursor: 'pointer'
+    }
+  }, s.id), !offloaded && React.createElement("button", {
+    className: "rename-btn",
+    onClick: onRename,
+    "data-tip": "Rename this session",
+    "aria-label": "Rename session"
+  }, React.createElement(IconEdit, {
+    size: 12
+  })), offloaded && React.createElement(Pill, {
+    variant: "muted"
+  }, "offloaded")), offloaded && s.workingDir && React.createElement("div", {
+    className: "muted mono",
+    style: {
+      fontSize: 11,
+      marginTop: 2,
+      paddingLeft: 28
+    }
+  }, "resume in ", s.workingDir)), React.createElement("td", {
+    className: "muted mono col-h3",
+    style: {
+      fontSize: 12.5
+    }
+  }, s.host), React.createElement("td", {
+    className: "col-act"
+  }, offloaded ? React.createElement("span", {
+    className: "muted",
+    style: {
+      fontSize: 12
+    }
+  }, "\u2014") : React.createElement(ActivityCell, {
+    session: s
+  })), React.createElement("td", {
+    className: "col-h2"
+  }, offloaded ? React.createElement("span", {
+    className: "muted",
+    style: {
+      fontSize: 12
+    }
+  }, "\u2014") : React.createElement(Presence, {
+    clients: s.clients
+  })), React.createElement("td", {
+    className: "muted num col-h4"
+  }, s.uptime), React.createElement("td", null, React.createElement("div", {
+    className: "actions-cell"
+  }, offloaded ? React.createElement(React.Fragment, null, React.createElement("button", {
+    className: "action-btn primary",
+    onClick: onRecreate,
+    disabled: recreating,
+    title: "Bring the tmux session back at its saved working directory and open it in a new tab"
+  }, recreating ? 'Recreating…' : 'Recreate'), React.createElement("button", {
+    className: "action-btn",
+    onClick: onForget,
+    disabled: recreating,
+    title: "Forget the saved working directory"
+  }, "Forget")) : React.createElement(React.Fragment, null, React.createElement("button", {
+    className: `action-btn icon star ${starred ? 'starred' : ''}`,
+    onClick: toggleStar,
+    disabled: !!busy,
+    "data-tip": starred ? 'Remove from favorites' : 'Add to favorites',
+    "aria-label": starred ? 'Remove from favorites' : 'Add to favorites'
+  }, React.createElement(IconStar, {
+    size: 14,
+    fill: starred ? 'currentColor' : 'none'
+  })), React.createElement("button", {
+    className: "action-btn icon",
+    onClick: onHandoff,
+    disabled: !!busy,
+    "data-tip": "Copy the SSH command to attach from your own terminal",
+    "aria-label": "Copy SSH command"
+  }, React.createElement(IconCopy, {
+    size: 14
+  })), React.createElement("button", {
+    className: `action-btn icon ${busy === 'offloading' ? 'busy' : ''}`,
+    onClick: onOffload,
+    disabled: !!busy,
+    "data-tip": "Offload: stop it now, resume later in the same directory",
+    "aria-label": "Offload session"
+  }, React.createElement(IconMoon, {
+    size: 14
+  })), React.createElement("button", {
+    className: `action-btn icon danger ${busy === 'ending' ? 'busy' : ''}`,
+    onClick: onKill,
+    disabled: !!busy,
+    "data-tip": "Kill the session and stop tracking it",
+    "aria-label": "Kill session"
+  }, React.createElement(IconClose, {
+    size: 14
+  }))))));
 };
 Object.assign(window, {
   Dashboard,

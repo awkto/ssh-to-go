@@ -522,11 +522,11 @@ function initTerminal(host, session) {
             btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
                 'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
             btn.classList.add("ok");
-            btn.title = "SSH command copied";
+            btn.setAttribute("data-tip", "SSH command copied");
             setTimeout(function () {
                 btn.innerHTML = original;
                 btn.classList.remove("ok");
-                btn.title = "Copy the SSH command for this session";
+                btn.setAttribute("data-tip", "Copy the SSH command to attach from your own terminal");
             }, 2000);
         } catch (e) {
             alert("Failed to copy: " + e.message);
@@ -817,6 +817,7 @@ function initTerminal(host, session) {
             var burger = document.getElementById("toolbar-menu");
             if (burger) burger.style.display = "none";
             themeDropdown.style.display = isOpen ? "none" : "block";
+            themeBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
         });
 
         themeDropdown.addEventListener("click", function (e) {
@@ -827,10 +828,14 @@ function initTerminal(host, session) {
             saveThemeToServer(id);
             markActive(id);
             themeDropdown.style.display = "none";
+            themeBtn.setAttribute("aria-expanded", "false");
             term.focus();
         });
 
-        document.addEventListener("click", function () { themeDropdown.style.display = "none"; });
+        document.addEventListener("click", function () {
+            themeDropdown.style.display = "none";
+            themeBtn.setAttribute("aria-expanded", "false");
+        });
     })();
 
     // Load server-saved theme (overrides localStorage if different)
@@ -863,6 +868,7 @@ function initTerminal(host, session) {
         var themeDd = document.getElementById("theme-dropdown");
         if (themeDd) themeDd.style.display = "none";
         burgerMenu.style.display = opening ? "block" : "none";
+        burgerBtn.setAttribute("aria-expanded", opening ? "true" : "false");
         if (opening) {
             // Check how many clients are attached to decide whether to show kick button
             try {
@@ -874,7 +880,10 @@ function initTerminal(host, session) {
             } catch (_) {}
         }
     });
-    document.addEventListener("click", function () { burgerMenu.style.display = "none"; });
+    document.addEventListener("click", function () {
+        burgerMenu.style.display = "none";
+        burgerBtn.setAttribute("aria-expanded", "false");
+    });
     burgerMenu.addEventListener("click", function (e) {
         if (e.target.closest(".toolbar-menu-item")) {
             setTimeout(function () { burgerMenu.style.display = "none"; }, 50);

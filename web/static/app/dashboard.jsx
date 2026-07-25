@@ -314,7 +314,7 @@ const SessionRow = ({ session: s, onOpen }) => {
             <SessIcon kind={s.iconKind} color={s.iconColor} />
           </button>
           <span className="mono name" onClick={offloaded ? onRecreate : onOpen} style={{cursor:'pointer'}}>{s.id}</span>
-          {!offloaded && <button className="rename-btn" onClick={onRename} title="Rename"><IconEdit size={12}/></button>}
+          {!offloaded && <button className="rename-btn" onClick={onRename} data-tip="Rename this session" aria-label="Rename session"><IconEdit size={12}/></button>}
           {offloaded && <Pill variant="muted">offloaded</Pill>}
         </div>
         {offloaded && s.workingDir && (
@@ -337,17 +337,17 @@ const SessionRow = ({ session: s, onOpen }) => {
             </React.Fragment>
           ) : (
             <React.Fragment>
-              <button className={`action-btn icon star ${starred ? 'starred' : ''}`} onClick={toggleStar} disabled={!!busy} title={starred ? 'Unstar' : 'Star'}>
+              <button className={`action-btn icon star ${starred ? 'starred' : ''}`} onClick={toggleStar} disabled={!!busy} data-tip={starred ? 'Remove from favorites' : 'Add to favorites'} aria-label={starred ? 'Remove from favorites' : 'Add to favorites'}>
                 <IconStar size={14} fill={starred ? 'currentColor' : 'none'} />
               </button>
-              <button className="action-btn icon" onClick={onHandoff} disabled={!!busy} title="Copy SSH handoff command">
+              <button className="action-btn icon" onClick={onHandoff} disabled={!!busy} data-tip="Copy the SSH command to attach from your own terminal" aria-label="Copy SSH command">
                 <IconCopy size={14} />
               </button>
               <button className={`action-btn icon ${busy === 'offloading' ? 'busy' : ''}`} onClick={onOffload} disabled={!!busy}
-                      title="Offload — stop tmux but keep it resumable from the same directory">
+                      data-tip="Offload: stop it now, resume later in the same directory" aria-label="Offload session">
                 <IconMoon size={14} />
               </button>
-              <button className={`action-btn icon danger ${busy === 'ending' ? 'busy' : ''}`} onClick={onKill} disabled={!!busy} title="End session (forgets it entirely)">
+              <button className={`action-btn icon danger ${busy === 'ending' ? 'busy' : ''}`} onClick={onKill} disabled={!!busy} data-tip="Kill the session and stop tracking it" aria-label="Kill session">
                 <IconClose size={14} />
               </button>
             </React.Fragment>
