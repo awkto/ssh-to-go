@@ -763,6 +763,52 @@ function initTerminal(host, session) {
         });
         themeDropdown.innerHTML = html;
 
+        // Keep the dropdown's tick in step with the active theme, however
+        // the theme was changed (picked from the list, or cycled).
+        function markActive(id) {
+            themeDropdown.querySelectorAll(".theme-option").forEach(function (el) {
+                el.classList.toggle("active", el.dataset.themeId === id);
+            });
+        }
+
+        var THEME_IDS = Object.keys(TERMINAL_THEMES);
+        var flashTimer = null;
+
+        function flashThemeName(name) {
+            var flash = document.getElementById("theme-flash");
+            if (!flash) return;
+            flash.textContent = name;
+            flash.classList.add("show");
+            clearTimeout(flashTimer);
+            flashTimer = setTimeout(function () { flash.classList.remove("show"); }, 1100);
+        }
+
+        // step +1 = next theme, -1 = previous. Wraps both ways.
+        function cycleTheme(step) {
+            var i = THEME_IDS.indexOf(currentThemeId);
+            if (i < 0) i = 0;
+            var next = THEME_IDS[(i + step + THEME_IDS.length) % THEME_IDS.length];
+            applyTheme(next);
+            saveThemeToServer(next);
+            markActive(next);
+            flashThemeName(TERMINAL_THEMES[next].name);
+        }
+
+        // Middle-press opens the browser's autoscroll widget over the page
+        // (that four-way pan cursor) unless the default is cancelled here.
+        themeBtn.addEventListener("mousedown", function (e) {
+            if (e.button === 1) e.preventDefault();
+        });
+        // Middle click cycles forward, shift+middle back. Desktop-only by
+        // nature — the dropdown stays the discoverable path.
+        themeBtn.addEventListener("auxclick", function (e) {
+            if (e.button !== 1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            cycleTheme(e.shiftKey ? -1 : 1);
+            term.focus();
+        });
+
         themeBtn.addEventListener("click", function (e) {
             e.stopPropagation();
             var isOpen = themeDropdown.style.display !== "none";
@@ -779,10 +825,7 @@ function initTerminal(host, session) {
             var id = opt.dataset.themeId;
             applyTheme(id);
             saveThemeToServer(id);
-            // Update active state
-            themeDropdown.querySelectorAll(".theme-option").forEach(function (el) {
-                el.classList.toggle("active", el.dataset.themeId === id);
-            });
+            markActive(id);
             themeDropdown.style.display = "none";
             term.focus();
         });

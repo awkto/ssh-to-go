@@ -186,6 +186,27 @@
             min-width: 200px;
             padding: 4px 0;
         }
+        /* Transient theme name shown when cycling with the middle button. */
+        .theme-flash {
+            position: absolute;
+            right: 0; top: 100%;
+            margin-top: 4px;
+            background: #1e1e38;
+            border: 1px solid #3a3a5a;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 12px;
+            color: #e0e0e8;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 160ms;
+            z-index: 1001;
+        }
+        .theme-flash.show { opacity: 1; }
+        @media (prefers-reduced-motion: reduce) {
+            .theme-flash { transition: none; }
+        }
         .theme-option {
             display: flex;
             align-items: center;
@@ -290,7 +311,7 @@
             <div style="position:relative;">
                 <!-- Swatch grid doubles as a preview: applyTheme() paints these
                      four squares with muted colours from the active theme. -->
-                <button class="btn-icon" id="theme-btn" title="Terminal theme" aria-label="Terminal theme">
+                <button class="btn-icon" id="theme-btn" title="Terminal theme — middle-click to cycle, shift+middle to go back" aria-label="Terminal theme">
                     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
                         <rect id="sw-1" x="1.5" y="1.5" width="5.6" height="5.6" rx="1.4"/>
                         <rect id="sw-2" x="8.9" y="1.5" width="5.6" height="5.6" rx="1.4"/>
@@ -299,6 +320,9 @@
                     </svg>
                 </button>
                 <div id="theme-dropdown" class="toolbar-dropdown theme-dropdown" style="display:none;"></div>
+                <!-- Names the theme you just cycled onto. 24 themes is too
+                     many to step through blind. -->
+                <div id="theme-flash" class="theme-flash" aria-live="polite"></div>
             </div>
             <button class="btn-icon" id="handoff-btn" title="Copy the SSH command for this session" aria-label="Handoff">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
