@@ -57,6 +57,13 @@ func main() {
 		log.Fatalf("session icons: %v", err)
 	}
 
+	// Remembers the commands sessions were launched with, so the New
+	// Session form can offer them back as chips.
+	rcs, err := keystore.NewRecentCommandStore(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("recent commands: %v", err)
+	}
+
 	// Initialize tracked-session registry (records app-created sessions
 	// so we can offer "recreate" after a host reboot).
 	reg, err := sessionreg.NewStore(cfg.DataDir)
@@ -160,6 +167,7 @@ func main() {
 		KeyStore:     ks,
 		Settings:     sm,
 		SessionIcons: sis,
+		RecentCmds:   rcs,
 		Registry:     reg,
 		Auth:         am,
 		ExecJobs:     execJobs,

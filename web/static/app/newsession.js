@@ -1,7 +1,8 @@
 const NS_LS = {
   createDir: 's2g:newsession:create-dir',
   launch: 's2g:newsession:launch',
-  command: 's2g:newsession:command'
+  command: 's2g:newsession:command',
+  after: 's2g:newsession:after'
 };
 const nsGet = (k, fallback) => {
   try {
@@ -16,6 +17,7 @@ const nsSet = (k, v) => {
     localStorage.setItem(k, v);
   } catch (_) {}
 };
+const nsAutoName = throwaway => (throwaway ? 'tmp-' : 'session-') + Math.random().toString(36).slice(2, 6);
 const NewSession = ({
   store,
   onClose
@@ -28,13 +30,21 @@ const NewSession = ({
   const [createDir, setCreateDir] = React.useState(nsGet(NS_LS.createDir, '1') === '1');
   const [launch, setLaunch] = React.useState(nsGet(NS_LS.launch, 'shell') === 'command' ? 'command' : 'shell');
   const [command, setCommand] = React.useState(nsGet(NS_LS.command, ''));
+  const [after, setAfter] = React.useState(nsGet(NS_LS.after, 'attach') === 'handoff' ? 'handoff' : 'attach');
   const [throwaway, setThrowaway] = React.useState(false);
   const [incognito, setIncognito] = React.useState(false);
-  const [attach, setAttach] = React.useState(true);
-  const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [autoName, setAutoName] = React.useState(() => nsAutoName(false));
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
+  const [copied, setCopied] = React.useState(false);
+  const [sshCmd, setSshCmd] = React.useState('');
+  const [hostMenu, setHostMenu] = React.useState(false);
   const cwdEdited = React.useRef(false);
+  const copyTimer = React.useRef(null);
+  const hostObj = HOSTS.find(h => h.id === host) || HOSTS[0] || null;
+  const effName = name.trim() || autoName;
+  const isCommand = launch === 'command';
+  const isHandoff = after === 'handoff';
   React.useEffect(() => {
     if (!host && HOSTS[0]) setHost(HOSTS[0].id);
   }, [HOSTS.length]);
@@ -50,6 +60,34 @@ const NewSession = ({
   React.useEffect(() => {
     nsSet(NS_LS.command, command);
   }, [command]);
+  React.useEffect(() => {
+    nsSet(NS_LS.after, after);
+  }, [after]);
+  React.useEffect(() => () => clearTimeout(copyTimer.current), []);
+  React.useEffect(() => {
+    setAutoName(nsAutoName(throwaway));
+  }, [throwaway]);
+  const fallbackSsh = React.useMemo(() => {
+    if (!hostObj) return '';
+    const [addr, port] = String(hostObj.fqdn || '').split(':');
+    const p = port && port !== '22' ? `-p ${port} ` : '';
+    return `ssh -t ${p}${hostObj.user}@${addr} tmux attach-session -t "${effName}"`;
+  }, [hostObj && hostObj.fqdn, hostObj && hostObj.user, effName]);
+  React.useEffect(() => {
+    if (!host) return;
+    let cancelled = false;
+    setSshCmd('');
+    const t = setTimeout(() => {
+      getHandoff(host, effName).then(cmd => {
+        if (!cancelled) setSshCmd(cmd);
+      }).catch(() => {});
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [host, effName]);
+  const shownSsh = sshCmd || fallbackSsh;
   const caretToEnd = e => {
     const el = e.target;
     if (el.selectionStart === 0 && el.selectionEnd === el.value.length) {
@@ -59,80 +97,165 @@ const NewSession = ({
       } catch (_) {}
     }
   };
+  const copySsh = async () => {
+    try {
+      await navigator.clipboard.writeText(shownSsh);
+    } catch (_) {}
+    setCopied(true);
+    clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 1600);
+  };
+  const recents = (store.recentCommands || []).slice(0, 4);
+  const pickRecent = cmd => {
+    setCommand(cmd);
+    setLaunch('command');
+  };
+  const forgetRecent = async cmd => {
+    try {
+      await forgetRecentCommand(cmd);
+    } catch (ex) {
+      setErr(ex.message || 'could not forget that command');
+    }
+  };
+  const summary = (() => {
+    const head = isCommand ? `Runs ${command.trim() || '…'}` : 'Opens a shell';
+    const where = `in ${cwd.trim() || '~'} on ${hostObj ? hostObj.fqdn : 'this host'}`;
+    const tail = [throwaway ? 'ends when you detach' : 'keeps running until killed'];
+    if (incognito) tail.push('untracked');
+    tail.push(isHandoff ? 'hands off to your terminal' : 'attaches in a web tab');
+    return `${head} ${where} · ${tail.join(', ')}.`;
+  })();
   const submit = async e => {
     if (e && e.preventDefault) e.preventDefault();
     if (!host) {
       setErr('Pick a host first.');
       return;
     }
-    const runCmd = launch === 'command' ? command.trim() : '';
-    if (launch === 'command' && !runCmd) {
-      setErr('Type a command, or switch back to Start in shell.');
+    const runCmd = isCommand ? command.trim() : '';
+    if (isCommand && !runCmd) {
+      setErr('Type a command, or switch back to shell.');
       return;
     }
     setErr('');
     setBusy(true);
     try {
-      const finalName = name.trim() || `session-${Math.random().toString(36).slice(2, 7)}`;
-      await createSession(host, finalName, cwd.trim() || '', {
+      await createSession(host, effName, cwd.trim() || '', {
         createDir,
         command: runCmd,
         throwaway,
         incognito
       });
+      if (isHandoff) {
+        try {
+          await navigator.clipboard.writeText(shownSsh);
+        } catch (_) {}
+      }
       onClose();
-      if (attach) openTerminal(host, finalName);
+      if (!isHandoff) openTerminal(host, effName);
     } catch (ex) {
       setErr(ex.message || 'failed');
     } finally {
       setBusy(false);
     }
   };
+  const shortHost = (() => {
+    if (!hostObj) return 'host';
+    const addr = String(hostObj.fqdn).split(':')[0];
+    return /^[\d.]+$/.test(addr) ? addr : addr.split('.')[0];
+  })();
+  const seg = active => `ns-seg${active ? ' active' : ''}`;
   return React.createElement("div", {
     className: "modal-backdrop",
     onClick: onClose
   }, React.createElement("div", {
     className: "modal",
-    onClick: e => e.stopPropagation()
+    onClick: e => {
+      e.stopPropagation();
+      setHostMenu(false);
+    }
   }, React.createElement("form", {
     onSubmit: submit
   }, React.createElement("div", {
-    className: "modal-head"
-  }, React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: 12
-    }
-  }, React.createElement("div", null, React.createElement("h3", null, "New session"), React.createElement("p", null, "Press Create to spin up a detached tmux session. All fields are optional.")), React.createElement("button", {
+    className: "ns-head"
+  }, React.createElement("h3", null, "New session"), React.createElement("div", {
+    className: "ns-hostpick"
+  }, React.createElement("button", {
     type: "button",
-    className: "icon-btn",
-    onClick: onClose
+    className: "ns-hostchip",
+    disabled: HOSTS.length <= 1,
+    onClick: e => {
+      e.stopPropagation();
+      setHostMenu(v => !v);
+    },
+    title: HOSTS.length > 1 ? 'Choose a host' : undefined
+  }, React.createElement(StatusDot, {
+    status: hostObj && hostObj.status === 'online' ? 'active' : 'offline'
+  }), React.createElement("span", {
+    className: "mono"
+  }, hostObj ? hostObj.fqdn : 'no hosts'), HOSTS.length > 1 && React.createElement(IconChevronDown, {
+    size: 12
+  })), hostMenu && React.createElement("div", {
+    className: "ns-hostmenu",
+    onClick: e => e.stopPropagation()
+  }, HOSTS.map(h => React.createElement("button", {
+    type: "button",
+    key: h.id,
+    className: `ns-hostopt${h.id === host ? ' active' : ''}`,
+    onClick: () => {
+      setHost(h.id);
+      setHostMenu(false);
+    }
+  }, React.createElement(StatusDot, {
+    status: h.status === 'online' ? 'active' : 'offline'
+  }), React.createElement("span", {
+    className: "mono",
+    style: {
+      flex: 1
+    }
+  }, h.fqdn), React.createElement("span", {
+    className: "ns-hostopt-sub"
+  }, h.sessions, " sess"))))), React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), React.createElement("button", {
+    type: "button",
+    className: "ns-close",
+    onClick: onClose,
+    "aria-label": "Close"
   }, React.createElement(IconClose, {
     size: 15
-  })))), React.createElement("div", {
-    className: "modal-body"
+  }))), React.createElement("div", {
+    className: "ns-body"
   }, React.createElement("div", {
-    className: "field"
-  }, React.createElement("label", null, "Session name ", React.createElement("span", {
-    className: "muted",
+    className: "ns-grid"
+  }, React.createElement("div", {
     style: {
-      fontWeight: 400,
-      fontSize: 11.5
+      minWidth: 0
     }
-  }, "(optional \u2014 auto-generated if empty)")), React.createElement("input", {
-    className: "input mono",
-    placeholder: "e.g. claude-code",
+  }, React.createElement("label", {
+    className: "ns-label",
+    htmlFor: "ns-name"
+  }, "Name"), React.createElement("input", {
+    id: "ns-name",
+    className: "ns-input mono",
+    placeholder: autoName,
     value: name,
     onChange: e => setName(e.target.value),
+    spellCheck: false,
     autoFocus: true
   })), React.createElement("div", {
-    className: "field"
-  }, React.createElement("label", null, "Working directory"), React.createElement("div", {
-    className: "dir-row"
+    style: {
+      minWidth: 0
+    }
+  }, React.createElement("label", {
+    className: "ns-label",
+    htmlFor: "ns-dir"
+  }, "Directory"), React.createElement("div", {
+    className: "ns-fieldbox"
   }, React.createElement("input", {
-    className: "input mono",
+    id: "ns-dir",
+    className: "ns-bare mono",
     value: cwd,
     onChange: e => {
       cwdEdited.current = true;
@@ -141,153 +264,131 @@ const NewSession = ({
     onFocus: caretToEnd,
     placeholder: "~/",
     spellCheck: false
-  }), React.createElement("label", {
-    className: "checkbox dir-create",
-    title: "Create the directory if it doesn't exist yet"
-  }, React.createElement("input", {
-    type: "checkbox",
-    checked: createDir,
-    onChange: e => setCreateDir(e.target.checked)
-  }), " Create")), React.createElement("div", {
-    className: "hint"
-  }, "The session starts here. Change the default in Settings \u2192 Defaults.")), React.createElement("div", {
-    className: "field"
-  }, React.createElement("label", null, "Launch"), React.createElement("div", {
-    className: "slide-toggle",
-    "data-state": launch
-  }, React.createElement("span", {
-    className: "slide-thumb",
-    "aria-hidden": "true"
   }), React.createElement("button", {
     type: "button",
-    className: `slide-opt ${launch === 'shell' ? 'active' : ''}`,
-    onClick: () => setLaunch('shell')
-  }, "Start in shell"), React.createElement("button", {
-    type: "button",
-    className: `slide-opt ${launch === 'command' ? 'active' : ''}`,
-    onClick: () => setLaunch('command')
-  }, "Command")), launch === 'command' && React.createElement("input", {
-    className: "input mono",
+    className: `ns-mkdir${createDir ? ' on' : ''}`,
+    onClick: () => setCreateDir(v => !v),
+    "aria-pressed": createDir,
+    title: "Create the directory if it doesn't exist yet"
+  }, "mkdir")))), React.createElement("div", null, React.createElement("div", {
+    className: "ns-labelline"
+  }, React.createElement("label", {
+    className: "ns-label",
     style: {
-      marginTop: 8
-    },
+      marginRight: 'auto'
+    }
+  }, "Start in"), recents.map(rc => React.createElement("span", {
+    className: "ns-chip",
+    key: rc.command,
+    title: `${rc.command} — used ${rc.count}×`
+  }, React.createElement("button", {
+    type: "button",
+    className: "ns-chip-pick mono",
+    onClick: () => pickRecent(rc.command)
+  }, rc.command), React.createElement("button", {
+    type: "button",
+    className: "ns-chip-forget",
+    onClick: () => forgetRecent(rc.command),
+    "aria-label": `Forget ${rc.command}`,
+    title: `Forget ${rc.command}`
+  }, "\xD7")))), React.createElement("div", {
+    className: "ns-control"
+  }, React.createElement("div", {
+    className: "ns-segs"
+  }, React.createElement("button", {
+    type: "button",
+    className: seg(!isCommand),
+    onClick: () => setLaunch('shell')
+  }, "shell"), React.createElement("button", {
+    type: "button",
+    className: seg(isCommand),
+    onClick: () => setLaunch('command')
+  }, "command")), React.createElement("div", {
+    className: "ns-slot"
+  }, isCommand ? React.createElement(React.Fragment, null, React.createElement("span", {
+    className: "ns-dollar mono"
+  }, "$"), React.createElement("input", {
+    className: "ns-bare mono",
     value: command,
     onChange: e => setCommand(e.target.value),
     onFocus: caretToEnd,
-    placeholder: "e.g. claude",
+    placeholder: "claude",
     spellCheck: false
-  }), React.createElement("div", {
-    className: "hint"
-  }, launch === 'command' ? 'Typed into the session once it starts — the shell stays alive when the command exits.' : 'Just a shell, nothing typed for you.')), React.createElement("div", {
-    className: "field"
-  }, React.createElement("div", {
-    className: "flavour-row"
+  })) : React.createElement("span", {
+    className: "ns-ghost mono"
+  }, hostObj ? hostObj.user : 'you', "@", shortHost, ":", cwd.trim() || '~', "$", React.createElement("i", {
+    className: "ns-caret"
+  }))))), React.createElement("div", null, React.createElement("div", {
+    className: "ns-labelline"
   }, React.createElement("label", {
-    className: "checkbox flavour",
-    title: "Removes session on disconnect"
-  }, React.createElement("input", {
-    type: "checkbox",
-    checked: throwaway,
-    onChange: e => setThrowaway(e.target.checked)
-  }), " Throwaway"), React.createElement("label", {
-    className: "checkbox flavour",
-    title: "Hides session from dashboard"
-  }, React.createElement("input", {
-    type: "checkbox",
-    checked: incognito,
-    onChange: e => setIncognito(e.target.checked)
-  }), " Incognito")), (throwaway || incognito) && React.createElement("div", {
-    className: "hint"
-  }, throwaway && incognito ? 'Hidden from the dashboard, and deleted once you disconnect or leave it idle 15 minutes.' : throwaway ? 'Killed and forgotten once you disconnect, or after 15 minutes with nothing attached.' : 'Runs normally but never appears in the app — only tmux on the host will show it.')), HOSTS.length === 0 && React.createElement("div", {
-    className: "muted",
+    className: "ns-label",
     style: {
-      fontSize: 12.5,
-      marginBottom: 12
+      marginRight: 'auto'
     }
-  }, "No hosts registered yet \u2014 add one from the Hosts page first."), HOSTS.length > 1 && React.createElement("div", {
-    className: "field"
-  }, React.createElement("label", null, "Target host"), React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6
-    }
-  }, HOSTS.map(h => React.createElement("div", {
-    key: h.id,
-    className: `radio-card ${host === h.id ? 'selected' : ''}`,
-    onClick: () => setHost(h.id)
-  }, React.createElement(StatusDot, {
-    status: h.status === 'online' ? 'active' : 'offline'
-  }), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, React.createElement("div", {
-    className: "radio-title mono"
-  }, h.fqdn), React.createElement("div", {
-    className: "radio-sub"
-  }, h.user, "@", h.fqdn.split(':')[0], " \xB7 ", h.os)), React.createElement(Pill, {
-    variant: h.sessions > 0 ? 'accent' : 'default',
-    mono: true
-  }, h.sessions, " sess"))))), HOSTS.length === 1 && React.createElement("div", {
-    className: "field"
-  }, React.createElement("label", null, "Target host"), React.createElement("div", {
-    className: "radio-card selected",
-    style: {
-      cursor: 'default'
-    }
-  }, React.createElement(StatusDot, {
-    status: HOSTS[0].status === 'online' ? 'active' : 'offline'
-  }), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, React.createElement("div", {
-    className: "radio-title mono"
-  }, HOSTS[0].fqdn), React.createElement("div", {
-    className: "radio-sub"
-  }, HOSTS[0].user, "@", HOSTS[0].fqdn.split(':')[0], " \xB7 ", HOSTS[0].os)))), React.createElement("button", {
+  }, "Then"), React.createElement("button", {
     type: "button",
-    className: "btn btn-ghost btn-sm",
-    onClick: () => setShowAdvanced(v => !v),
-    style: {
-      padding: '4px 0',
-      marginTop: 4
-    }
-  }, showAdvanced ? '▾' : '▸', " Advanced options"), showAdvanced && React.createElement("div", {
-    style: {
-      marginTop: 10
-    }
-  }, React.createElement("div", {
-    className: "field"
-  }, React.createElement("label", {
-    className: "checkbox"
-  }, React.createElement("input", {
-    type: "checkbox",
-    checked: attach,
-    onChange: e => setAttach(e.target.checked)
-  }), " Attach immediately"))), err && React.createElement("div", {
-    style: {
-      color: 'var(--err)',
-      fontSize: 12.5,
-      marginTop: 10
-    }
-  }, err)), React.createElement("div", {
-    className: "modal-foot"
-  }, React.createElement(Button, {
-    variant: "ghost",
+    className: `ns-flag${throwaway ? ' on' : ''}`,
+    "aria-pressed": throwaway,
+    onClick: () => setThrowaway(v => !v),
+    title: "Removed as soon as you leave it"
+  }, React.createElement(IconClock, {
+    size: 13
+  }), "throwaway"), React.createElement("button", {
     type: "button",
+    className: `ns-flag${incognito ? ' on' : ''}`,
+    "aria-pressed": incognito,
+    onClick: () => setIncognito(v => !v),
+    title: "Not tracked in the app"
+  }, React.createElement(IconMoon, {
+    size: 13
+  }), "incognito")), React.createElement("div", {
+    className: "ns-control"
+  }, React.createElement("div", {
+    className: "ns-segs"
+  }, React.createElement("button", {
+    type: "button",
+    className: seg(!isHandoff),
+    onClick: () => setAfter('attach')
+  }, "attach here"), React.createElement("button", {
+    type: "button",
+    className: seg(isHandoff),
+    onClick: () => setAfter('handoff')
+  }, "hand off")), React.createElement("div", {
+    className: "ns-slot"
+  }, React.createElement("span", {
+    className: "ns-dest"
+  }, isHandoff ? React.createElement(IconTerminal, {
+    size: 13
+  }) : React.createElement(IconExternalLink, {
+    size: 13
+  }), isHandoff ? 'your own terminal' : 'new web-terminal tab'))), React.createElement("div", {
+    className: `ns-ssh${isHandoff ? ' lit' : ''}`
+  }, React.createElement("span", {
+    className: "ns-ssh-cmd mono"
+  }, shownSsh), React.createElement("button", {
+    type: "button",
+    className: "ns-copy mono",
+    onClick: copySsh
+  }, React.createElement(IconCopy, {
+    size: 12
+  }), copied ? 'copied' : 'copy')))), React.createElement("div", {
+    className: "ns-foot"
+  }, React.createElement("div", {
+    className: `ns-summary${err ? ' err' : ''}`,
+    title: err || summary
+  }, React.createElement("span", null, err || summary)), React.createElement("button", {
+    type: "button",
+    className: "ns-cancel",
     onClick: onClose
-  }, "Cancel"), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement(Button, {
-    variant: "primary",
+  }, "Cancel"), React.createElement("button", {
     type: "submit",
-    icon: IconPlay,
+    className: "ns-primary",
     disabled: busy || !host
-  }, busy ? 'Creating…' : attach ? 'Create & attach' : 'Create')))));
+  }, isHandoff ? React.createElement(IconCopy, {
+    size: 14
+  }) : React.createElement(IconPlay, {
+    size: 14
+  }), busy ? 'Creating…' : isHandoff ? 'Create & copy ssh' : 'Create & attach')))));
 };
 Object.assign(window, {
   NewSession

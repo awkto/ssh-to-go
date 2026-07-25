@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -24,6 +25,7 @@ type Handlers struct {
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
 	SessionIcons *keystore.SessionIconStore
+	RecentCmds   *keystore.RecentCommandStore
 	Registry     *sessionreg.Store
 	Auth         *auth.Manager
 	ExecJobs     *execjob.Store
@@ -198,6 +200,20 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Remember the command only now that the session really started, so a
+	// failed create never seeds the chip list.
+	//
+	// Incognito sessions are excluded: a chip is UI tracking, and leaving
+	// the command behind would defeat the flag — the session would be
+	// hidden while the thing you ran in it sat in the New Session form for
+	// the next person at the browser. Non-fatal; a session is worth more
+	// than its bookkeeping.
+	if h.RecentCmds != nil && !req.Incognito {
+		if err := h.RecentCmds.Record(req.Command); err != nil {
+			log.Printf("recent command record %q: %v", req.Command, err)
+		}
 	}
 
 	if h.Registry != nil {
@@ -1195,4 +1211,53 @@ func (h *Handlers) SetSessionIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+// GetRecentCommands lists the commands sessions have been launched with,
+// most recently used first. Always an array, never null, so the UI can map
+// over it without a guard.
+func (h *Handlers) GetRecentCommands(w http.ResponseWriter, r *http.Request) {
+	list := []keystore.RecentCommand{}
+	if h.RecentCmds != nil {
+		list = h.RecentCmds.List()
+	}
+	writeJSON(w, list)
+}
+
+type deleteRecentCmdReq struct {
+	Command string `json:"command,omitempty"`
+}
+
+// DeleteRecentCommands forgets one command, or the whole list when no
+// command is given. An absent body is treated as "clear all" rather than a
+// 400, so `fetch(..., {method: 'DELETE'})` with no body does the obvious
+// thing.
+func (h *Handlers) DeleteRecentCommands(w http.ResponseWriter, r *http.Request) {
+	if h.RecentCmds == nil {
+		http.Error(w, "recent commands unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var req deleteRecentCmdReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Command == "" {
+		if err := h.RecentCmds.Clear(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]string{"status": "cleared"})
+		return
+	}
+	found, err := h.RecentCmds.Delete(req.Command)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "command not in the list", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "deleted"})
 }

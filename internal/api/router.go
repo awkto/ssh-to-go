@@ -19,6 +19,7 @@ type RouterConfig struct {
 	KeyStore     *keystore.Store
 	Settings     *keystore.SettingsManager
 	SessionIcons *keystore.SessionIconStore
+	RecentCmds   *keystore.RecentCommandStore
 	Registry     *sessionreg.Store
 	Auth         *auth.Manager
 	ExecJobs     *execjob.Store
@@ -37,6 +38,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 		KeyStore:     rc.KeyStore,
 		Settings:     rc.Settings,
 		SessionIcons: rc.SessionIcons,
+		RecentCmds:   rc.RecentCmds,
 		Registry:     rc.Registry,
 		Auth:         rc.Auth,
 		ExecJobs:     rc.ExecJobs,
@@ -109,6 +111,13 @@ func NewRouter(rc RouterConfig) http.Handler {
 	// Session icons API
 	mux.HandleFunc("GET /api/session-icons", handlers.GetSessionIcons)
 	mux.HandleFunc("PUT /api/session-icons/{host}/{session}", handlers.SetSessionIcon)
+
+	// Recent commands. DELETE takes an optional {"command": "..."} body:
+	// with one it forgets that command, without one it clears the list.
+	// The command is not a path segment because commands contain slashes
+	// and spaces, which net/http rewrites before a handler ever sees them.
+	mux.HandleFunc("GET /api/recent-commands", handlers.GetRecentCommands)
+	mux.HandleFunc("DELETE /api/recent-commands", handlers.DeleteRecentCommands)
 
 	// MCP (Model Context Protocol)
 	mcpServer := mcp.NewServer(rc.Hub, rc.Tmux, rc.KeyStore, rc.Settings, rc.Auth, rc.ExecJobs, rc.Version)

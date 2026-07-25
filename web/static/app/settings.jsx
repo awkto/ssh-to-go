@@ -81,6 +81,38 @@ const Settings = ({ store }) => {
             </div>
             <div className="setting-row">
               <div className="setting-label">
+                <h4>Recent commands</h4>
+                <p>Commands sessions were started with, offered as chips on the New Session form. Removing one applies immediately — no need to Save.</p>
+              </div>
+              <div>
+                {(store.recentCommands || []).length === 0 ? (
+                  <span className="muted" style={{fontSize:12.5}}>Nothing remembered yet. Start a session with a command and it shows up here.</span>
+                ) : (
+                  <div className="rc-list">
+                    {store.recentCommands.map(rc => (
+                      <div className="rc-item" key={rc.command}>
+                        <span className="rc-cmd mono" title={rc.command}>{rc.command}</span>
+                        <span className="rc-count mono">{rc.count}×</span>
+                        <button
+                          type="button"
+                          className="rc-forget"
+                          title={`Forget ${rc.command}`}
+                          aria-label={`Forget ${rc.command}`}
+                          onClick={() => forgetRecentCommand(rc.command).catch(() => {})}
+                        ><IconClose size={12}/></button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm rc-clear"
+                      onClick={() => forgetRecentCommand().catch(() => {})}
+                    >Clear all</button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="setting-row">
+              <div className="setting-label">
                 <h4>Default keypair</h4>
                 <p>Which key is offered first when authenticating to new hosts.</p>
               </div>

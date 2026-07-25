@@ -1,20 +1,38 @@
-// New Session modal — single-form (no stepper). Required: a host (auto-selected
-// when only one exists). Name auto-generates if left empty. Everything else is
-// optional. Minimum path is one click of Create; Enter also submits.
+// New Session modal — design option 5a.
+//
+// One screen, no stepper and no "Advanced" drawer: the host lives in the
+// header, name and directory share a row, the two consequential choices
+// ("start in what?", "then what?") are segmented controls with a live
+// preview beside them, and the four per-row hints of the old form collapse
+// into one sentence in the footer that describes the whole session.
+//
+// The modal's height is deliberately constant across every combination of
+// toggles — nothing appears or disappears, only text and colour change. The
+// old form grew and shrank as you touched it, which made it feel unstable.
 
 // Choices the user is likely to repeat are remembered locally rather than in
-// server settings: they're per-browser habits, not deployment config. The
-// working directory is the exception — it seeds from the server setting so it
-// is the same on every device.
+// server settings: they're per-browser habits, not deployment config. Two
+// exceptions: the working directory seeds from a server setting so it's the
+// same on every device, and the recent-command chips come from the server so
+// they reflect what actually ran — including sessions started from another
+// device, the HTTP API, or an agent over MCP.
 const NS_LS = {
   createDir: 's2g:newsession:create-dir',
   launch: 's2g:newsession:launch',
   command: 's2g:newsession:command',
+  after: 's2g:newsession:after',
 };
 const nsGet = (k, fallback) => {
   try { const v = localStorage.getItem(k); return v === null ? fallback : v; } catch (_) { return fallback; }
 };
 const nsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+
+// The name the session gets when the field is left empty. Generated once per
+// modal (and again when Throwaway flips, because the prefix differs) so the
+// placeholder, the ssh preview and the session that actually gets created all
+// agree — rolling it at submit time would show one name and create another.
+const nsAutoName = (throwaway) =>
+  (throwaway ? 'tmp-' : 'session-') + Math.random().toString(36).slice(2, 6);
 
 const NewSession = ({ store, onClose }) => {
   const HOSTS = store.hosts;
@@ -25,16 +43,25 @@ const NewSession = ({ store, onClose }) => {
   const [createDir, setCreateDir] = React.useState(nsGet(NS_LS.createDir, '1') === '1');
   const [launch, setLaunch] = React.useState(nsGet(NS_LS.launch, 'shell') === 'command' ? 'command' : 'shell');
   const [command, setCommand] = React.useState(nsGet(NS_LS.command, ''));
+  const [after, setAfter] = React.useState(nsGet(NS_LS.after, 'attach') === 'handoff' ? 'handoff' : 'attach');
   // Deliberately NOT persisted, unlike the fields above: both are
   // consequential enough that they should be a per-create decision rather
   // than something yesterday's session left switched on.
   const [throwaway, setThrowaway] = React.useState(false);
   const [incognito, setIncognito] = React.useState(false);
-  const [attach, setAttach] = React.useState(true);
-  const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [autoName, setAutoName] = React.useState(() => nsAutoName(false));
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
+  const [copied, setCopied] = React.useState(false);
+  const [sshCmd, setSshCmd] = React.useState('');
+  const [hostMenu, setHostMenu] = React.useState(false);
   const cwdEdited = React.useRef(false);
+  const copyTimer = React.useRef(null);
+
+  const hostObj = HOSTS.find(h => h.id === host) || HOSTS[0] || null;
+  const effName = name.trim() || autoName;
+  const isCommand = launch === 'command';
+  const isHandoff = after === 'handoff';
 
   React.useEffect(() => { if (!host && HOSTS[0]) setHost(HOSTS[0].id); }, [HOSTS.length]);
 
@@ -45,6 +72,38 @@ const NewSession = ({ store, onClose }) => {
   React.useEffect(() => { nsSet(NS_LS.createDir, createDir ? '1' : '0'); }, [createDir]);
   React.useEffect(() => { nsSet(NS_LS.launch, launch); }, [launch]);
   React.useEffect(() => { nsSet(NS_LS.command, command); }, [command]);
+  React.useEffect(() => { nsSet(NS_LS.after, after); }, [after]);
+  React.useEffect(() => () => clearTimeout(copyTimer.current), []);
+
+  // Throwaway sessions are named tmp-* so they read as disposable at a
+  // glance in tmux. Only the generated name changes — a name you typed is
+  // still yours.
+  React.useEffect(() => { setAutoName(nsAutoName(throwaway)); }, [throwaway]);
+
+  // The real ssh command comes from the server, which knows the port and any
+  // proxy details the browser doesn't. Until it lands (and if the request
+  // fails) fall back to a locally-built string so the line is never empty —
+  // an empty line would collapse and change the modal's height.
+  const fallbackSsh = React.useMemo(() => {
+    if (!hostObj) return '';
+    const [addr, port] = String(hostObj.fqdn || '').split(':');
+    const p = port && port !== '22' ? `-p ${port} ` : '';
+    return `ssh -t ${p}${hostObj.user}@${addr} tmux attach-session -t "${effName}"`;
+  }, [hostObj && hostObj.fqdn, hostObj && hostObj.user, effName]);
+
+  React.useEffect(() => {
+    if (!host) return;
+    let cancelled = false;
+    setSshCmd('');
+    const t = setTimeout(() => {
+      getHandoff(host, effName)
+        .then(cmd => { if (!cancelled) setSshCmd(cmd); })
+        .catch(() => {});
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [host, effName]);
+
+  const shownSsh = sshCmd || fallbackSsh;
 
   // Focusing the path field must never wipe it — the point of prefilling
   // "~/sessions/" is that you type the project name onto the end. A click
@@ -58,17 +117,47 @@ const NewSession = ({ store, onClose }) => {
     }
   };
 
+  const copySsh = async () => {
+    try { await navigator.clipboard.writeText(shownSsh); } catch (_) {}
+    setCopied(true);
+    clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 1600);
+  };
+
+  const recents = (store.recentCommands || []).slice(0, 4);
+  const pickRecent = (cmd) => { setCommand(cmd); setLaunch('command'); };
+  const forgetRecent = async (cmd) => {
+    try { await forgetRecentCommand(cmd); } catch (ex) { setErr(ex.message || 'could not forget that command'); }
+  };
+
+  // One sentence describing the session that is about to exist, recomposed
+  // from state. It replaces the four hint paragraphs the old form carried.
+  const summary = (() => {
+    const head = isCommand
+      ? `Runs ${command.trim() || '…'}`
+      : 'Opens a shell';
+    const where = `in ${cwd.trim() || '~'} on ${hostObj ? hostObj.fqdn : 'this host'}`;
+    const tail = [throwaway ? 'ends when you detach' : 'keeps running until killed'];
+    if (incognito) tail.push('untracked');
+    tail.push(isHandoff ? 'hands off to your terminal' : 'attaches in a web tab');
+    return `${head} ${where} · ${tail.join(', ')}.`;
+  })();
+
   const submit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!host) { setErr('Pick a host first.'); return; }
-    const runCmd = launch === 'command' ? command.trim() : '';
-    if (launch === 'command' && !runCmd) { setErr('Type a command, or switch back to Start in shell.'); return; }
+    const runCmd = isCommand ? command.trim() : '';
+    if (isCommand && !runCmd) { setErr('Type a command, or switch back to shell.'); return; }
     setErr(''); setBusy(true);
     try {
-      const finalName = name.trim() || `session-${Math.random().toString(36).slice(2, 7)}`;
-      await createSession(host, finalName, cwd.trim() || '', { createDir, command: runCmd, throwaway, incognito });
+      await createSession(host, effName, cwd.trim() || '', { createDir, command: runCmd, throwaway, incognito });
+      if (isHandoff) {
+        // Copy before closing: the modal owns the string, and the session
+        // is useless to hand off if you can't paste it.
+        try { await navigator.clipboard.writeText(shownSsh); } catch (_) {}
+      }
       onClose();
-      if (attach) openTerminal(host, finalName);
+      if (!isHandoff) openTerminal(host, effName);
     } catch (ex) {
       setErr(ex.message || 'failed');
     } finally {
@@ -76,145 +165,186 @@ const NewSession = ({ store, onClose }) => {
     }
   };
 
+  // Shorten a hostname to its first label the way a shell prompt would —
+  // but leave an IP alone, since "127" is not a shorter way to say anything.
+  const shortHost = (() => {
+    if (!hostObj) return 'host';
+    const addr = String(hostObj.fqdn).split(':')[0];
+    return /^[\d.]+$/.test(addr) ? addr : addr.split('.')[0];
+  })();
+  const seg = (active) => `ns-seg${active ? ' active' : ''}`;
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e)=>e.stopPropagation()}>
+      <div className="modal" onClick={(e)=>{ e.stopPropagation(); setHostMenu(false); }}>
         <form onSubmit={submit}>
-          <div className="modal-head">
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
-              <div>
-                <h3>New session</h3>
-                <p>Press Create to spin up a detached tmux session. All fields are optional.</p>
-              </div>
-              <button type="button" className="icon-btn" onClick={onClose}><IconClose size={15}/></button>
-            </div>
-          </div>
-
-          <div className="modal-body">
-            <div className="field">
-              <label>Session name <span className="muted" style={{fontWeight:400, fontSize:11.5}}>(optional — auto-generated if empty)</span></label>
-              <input className="input mono" placeholder="e.g. claude-code" value={name} onChange={e=>setName(e.target.value)} autoFocus />
-            </div>
-
-            <div className="field">
-              <label>Working directory</label>
-              <div className="dir-row">
-                <input
-                  className="input mono"
-                  value={cwd}
-                  onChange={e=>{ cwdEdited.current = true; setCwd(e.target.value); }}
-                  onFocus={caretToEnd}
-                  placeholder="~/"
-                  spellCheck={false}
-                />
-                <label className="checkbox dir-create" title="Create the directory if it doesn't exist yet">
-                  <input type="checkbox" checked={createDir} onChange={e=>setCreateDir(e.target.checked)} /> Create
-                </label>
-              </div>
-              <div className="hint">The session starts here. Change the default in Settings → Defaults.</div>
-            </div>
-
-            <div className="field">
-              <label>Launch</label>
-              <div className="slide-toggle" data-state={launch}>
-                <span className="slide-thumb" aria-hidden="true" />
-                <button type="button" className={`slide-opt ${launch==='shell'?'active':''}`} onClick={()=>setLaunch('shell')}>Start in shell</button>
-                <button type="button" className={`slide-opt ${launch==='command'?'active':''}`} onClick={()=>setLaunch('command')}>Command</button>
-              </div>
-              {launch === 'command' && (
-                <input
-                  className="input mono"
-                  style={{marginTop:8}}
-                  value={command}
-                  onChange={e=>setCommand(e.target.value)}
-                  onFocus={caretToEnd}
-                  placeholder="e.g. claude"
-                  spellCheck={false}
-                />
-              )}
-              <div className="hint">
-                {launch === 'command'
-                  ? 'Typed into the session once it starts — the shell stays alive when the command exits.'
-                  : 'Just a shell, nothing typed for you.'}
-              </div>
-            </div>
-
-            <div className="field">
-              <div className="flavour-row">
-                <label className="checkbox flavour" title="Removes session on disconnect">
-                  <input type="checkbox" checked={throwaway} onChange={e=>setThrowaway(e.target.checked)} /> Throwaway
-                </label>
-                <label className="checkbox flavour" title="Hides session from dashboard">
-                  <input type="checkbox" checked={incognito} onChange={e=>setIncognito(e.target.checked)} /> Incognito
-                </label>
-              </div>
-              {(throwaway || incognito) && (
-                <div className="hint">
-                  {throwaway && incognito
-                    ? 'Hidden from the dashboard, and deleted once you disconnect or leave it idle 15 minutes.'
-                    : throwaway
-                      ? 'Killed and forgotten once you disconnect, or after 15 minutes with nothing attached.'
-                      : 'Runs normally but never appears in the app — only tmux on the host will show it.'}
-                </div>
-              )}
-            </div>
-
-            {HOSTS.length === 0 && (
-              <div className="muted" style={{fontSize:12.5, marginBottom: 12}}>No hosts registered yet — add one from the Hosts page first.</div>
-            )}
-            {HOSTS.length > 1 && (
-              <div className="field">
-                <label>Target host</label>
-                <div style={{display:'flex', flexDirection:'column', gap:6}}>
+          <div className="ns-head">
+            <h3>New session</h3>
+            <div className="ns-hostpick">
+              <button
+                type="button"
+                className="ns-hostchip"
+                disabled={HOSTS.length <= 1}
+                onClick={(e)=>{ e.stopPropagation(); setHostMenu(v => !v); }}
+                title={HOSTS.length > 1 ? 'Choose a host' : undefined}
+              >
+                <StatusDot status={hostObj && hostObj.status === 'online' ? 'active' : 'offline'} />
+                <span className="mono">{hostObj ? hostObj.fqdn : 'no hosts'}</span>
+                {HOSTS.length > 1 && <IconChevronDown size={12} />}
+              </button>
+              {hostMenu && (
+                <div className="ns-hostmenu" onClick={(e)=>e.stopPropagation()}>
                   {HOSTS.map(h => (
-                    <div key={h.id} className={`radio-card ${host===h.id?'selected':''}`} onClick={()=>setHost(h.id)}>
-                      <StatusDot status={h.status==='online'?'active':'offline'} />
-                      <div style={{flex:1}}>
-                        <div className="radio-title mono">{h.fqdn}</div>
-                        <div className="radio-sub">{h.user}@{h.fqdn.split(':')[0]} · {h.os}</div>
-                      </div>
-                      <Pill variant={h.sessions>0?'accent':'default'} mono>{h.sessions} sess</Pill>
-                    </div>
+                    <button
+                      type="button"
+                      key={h.id}
+                      className={`ns-hostopt${h.id === host ? ' active' : ''}`}
+                      onClick={()=>{ setHost(h.id); setHostMenu(false); }}
+                    >
+                      <StatusDot status={h.status === 'online' ? 'active' : 'offline'} />
+                      <span className="mono" style={{flex:1}}>{h.fqdn}</span>
+                      <span className="ns-hostopt-sub">{h.sessions} sess</span>
+                    </button>
                   ))}
                 </div>
-              </div>
-            )}
-            {HOSTS.length === 1 && (
-              <div className="field">
-                <label>Target host</label>
-                <div className="radio-card selected" style={{cursor:'default'}}>
-                  <StatusDot status={HOSTS[0].status==='online'?'active':'offline'} />
-                  <div style={{flex:1}}>
-                    <div className="radio-title mono">{HOSTS[0].fqdn}</div>
-                    <div className="radio-sub">{HOSTS[0].user}@{HOSTS[0].fqdn.split(':')[0]} · {HOSTS[0].os}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAdvanced(v => !v)} style={{padding:'4px 0', marginTop:4}}>
-              {showAdvanced ? '▾' : '▸'} Advanced options
-            </button>
-
-            {showAdvanced && (
-              <div style={{marginTop: 10}}>
-                <div className="field">
-                  <label className="checkbox">
-                    <input type="checkbox" checked={attach} onChange={e=>setAttach(e.target.checked)} /> Attach immediately
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {err && <div style={{color:'var(--err)', fontSize:12.5, marginTop:10}}>{err}</div>}
+              )}
+            </div>
+            <div style={{flex:1}} />
+            <button type="button" className="ns-close" onClick={onClose} aria-label="Close"><IconClose size={15}/></button>
           </div>
 
-          <div className="modal-foot">
-            <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
-            <div style={{flex:1}}/>
-            <Button variant="primary" type="submit" icon={IconPlay} disabled={busy || !host}>
-              {busy ? 'Creating…' : (attach ? 'Create & attach' : 'Create')}
-            </Button>
+          <div className="ns-body">
+            <div className="ns-grid">
+              <div style={{minWidth:0}}>
+                <label className="ns-label" htmlFor="ns-name">Name</label>
+                <input
+                  id="ns-name"
+                  className="ns-input mono"
+                  placeholder={autoName}
+                  value={name}
+                  onChange={e=>setName(e.target.value)}
+                  spellCheck={false}
+                  autoFocus
+                />
+              </div>
+              <div style={{minWidth:0}}>
+                <label className="ns-label" htmlFor="ns-dir">Directory</label>
+                <div className="ns-fieldbox">
+                  <input
+                    id="ns-dir"
+                    className="ns-bare mono"
+                    value={cwd}
+                    onChange={e=>{ cwdEdited.current = true; setCwd(e.target.value); }}
+                    onFocus={caretToEnd}
+                    placeholder="~/"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="button"
+                    className={`ns-mkdir${createDir ? ' on' : ''}`}
+                    onClick={()=>setCreateDir(v => !v)}
+                    aria-pressed={createDir}
+                    title="Create the directory if it doesn't exist yet"
+                  >mkdir</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="ns-labelline">
+                <label className="ns-label" style={{marginRight:'auto'}}>Start in</label>
+                {recents.map(rc => (
+                  <span className="ns-chip" key={rc.command} title={`${rc.command} — used ${rc.count}×`}>
+                    <button type="button" className="ns-chip-pick mono" onClick={()=>pickRecent(rc.command)}>{rc.command}</button>
+                    <button
+                      type="button"
+                      className="ns-chip-forget"
+                      onClick={()=>forgetRecent(rc.command)}
+                      aria-label={`Forget ${rc.command}`}
+                      title={`Forget ${rc.command}`}
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+              <div className="ns-control">
+                <div className="ns-segs">
+                  <button type="button" className={seg(!isCommand)} onClick={()=>setLaunch('shell')}>shell</button>
+                  <button type="button" className={seg(isCommand)} onClick={()=>setLaunch('command')}>command</button>
+                </div>
+                <div className="ns-slot">
+                  {isCommand ? (
+                    <>
+                      <span className="ns-dollar mono">$</span>
+                      <input
+                        className="ns-bare mono"
+                        value={command}
+                        onChange={e=>setCommand(e.target.value)}
+                        onFocus={caretToEnd}
+                        placeholder="claude"
+                        spellCheck={false}
+                      />
+                    </>
+                  ) : (
+                    <span className="ns-ghost mono">{hostObj ? hostObj.user : 'you'}@{shortHost}:{cwd.trim() || '~'}$<i className="ns-caret" /></span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="ns-labelline">
+                <label className="ns-label" style={{marginRight:'auto'}}>Then</label>
+                <button
+                  type="button"
+                  className={`ns-flag${throwaway ? ' on' : ''}`}
+                  aria-pressed={throwaway}
+                  onClick={()=>setThrowaway(v => !v)}
+                  title="Removed as soon as you leave it"
+                ><IconClock size={13}/>throwaway</button>
+                <button
+                  type="button"
+                  className={`ns-flag${incognito ? ' on' : ''}`}
+                  aria-pressed={incognito}
+                  onClick={()=>setIncognito(v => !v)}
+                  title="Not tracked in the app"
+                ><IconMoon size={13}/>incognito</button>
+              </div>
+              <div className="ns-control">
+                <div className="ns-segs">
+                  <button type="button" className={seg(!isHandoff)} onClick={()=>setAfter('attach')}>attach here</button>
+                  <button type="button" className={seg(isHandoff)} onClick={()=>setAfter('handoff')}>hand off</button>
+                </div>
+                <div className="ns-slot">
+                  <span className="ns-dest">
+                    {isHandoff ? <IconTerminal size={13}/> : <IconExternalLink size={13}/>}
+                    {isHandoff ? 'your own terminal' : 'new web-terminal tab'}
+                  </span>
+                </div>
+              </div>
+              {/* Always rendered, dimmed in attach mode — hiding it would
+                  change the modal's height every time you flip the segment. */}
+              <div className={`ns-ssh${isHandoff ? ' lit' : ''}`}>
+                <span className="ns-ssh-cmd mono">{shownSsh}</span>
+                <button type="button" className="ns-copy mono" onClick={copySsh}>
+                  <IconCopy size={12}/>{copied ? 'copied' : 'copy'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="ns-foot">
+            {/* The error takes the summary's slot rather than adding a row,
+                so a failed create doesn't resize the modal. Two lines are
+                reserved and the text is clamped to them; the title carries
+                the full string when a long command overruns. */}
+            <div className={`ns-summary${err ? ' err' : ''}`} title={err || summary}>
+              <span>{err || summary}</span>
+            </div>
+            <button type="button" className="ns-cancel" onClick={onClose}>Cancel</button>
+            <button type="submit" className="ns-primary" disabled={busy || !host}>
+              {isHandoff ? <IconCopy size={14}/> : <IconPlay size={14}/>}
+              {busy ? 'Creating…' : (isHandoff ? 'Create & copy ssh' : 'Create & attach')}
+            </button>
           </div>
         </form>
       </div>

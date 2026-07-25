@@ -4,6 +4,7 @@ const STORE = {
   keypairs: [],
   settings: {},
   icons: {},
+  recentCommands: [],
   pubkey: null,
   version: '',
   loading: true,
@@ -28,12 +29,13 @@ async function authFetch(url, opts) {
 }
 async function refresh() {
   try {
-    const [h, s, k, st, ic] = await Promise.all([authFetch('/api/hosts').then(r => r.json()), authFetch('/api/sessions').then(r => r.json()), authFetch('/api/keypairs').then(r => r.json()), authFetch('/api/settings').then(r => r.json()), authFetch('/api/session-icons').then(r => r.json()).catch(() => ({}))]);
+    const [h, s, k, st, ic, rc] = await Promise.all([authFetch('/api/hosts').then(r => r.json()), authFetch('/api/sessions').then(r => r.json()), authFetch('/api/keypairs').then(r => r.json()), authFetch('/api/settings').then(r => r.json()), authFetch('/api/session-icons').then(r => r.json()).catch(() => ({})), authFetch('/api/recent-commands').then(r => r.json()).catch(() => [])]);
     STORE.hosts = h || [];
     STORE.sessions = s || [];
     STORE.keypairs = k || [];
     STORE.settings = st || {};
     STORE.icons = ic || {};
+    STORE.recentCommands = rc || [];
     STORE.loading = false;
     STORE.error = null;
     STORE._lastRefresh = Date.now();
@@ -246,6 +248,7 @@ function useStore() {
     keypairs: adaptKeypairs(),
     settings: STORE.settings,
     icons: STORE.icons,
+    recentCommands: STORE.recentCommands,
     loading: STORE.loading,
     error: STORE.error,
     activeSessionCount: activeSessionCount(),
@@ -315,6 +318,20 @@ async function renameSession(hostName, oldName, newName) {
   if (!r.ok) throw new Error(await r.text());
   await refresh();
 }
+async function forgetRecentCommand(command) {
+  const body = command ? JSON.stringify({
+    command
+  }) : undefined;
+  const r = await authFetch('/api/recent-commands', {
+    method: 'DELETE',
+    headers: body ? {
+      'Content-Type': 'application/json'
+    } : undefined,
+    body
+  });
+  if (!r.ok) throw new Error(await r.text());
+  await refresh();
+}
 async function getHandoff(hostName, sessionName) {
   const r = await authFetch(`/api/hosts/${encodeURIComponent(hostName)}/sessions/${encodeURIComponent(sessionName)}/handoff`);
   if (!r.ok) throw new Error(await r.text());
@@ -376,6 +393,7 @@ Object.assign(window, {
   forgetSession,
   renameSession,
   getHandoff,
+  forgetRecentCommand,
   setSessionIconPatch,
   addHost,
   scanAll,

@@ -100,6 +100,37 @@ const Settings = ({
     className: "setting-row"
   }, React.createElement("div", {
     className: "setting-label"
+  }, React.createElement("h4", null, "Recent commands"), React.createElement("p", null, "Commands sessions were started with, offered as chips on the New Session form. Removing one applies immediately \u2014 no need to Save.")), React.createElement("div", null, (store.recentCommands || []).length === 0 ? React.createElement("span", {
+    className: "muted",
+    style: {
+      fontSize: 12.5
+    }
+  }, "Nothing remembered yet. Start a session with a command and it shows up here.") : React.createElement("div", {
+    className: "rc-list"
+  }, store.recentCommands.map(rc => React.createElement("div", {
+    className: "rc-item",
+    key: rc.command
+  }, React.createElement("span", {
+    className: "rc-cmd mono",
+    title: rc.command
+  }, rc.command), React.createElement("span", {
+    className: "rc-count mono"
+  }, rc.count, "\xD7"), React.createElement("button", {
+    type: "button",
+    className: "rc-forget",
+    title: `Forget ${rc.command}`,
+    "aria-label": `Forget ${rc.command}`,
+    onClick: () => forgetRecentCommand(rc.command).catch(() => {})
+  }, React.createElement(IconClose, {
+    size: 12
+  })))), React.createElement("button", {
+    type: "button",
+    className: "btn btn-ghost btn-sm rc-clear",
+    onClick: () => forgetRecentCommand().catch(() => {})
+  }, "Clear all")))), React.createElement("div", {
+    className: "setting-row"
+  }, React.createElement("div", {
+    className: "setting-label"
   }, React.createElement("h4", null, "Default keypair"), React.createElement("p", null, "Which key is offered first when authenticating to new hosts.")), React.createElement("div", null, React.createElement("select", {
     className: "select",
     value: draft.default_keypair || '',
@@ -404,36 +435,57 @@ const ApiTokensPanel = () => {
       setErr(e.message || 'load failed');
     }
   }, []);
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    load();
+  }, [load]);
   const create = async e => {
     e.preventDefault();
     if (!name.trim()) return;
-    setBusy(true); setErr('');
+    setBusy(true);
+    setErr('');
     try {
       const r = await fetch('/api/auth/tokens', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: name.trim()
+        })
       });
       if (!r.ok) throw new Error(await r.text());
       const body = await r.json();
-      setJustCreated(body); setName(''); setCopied(false); load();
-    } catch (ex) { setErr(ex.message || 'create failed'); }
-    finally { setBusy(false); }
+      setJustCreated(body);
+      setName('');
+      setCopied(false);
+      load();
+    } catch (ex) {
+      setErr(ex.message || 'create failed');
+    } finally {
+      setBusy(false);
+    }
   };
   const remove = async tokenName => {
     if (!confirm(`Revoke token "${tokenName}"? Clients using it will stop working.`)) return;
     try {
-      const r = await fetch(`/api/auth/tokens/${encodeURIComponent(tokenName)}`, { method: 'DELETE' });
+      const r = await fetch(`/api/auth/tokens/${encodeURIComponent(tokenName)}`, {
+        method: 'DELETE'
+      });
       if (!r.ok) throw new Error(await r.text());
       if (justCreated && justCreated.name === tokenName) setJustCreated(null);
       load();
-    } catch (ex) { alert('revoke failed: ' + ex.message); }
+    } catch (ex) {
+      alert('revoke failed: ' + ex.message);
+    }
   };
   const copy = async () => {
     if (!justCreated) return;
-    try { await navigator.clipboard.writeText(justCreated.token); setCopied(true); }
-    catch (ex) { alert('copy failed: ' + ex.message); }
+    try {
+      await navigator.clipboard.writeText(justCreated.token);
+      setCopied(true);
+    } catch (ex) {
+      alert('copy failed: ' + ex.message);
+    }
   };
   return React.createElement("div", {
     className: "panel"
@@ -441,88 +493,132 @@ const ApiTokensPanel = () => {
     className: "panel-head"
   }, React.createElement("h2", null, "API tokens"), React.createElement("span", {
     className: "muted",
-    style: { fontSize: 12 }
+    style: {
+      fontSize: 12
+    }
   }, "Bearer tokens for native clients (Android app, MCP)")), React.createElement("div", {
     className: "panel-body"
-  },
-    justCreated && React.createElement("div", {
-      className: "setting-row",
-      style: { background: 'var(--bg-elev-2)', padding: 12, borderRadius: 8, alignItems: 'flex-start' }
-    }, React.createElement("div", {
-      className: "setting-label"
-    }, React.createElement("h4", {
-      style: { color: 'var(--ok)' }
-    }, "New token: ", justCreated.name), React.createElement("p", null, "Copy it now — it won't be shown again. Paste this into the Android app's \"API token\" field.")), React.createElement("div", {
-      style: { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }
-    }, React.createElement("code", {
-      className: "mono",
-      style: {
-        padding: '8px 10px',
-        background: 'var(--bg)',
-        border: '1px solid var(--hairline)',
-        borderRadius: 6,
-        fontSize: 12,
-        wordBreak: 'break-all',
-        userSelect: 'all'
-      }
-    }, justCreated.token), React.createElement("div", {
-      style: { display: 'flex', gap: 6 }
-    }, React.createElement(Button, {
-      variant: "primary",
-      size: "sm",
-      icon: IconCopy,
-      onClick: copy
-    }, copied ? 'Copied!' : 'Copy'), React.createElement(Button, {
-      variant: "ghost",
-      size: "sm",
-      onClick: () => setJustCreated(null)
-    }, "Dismiss")))),
-    React.createElement("form", {
-      className: "setting-row",
-      onSubmit: create
-    }, React.createElement("div", {
-      className: "setting-label"
-    }, React.createElement("h4", null, "Create token"), React.createElement("p", null, "Pick a memorable name (e.g. \"phone\", \"android\"). The token itself will be generated server-side.")), React.createElement("div", {
-      style: { display: 'flex', gap: 6 }
-    }, React.createElement("input", {
-      className: "input mono",
-      placeholder: "name",
-      value: name,
-      onChange: e => setName(e.target.value)
-    }), React.createElement(Button, {
-      variant: "primary",
-      size: "sm",
-      type: "submit",
-      disabled: busy || !name.trim()
-    }, busy ? '…' : 'Create'))),
-    err && React.createElement("div", {
-      style: { color: 'var(--err)', fontSize: 12.5, padding: '0 0 8px' }
-    }, err),
-    React.createElement("div", {
-      style: { padding: '4px 0 0' }
-    },
-      tokens === null && React.createElement("div", { className: "muted", style: { fontSize: 13 } }, "Loading…"),
-      tokens && tokens.length === 0 && React.createElement("div", { className: "muted", style: { fontSize: 13 } }, "No tokens yet."),
-      tokens && tokens.map(t => React.createElement("div", {
-        key: t.name,
-        className: "key-card"
-      }, React.createElement("span", {
-        className: "icon-bg",
-        style: { width: 28, height: 28, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'grid', placeItems: 'center' }
-      }, React.createElement(IconKey, { size: 14 })), React.createElement("div", {
-        style: { flex: 1, minWidth: 0 }
-      }, React.createElement("div", {
-        className: "row gap-2"
-      }, React.createElement("span", { className: "key-name" }, t.name), React.createElement("span", {
-        className: "muted mono",
-        style: { fontSize: 11 }
-      }, "created ", timeAgo(new Date(t.created))))), React.createElement(Button, {
-        variant: "ghost",
-        size: "sm",
-        onClick: () => remove(t.name)
-      }, "Revoke")))
-    )
-  ));
+  }, justCreated && React.createElement("div", {
+    className: "setting-row",
+    style: {
+      background: 'var(--bg-elev-2)',
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'flex-start'
+    }
+  }, React.createElement("div", {
+    className: "setting-label"
+  }, React.createElement("h4", {
+    style: {
+      color: 'var(--ok)'
+    }
+  }, "New token: ", justCreated.name), React.createElement("p", null, "Copy it now \u2014 it won't be shown again. Paste this into the Android app's \"API token\" field.")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      minWidth: 0
+    }
+  }, React.createElement("code", {
+    className: "mono",
+    style: {
+      padding: '8px 10px',
+      background: 'var(--bg)',
+      border: '1px solid var(--hairline)',
+      borderRadius: 6,
+      fontSize: 12,
+      wordBreak: 'break-all',
+      userSelect: 'all'
+    }
+  }, justCreated.token), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6
+    }
+  }, React.createElement(Button, {
+    variant: "primary",
+    size: "sm",
+    icon: IconCopy,
+    onClick: copy
+  }, copied ? 'Copied!' : 'Copy'), React.createElement(Button, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => setJustCreated(null)
+  }, "Dismiss")))), React.createElement("form", {
+    className: "setting-row",
+    onSubmit: create
+  }, React.createElement("div", {
+    className: "setting-label"
+  }, React.createElement("h4", null, "Create token"), React.createElement("p", null, "Pick a memorable name (e.g. \"phone\", \"android\"). The token itself will be generated server-side.")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6
+    }
+  }, React.createElement("input", {
+    className: "input mono",
+    placeholder: "name",
+    value: name,
+    onChange: e => setName(e.target.value)
+  }), React.createElement(Button, {
+    variant: "primary",
+    size: "sm",
+    type: "submit",
+    disabled: busy || !name.trim()
+  }, busy ? '…' : 'Create'))), err && React.createElement("div", {
+    style: {
+      color: 'var(--err)',
+      fontSize: 12.5,
+      padding: '0 0 8px'
+    }
+  }, err), React.createElement("div", {
+    style: {
+      padding: '4px 0 0'
+    }
+  }, tokens === null && React.createElement("div", {
+    className: "muted",
+    style: {
+      fontSize: 13
+    }
+  }, "Loading\u2026"), tokens && tokens.length === 0 && React.createElement("div", {
+    className: "muted",
+    style: {
+      fontSize: 13
+    }
+  }, "No tokens yet."), tokens && tokens.map(t => React.createElement("div", {
+    key: t.name,
+    className: "key-card"
+  }, React.createElement("span", {
+    className: "icon-bg",
+    style: {
+      width: 28,
+      height: 28,
+      borderRadius: 6,
+      background: 'var(--accent-soft)',
+      color: 'var(--accent)',
+      display: 'grid',
+      placeItems: 'center'
+    }
+  }, React.createElement(IconKey, {
+    size: 14
+  })), React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, React.createElement("div", {
+    className: "row gap-2"
+  }, React.createElement("span", {
+    className: "key-name"
+  }, t.name), React.createElement("span", {
+    className: "muted mono",
+    style: {
+      fontSize: 11
+    }
+  }, "created ", timeAgo(new Date(t.created))))), React.createElement(Button, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => remove(t.name)
+  }, "Revoke"))))));
 };
 Object.assign(window, {
   Settings,
