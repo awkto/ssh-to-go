@@ -418,6 +418,16 @@ function initTerminal(host, session) {
         activeWs = ws;
         ws.binaryType = "arraybuffer";
 
+        // ONE decoder for the whole connection, always used with
+        // {stream:true}. The relay forwards raw pty bytes and frames break
+        // wherever the 32KB read did, so a multi-byte rune is regularly
+        // split across two frames. Decoding each frame in isolation turned
+        // the truncated tail and the orphan continuation bytes into U+FFFD
+        // each — a 1-cell box-drawing char became 2+ cells, shifting the
+        // rest of the line sideways. A streaming decoder holds the partial
+        // sequence back until the bytes that complete it arrive.
+        const decoder = new TextDecoder("utf-8");
+
         ws.onopen = function () {
             statusEl.className = "status connected";
             if (relayMode === "control") {
@@ -437,7 +447,7 @@ function initTerminal(host, session) {
             if (e.data instanceof ArrayBuffer) {
                 // Filter mouse mode sequences from binary data
                 var bytes = new Uint8Array(e.data);
-                var str = new TextDecoder().decode(bytes);
+                var str = decoder.decode(bytes, { stream: true });
                 var filtered = str.replace(mouseSeqRegex, "");
                 if (filtered.length > 0) {
                     term.write(filtered);
