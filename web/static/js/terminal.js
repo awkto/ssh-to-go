@@ -766,6 +766,10 @@ function initTerminal(host, session) {
         themeBtn.addEventListener("click", function (e) {
             e.stopPropagation();
             var isOpen = themeDropdown.style.display !== "none";
+            // Only one toolbar panel open at a time — the click that opens
+            // this one is swallowed above, so the other won't self-close.
+            var burger = document.getElementById("toolbar-menu");
+            if (burger) burger.style.display = "none";
             themeDropdown.style.display = isOpen ? "none" : "block";
         });
 
@@ -812,6 +816,9 @@ function initTerminal(host, session) {
     burgerBtn.addEventListener("click", async function (e) {
         e.stopPropagation();
         var opening = burgerMenu.style.display === "none";
+        // See the theme button: the two panels are mutually exclusive.
+        var themeDd = document.getElementById("theme-dropdown");
+        if (themeDd) themeDd.style.display = "none";
         burgerMenu.style.display = opening ? "block" : "none";
         if (opening) {
             // Check how many clients are attached to decide whether to show kick button

@@ -177,7 +177,10 @@
 
         /* Theme picker */
         .theme-dropdown {
-            right: auto; left: 0;
+            /* Right-aligned like the burger menu. Left-anchoring it (the old
+               behaviour) hung the panel off the right edge of the window now
+               that Theme sits in the top-right cluster. */
+            right: 0; left: auto;
             max-height: 360px;
             overflow-y: auto;
             min-width: 200px;
