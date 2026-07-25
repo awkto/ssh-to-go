@@ -136,6 +136,43 @@ const SortMenu = ({ sortBy, setSortBy }) => {
   );
 };
 
+// Row bits shared by the Sessions table and the dashboard's Recent sessions.
+// Both rows show the same session in the same states, so the "why is this
+// offloaded" and "don't sleep this one" affordances live in one place.
+
+// Auto-sleep is off by default, and a keep-awake toggle means nothing until
+// it's on — so the button only appears once the setting exists.
+const autoSleepOn = () => (STORE.settings && STORE.settings.idle_offload_hours > 0);
+
+const KeepAwakeButton = ({ session: s, disabled }) => {
+  const [keep, setKeep] = React.useState(!!s.keepAwake);
+  if (!autoSleepOn()) return null;
+  const toggle = (e) => {
+    e.stopPropagation();
+    const next = !keep;
+    setKeep(next);
+    setSessionIconPatch(s.hostName, s.id, { keep_awake: next });
+  };
+  return (
+    <button className={`action-btn icon ${keep ? 'starred' : ''}`} onClick={toggle} disabled={disabled}
+            data-tip={keep ? 'Keep awake: exempt from idle auto-offload' : 'Let this session auto-offload when idle'}
+            aria-label={keep ? 'Allow auto-offload' : 'Keep awake'}>
+      <IconSun size={14} />
+    </button>
+  );
+};
+
+// Why a session is in the offloaded state, and what comes back with it.
+const OffloadedNote = ({ session: s }) => {
+  if (!s.workingDir && !s.command) return null;
+  return (
+    <div className="muted mono" style={{fontSize:11, marginTop:2, paddingLeft:28}}>
+      {s.workingDir ? `resume in ${s.workingDir}` : 'resume'}
+      {s.command ? ` · runs ${s.command}` : ''}
+    </div>
+  );
+};
+
 const FullSessionRow = ({ session: s, onOpen }) => {
   const [starred, setStarred] = React.useState(s.starred);
   const [recreating, setRecreating] = React.useState(false);
@@ -210,11 +247,9 @@ const FullSessionRow = ({ session: s, onOpen }) => {
           </button>
           <span className="mono name" onClick={offloaded ? onRecreate : onOpen} style={{cursor:'pointer'}}>{s.id}</span>
           {!offloaded && <button className="rename-btn" onClick={onRename} data-tip="Rename this session" aria-label="Rename session"><IconEdit size={12}/></button>}
-          {offloaded && <Pill variant="muted">offloaded</Pill>}
+          {offloaded && <Pill variant="muted">{s.autoOffloaded ? 'slept' : 'offloaded'}</Pill>}
         </div>
-        {offloaded && s.workingDir && (
-          <div className="muted mono" style={{fontSize:11, marginTop:2, paddingLeft:28}}>resume in {s.workingDir}</div>
-        )}
+        {offloaded && <OffloadedNote session={s} />}
       </td>
       <td className="muted mono col-h3" style={{fontSize:12.5}}>{s.host}</td>
       <td className="col-act">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
@@ -239,6 +274,7 @@ const FullSessionRow = ({ session: s, onOpen }) => {
           <button className="action-btn icon" onClick={onHandoff} disabled={!!busy} data-tip="Copy the SSH command to attach from your own terminal" aria-label="Copy SSH command">
             <IconCopy size={14} />
           </button>
+          <KeepAwakeButton session={s} disabled={!!busy} />
           <button className={`action-btn icon ${busy === 'offloading' ? 'busy' : ''}`} onClick={onOffload} disabled={!!busy}
                   data-tip="Offload: stop it now, resume later in the same directory" aria-label="Offload session">
             <IconMoon size={14} />
@@ -253,4 +289,4 @@ const FullSessionRow = ({ session: s, onOpen }) => {
   );
 };
 
-Object.assign(window, { Sessions, FullSessionRow });
+Object.assign(window, { Sessions, FullSessionRow, KeepAwakeButton, OffloadedNote });

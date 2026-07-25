@@ -176,6 +176,26 @@ const Settings = ({
     className: "setting-row"
   }, React.createElement("div", {
     className: "setting-label"
+  }, React.createElement("h4", null, "Auto-sleep idle sessions"), React.createElement("p", null, "Offload a session once it has had no client attached and nothing running for this long. The tmux session is stopped to free memory; it stays resumable with its working directory and launch command. Sessions marked keep-awake are never slept.")), React.createElement("div", null, React.createElement("select", {
+    className: "select",
+    value: String(draft.idle_offload_hours || 0),
+    onChange: e => set({
+      idle_offload_hours: parseInt(e.target.value, 10)
+    })
+  }, React.createElement("option", {
+    value: "0"
+  }, "Off"), React.createElement("option", {
+    value: "24"
+  }, "After 1 day"), React.createElement("option", {
+    value: "48"
+  }, "After 2 days"), React.createElement("option", {
+    value: "168"
+  }, "After 7 days"), React.createElement("option", {
+    value: "720"
+  }, "After 30 days")))), React.createElement("div", {
+    className: "setting-row"
+  }, React.createElement("div", {
+    className: "setting-label"
   }, React.createElement("h4", null, "Show public key on dashboard"), React.createElement("p", null, "Display your default public key for easy copy.")), React.createElement("div", null, React.createElement("label", {
     className: "checkbox"
   }, React.createElement("input", {

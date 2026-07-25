@@ -51,6 +51,11 @@ type SessionIcon struct {
 	Starred      bool   `json:"starred,omitempty"`
 	Theme        string `json:"theme,omitempty"`
 	LastAccessed string `json:"last_accessed,omitempty"`
+	// KeepAwake exempts the session from idle auto-offload. It lives here
+	// with the other per-session user preferences (star, theme) rather than
+	// in the registry, which records what a session IS rather than how its
+	// owner wants it treated.
+	KeepAwake bool `json:"keep_awake,omitempty"`
 }
 
 // SessionIconStore persists session icon/color overrides to a JSON file.
@@ -114,7 +119,7 @@ func (s *SessionIconStore) Set(host, session string, icon SessionIcon) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := sessionKey(host, session)
-	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && icon.LastAccessed == "" && !icon.Starred {
+	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && icon.LastAccessed == "" && !icon.Starred && !icon.KeepAwake {
 		delete(s.icons, key)
 	} else {
 		s.icons[key] = icon

@@ -106,6 +106,8 @@ function allMissingSessions() {
         host: h.config.address || hostName,
         name: m.name,
         workingDir: m.working_dir || '',
+        command: m.command || '',
+        autoOffloaded: !!m.auto_offloaded,
         createdAt: m.created_at || '',
         lastSeenAt: m.last_seen_at || ''
       });
@@ -148,11 +150,13 @@ function adaptSessions() {
       iconKind: icon.icon || 'terminal',
       iconColor: icon.color || 'indigo',
       starred: !!icon.starred,
+      keepAwake: !!icon.keep_awake,
       createdMs,
       activityMs,
       lastAccessedMs,
       status: 'live',
       workingDir: '',
+      command: '',
       _raw: entry
     };
   });
@@ -180,11 +184,14 @@ function adaptSessions() {
         iconKind: icon.icon || 'terminal',
         iconColor: icon.color || 'indigo',
         starred: !!icon.starred,
+        keepAwake: !!icon.keep_awake,
         createdMs,
         activityMs,
         lastAccessedMs,
         status: 'offloaded',
         workingDir: m.working_dir || '',
+        command: m.command || '',
+        autoOffloaded: !!m.auto_offloaded,
         _raw: m
       });
     }

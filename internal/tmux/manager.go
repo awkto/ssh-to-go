@@ -222,6 +222,46 @@ func (m *Manager) SessionCwd(client *ssh.Client, name string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// shellCommands are the pane_current_command values that mean "a shell
+// sitting at a prompt" — i.e. nothing is running. Anything else (make, vim,
+// claude, ssh, docker) counts as busy. The list is deliberately short: a
+// wrapper we don't recognise makes a session look busy forever, which only
+// costs us an auto-offload. Mistaking a running job for a shell would cost
+// the user their work.
+var shellCommands = map[string]bool{
+	"bash": true, "zsh": true, "fish": true, "sh": true,
+	"dash": true, "ksh": true, "ash": true, "csh": true, "tcsh": true,
+}
+
+// SessionQuiet reports whether every pane of every window in the session is
+// a shell at a prompt. A session with no panes at all (it vanished between
+// the poll and this call) reports not-quiet, so the caller leaves it alone.
+func (m *Manager) SessionQuiet(client *ssh.Client, name string) (bool, error) {
+	// -s covers all windows in the session, not just the current one.
+	out, err := sshutil.Exec(client, fmt.Sprintf("tmux list-panes -s -t %q -F '#{pane_current_command}'", name))
+	if err != nil {
+		return false, fmt.Errorf("list panes for %q: %w", name, err)
+	}
+	return panesQuiet(out), nil
+}
+
+// panesQuiet decides quietness from `list-panes -F #{pane_current_command}`
+// output. Split out so the rule is testable without an SSH connection.
+func panesQuiet(out string) bool {
+	seen := false
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		cmd := strings.TrimSpace(line)
+		if cmd == "" {
+			continue
+		}
+		seen = true
+		if !shellCommands[cmd] {
+			return false
+		}
+	}
+	return seen
+}
+
 // KillSession kills a tmux session on the remote host.
 func (m *Manager) KillSession(client *ssh.Client, name string) error {
 	_, err := sshutil.Exec(client, fmt.Sprintf("tmux kill-session -t %q", name))

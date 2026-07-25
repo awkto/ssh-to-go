@@ -385,6 +385,28 @@ function initTerminal(host, session) {
     let myTTY = "";
     // Set to true when server sends a "kicked" message — prevents auto-reconnect
     let kicked = false;
+    // Reason this session was deliberately ended ("killed" / "offloaded"),
+    // from the server's "terminated" message, the 4002 close code, or our own
+    // Kill/Offload buttons. Any of them suppresses the auto-reconnect below —
+    // that reconnect runs `tmux new-session -A`, which would recreate the
+    // session three seconds after you ended it.
+    let terminated = "";
+    let endStateDrawn = false;
+
+    // Explicit end state in place of the terminal, so an ended session reads
+    // as ended rather than as a connection that silently stopped coming back.
+    function drawEndState(reason) {
+        if (endStateDrawn) return;
+        endStateDrawn = true;
+        statusEl.className = "status disconnected";
+        var offloaded = reason === "offloaded";
+        var title = offloaded ? "Session Offloaded" : "Session Killed";
+        var detail = offloaded
+            ? "tmux stopped, but ssh-to-go kept it — resume it from the dashboard."
+            : "The tmux session is gone and ssh-to-go is no longer tracking it.";
+        term.write("\r\n\r\n\x1b[1;93m─── " + title + " ───\x1b[0m\r\n" +
+                   "\x1b[90m" + detail + "\x1b[0m\r\n");
+    }
 
     function sendBytes(bytes) {
         if (activeWs && activeWs.readyState === WebSocket.OPEN) {
@@ -459,6 +481,9 @@ function initTerminal(host, session) {
                     if (msg.type === "resize") return;
                     if (msg.type === "tty") { myTTY = msg.tty; return; }
                     if (msg.type === "kicked") { kicked = true; return; }
+                    // Sent while the socket is still healthy, just before
+                    // the server tears tmux down on purpose.
+                    if (msg.type === "terminated") { terminated = msg.reason || "killed"; return; }
                 } catch (_) {}
                 term.write(e.data.replace(mouseSeqRegex, ""));
             }
@@ -466,6 +491,13 @@ function initTerminal(host, session) {
 
         ws.onclose = function (e) {
             statusEl.className = "status disconnected";
+            // Deliberately killed or offloaded (code 4002, or the control
+            // message that preceded it). No reconnect: this is the whole
+            // fix for sessions coming back from the dead.
+            if (terminated || e.code === 4002) {
+                drawEndState(terminated || e.reason || "killed");
+                return;
+            }
             // Code 4000 = session ended normally (killed/destroyed)
             if (e.code === 4000) {
                 term.write("\r\n\x1b[93m--- session ended ---\x1b[0m\r\n");
@@ -890,41 +922,74 @@ function initTerminal(host, session) {
         }
     });
 
-    // Duplicate button — create a new session on the same host in the same working dir
+    // Duplicate button — a second session beside this one, in the directory
+    // it is sitting in now and with the command it was launched with. The
+    // server owns the naming (foo → foo-COPY → foo-COPY2) because picking
+    // the next free number means seeing both live and offloaded sessions.
     document.getElementById("duplicate-btn").addEventListener("click", async function () {
         const btn = this;
         btn.disabled = true;
         btn.textContent = "Opening…";
         try {
-            // Get the current session's working directory
-            let cwd = "";
-            try {
-                const cwdRes = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/cwd`);
-                if (cwdRes.ok) {
-                    const cwdData = await cwdRes.json();
-                    cwd = cwdData.cwd || "";
-                }
-            } catch (_) {}
-
-            const newName = `${session}-dup-${Date.now()}`;
-            const body = { name: newName };
-            if (cwd) body.cwd = cwd;
-            const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions`, {
+            const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/duplicate`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
             });
-            if (!res.ok) {
-                throw new Error(`Server returned ${res.status}`);
-            }
+            if (!res.ok) throw new Error(await res.text() || `Server returned ${res.status}`);
             const data = await res.json();
-            const sessName = data.name || newName;
-            window.open(`/terminal/${encodeURIComponent(host)}/${encodeURIComponent(sessName)}`, "_blank");
+            window.open(`/terminal/${encodeURIComponent(host)}/${encodeURIComponent(data.name)}`, "_blank");
         } catch (e) {
             alert("Duplicate failed: " + e.message);
         } finally {
             btn.disabled = false;
             btn.textContent = "Duplicate";
+        }
+    });
+
+    // Offload — stop tmux but keep the session resumable. Not confirmed:
+    // it's reversible from the dashboard, working directory and launch
+    // command included.
+    document.getElementById("offload-btn").addEventListener("click", async function () {
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = "Offloading…";
+        // Set before the request: if the relay drops before the server's
+        // "terminated" message arrives, this still blocks the reconnect.
+        terminated = "offloaded";
+        try {
+            const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}/offload`, {
+                method: "POST",
+            });
+            if (!res.ok) throw new Error(await res.text() || `Server returned ${res.status}`);
+            drawEndState("offloaded");
+            if (activeWs) activeWs.close();
+        } catch (e) {
+            terminated = "";
+            alert("Offload failed: " + e.message);
+            btn.disabled = false;
+            btn.textContent = "Offload";
+        }
+    });
+
+    // Kill — irreversible, and this menu is one click from Send Ctrl-C, so
+    // it asks first.
+    document.getElementById("kill-btn").addEventListener("click", async function () {
+        const btn = this;
+        if (!confirm(`Kill session "${session}"? The tmux session is destroyed and ssh-to-go forgets it — this can't be undone.`)) return;
+        btn.disabled = true;
+        btn.textContent = "Killing…";
+        terminated = "killed";
+        try {
+            const res = await fetch(`/api/hosts/${encodeURIComponent(host)}/sessions/${encodeURIComponent(session)}`, {
+                method: "DELETE",
+            });
+            if (!res.ok) throw new Error(await res.text() || `Server returned ${res.status}`);
+            drawEndState("killed");
+            if (activeWs) activeWs.close();
+        } catch (e) {
+            terminated = "";
+            alert("Kill failed: " + e.message);
+            btn.disabled = false;
+            btn.textContent = "Kill Session";
         }
     });
 

@@ -41,6 +41,11 @@ type Options struct {
 	// session this relay creates, so new panes get deeper scrollback. tmux
 	// can't grow an existing pane's buffer, so this only helps fresh sessions.
 	HistoryLimit int
+
+	// Host is the ssh-to-go host name this session belongs to. Only used to
+	// key the deliberate-termination registry (see terminate.go) — the relay
+	// itself dials by address. Empty disables termination signalling.
+	Host string
 }
 
 // Relay bridges a WebSocket connection to a tmux session over SSH.
@@ -62,7 +67,7 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	go sshutil.KeepAlive(client, 15_000_000_000, done) // 15s
 
 	if opts.Mode == "control" {
-		return relayControlMode(ctx, ws, client, sessionName, windowSize, opts.HistoryLimit)
+		return relayControlMode(ctx, ws, client, sessionName, windowSize, opts.HistoryLimit, opts.Host)
 	}
 
 	// Default size, will be resized by first client message
@@ -168,6 +173,26 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	defer cancel()
 
 	var wg sync.WaitGroup
+
+	// Watch for a deliberate kill/offload of this session — tell the browser
+	// why while the socket is still healthy, so it suppresses its reconnect
+	// instead of recreating the session with `new-session -A`.
+	termReason := ""
+	if opts.Host != "" {
+		termCh := RegisterTerminateCh(opts.Host, sessionName)
+		defer UnregisterTerminateCh(opts.Host, sessionName, termCh)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case reason := <-termCh:
+				termReason = reason
+				msg, _ := json.Marshal(map[string]string{"type": "terminated", "reason": reason})
+				_ = ws.Write(ctx, websocket.MessageText, msg)
+			case <-ctx.Done():
+			}
+		}()
+	}
 
 	// Watch for kick signal — send control message to browser before tmux detaches us
 	if kickCh != nil {
@@ -275,6 +300,10 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	if wasKicked {
 		closeCode = 4001
 		closeMsg = "detached by another client"
+	}
+	if termReason != "" {
+		closeCode = 4002
+		closeMsg = termReason
 	}
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer closeCancel()

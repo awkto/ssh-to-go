@@ -51,8 +51,9 @@ func NewRouter(rc RouterConfig) http.Handler {
 	// Collects throwaway sessions that have been sitting with nothing
 	// attached. The per-disconnect check handles the common case; this
 	// catches sessions abandoned without a clean detach, and survives a
-	// restart because the idle clock is persisted in the registry.
-	handlers.StartThrowawaySweeper()
+	// restart because the idle clock is persisted in the registry. The same
+	// tick runs the auto-sleep pass (off unless idle_offload_hours is set).
+	handlers.StartSweepers()
 
 	mux := http.NewServeMux()
 
@@ -78,6 +79,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/recreate", handlers.RecreateSession)
 	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/forget", handlers.ForgetSession)
 	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/offload", handlers.OffloadSession)
+	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/duplicate", handlers.DuplicateSession)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/handoff", handlers.Handoff)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/cwd", handlers.SessionCwd)
 	mux.HandleFunc("GET /api/hosts/{host}/sessions/{session}/clients", handlers.ListClients)

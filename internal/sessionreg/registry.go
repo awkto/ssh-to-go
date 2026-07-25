@@ -17,9 +17,14 @@ import (
 
 // Entry is one tracked session.
 type Entry struct {
-	Host       string    `json:"host"`
-	Name       string    `json:"name"`
-	WorkingDir string    `json:"working_dir,omitempty"`
+	Host       string `json:"host"`
+	Name       string `json:"name"`
+	WorkingDir string `json:"working_dir,omitempty"`
+	// Command is what the session was launched with (e.g. "claude"), so
+	// Recreate can replay it and Duplicate can copy it. Entries written
+	// before this field existed simply have none and recreate as a bare
+	// shell, exactly as they did then.
+	Command    string    `json:"command,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 	LastSeenAt time.Time `json:"last_seen_at,omitempty"`
 	// Throwaway sessions are collected once nothing is attached — see
@@ -32,6 +37,11 @@ type Entry struct {
 	// exists — hiding something requires knowing it is there, and the tmux
 	// session outlives this process, so the flag has to be on disk.
 	Incognito bool `json:"incognito,omitempty"`
+	// AutoOffloaded records that the idle sweeper put this session to sleep
+	// rather than a person offloading it by hand. Without the distinction a
+	// session moving to Resumable overnight looks like a bug. Cleared the
+	// moment the entry is re-added (i.e. recreated).
+	AutoOffloaded bool `json:"auto_offloaded,omitempty"`
 }
 
 // Flags are the session flavours chosen at creation. Zero value is an
@@ -99,41 +109,90 @@ func (s *Store) saveLocked() error {
 	return os.WriteFile(s.path, data, 0600)
 }
 
+// Attrs is everything recorded about a session at creation time.
+type Attrs struct {
+	WorkingDir string
+	// Command the session was launched with. Empty on an existing entry
+	// leaves the recorded one alone — Add()'s callers (rename, poller cwd
+	// refresh) don't know it and must not erase it.
+	Command string
+	Flags   Flags
+}
+
 // Add records a newly-created session. If one already exists with the same
 // (host, name), its WorkingDir is updated and CreatedAt is left untouched.
 func (s *Store) Add(host, name, workingDir string) error {
-	return s.AddWithFlags(host, name, workingDir, Flags{})
+	return s.AddSession(host, name, Attrs{WorkingDir: workingDir})
 }
 
 // AddWithFlags is Add with the session flavours set. Flags only apply to a
 // NEW entry: re-adding an existing session (rename, recreate) keeps whatever
 // it was created as, so a throwaway can't quietly become permanent.
 func (s *Store) AddWithFlags(host, name, workingDir string, flags Flags) error {
+	return s.AddSession(host, name, Attrs{WorkingDir: workingDir, Flags: flags})
+}
+
+// AddSession is Add with every recorded attribute. See Attrs.
+func (s *Store) AddSession(host, name string, a Attrs) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key(host, name)
 	now := time.Now().UTC()
 	if existing, ok := s.entries[k]; ok {
-		if workingDir != "" {
-			existing.WorkingDir = workingDir
+		if a.WorkingDir != "" {
+			existing.WorkingDir = a.WorkingDir
 		}
+		if a.Command != "" {
+			existing.Command = a.Command
+		}
+		// The session is alive again, so it is no longer asleep. Leaving
+		// this set would badge a recreated session as auto-offloaded for
+		// the rest of its life.
+		existing.AutoOffloaded = false
 		existing.LastSeenAt = now
 		s.entries[k] = existing
 	} else {
 		s.entries[k] = Entry{
 			Host:       host,
 			Name:       name,
-			WorkingDir: workingDir,
+			WorkingDir: a.WorkingDir,
+			Command:    a.Command,
 			CreatedAt:  now,
 			LastSeenAt: now,
-			Throwaway:  flags.Throwaway,
-			Incognito:  flags.Incognito,
+			Throwaway:  a.Flags.Throwaway,
+			Incognito:  a.Flags.Incognito,
 			// Never attached yet — the idle clock starts now, so a session
 			// created and forgotten is still collected.
 			LastAttachedAt: now,
 		}
 	}
 	return s.saveLocked()
+}
+
+// MarkAutoOffloaded flags an entry as slept by the idle sweeper rather than
+// offloaded by hand, so the UI can say so. No-op for untracked sessions.
+func (s *Store) MarkAutoOffloaded(host, name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := key(host, name)
+	e, ok := s.entries[k]
+	if !ok {
+		return
+	}
+	e.AutoOffloaded = true
+	s.entries[k] = e
+	_ = s.saveLocked()
+}
+
+// List returns a copy of every entry, for the idle-offload sweeper.
+func (s *Store) List() []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Entry, 0, len(s.entries))
+	for _, e := range s.entries {
+		out = append(out, e)
+	}
+	return out
 }
 
 // MarkAttached records that a client is (or just was) on the session,

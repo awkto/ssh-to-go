@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Settings struct {
@@ -38,6 +39,11 @@ type Settings struct {
 	// API still treats an omitted cwd as "the SSH user's home", so MCP and
 	// direct API callers are unaffected.
 	NewSessionDir string `json:"new_session_dir,omitempty"`
+	// IdleOffloadHours puts long-idle sessions to sleep: the tmux session is
+	// offloaded (killed, registry entry kept, resumable with its working
+	// directory and launch command) once it has had no client and nothing
+	// running for this many hours. 0 — the default — is off.
+	IdleOffloadHours int `json:"idle_offload_hours"`
 }
 
 // DefaultScrollbackLines is the scrollback depth used when the setting is
@@ -145,6 +151,12 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 	// Assigned unconditionally so clearing the field in the UI resets it to
 	// DefaultNewSessionDir rather than pinning the old value forever.
 	sm.settings.NewSessionDir = strings.TrimSpace(s.NewSessionDir)
+	// Also unconditional: 0 is "off", which has to be reachable again once
+	// auto-sleep has been turned on.
+	if s.IdleOffloadHours < 0 || s.IdleOffloadHours > 24*365 {
+		return fmt.Errorf("invalid idle_offload_hours %d: must be between 0 (off) and %d", s.IdleOffloadHours, 24*365)
+	}
+	sm.settings.IdleOffloadHours = s.IdleOffloadHours
 
 	return sm.save()
 }
@@ -193,6 +205,17 @@ func (sm *SettingsManager) ScrollbackLines() int {
 		return DefaultScrollbackLines
 	}
 	return sm.settings.ScrollbackLines
+}
+
+// IdleOffloadTimeout returns how long a session may sit idle before the
+// sweeper offloads it, or 0 when the feature is off.
+func (sm *SettingsManager) IdleOffloadTimeout() time.Duration {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if sm.settings.IdleOffloadHours <= 0 {
+		return 0
+	}
+	return time.Duration(sm.settings.IdleOffloadHours) * time.Hour
 }
 
 // DefaultHost returns the configured default host for the exec API, or "".

@@ -18,6 +18,14 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Refuse to attach to a session that was just killed or offloaded. The
+	// attach runs `tmux new-session -A`, so serving this would recreate what
+	// the user deliberately ended — the resurrection bug. See terminate.go.
+	if h.recentlyTerminated(hostName, sessionName) {
+		http.Error(w, "session was just terminated", http.StatusConflict)
+		return
+	}
+
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// Allow connections from any origin for local dev
 		InsecureSkipVerify: true,
@@ -40,7 +48,7 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 		r.Context(), ws,
 		hostCfg.DialAddress(), hostCfg.User, h.resolveKey(hostCfg),
 		sessionName, h.Settings.TmuxWindowSize(),
-		relay.Options{Mouse: mouse, Mode: mode, HistoryLimit: h.Settings.ScrollbackLines()},
+		relay.Options{Mouse: mouse, Mode: mode, HistoryLimit: h.Settings.ScrollbackLines(), Host: hostName},
 	)
 	if err != nil {
 		log.Printf("relay error: %v", err)

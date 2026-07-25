@@ -54,6 +54,12 @@ func (h *Handlers) collectIfIdle(hostName, sessionName string) bool {
 		return false // someone is still attached (or came back)
 	}
 
+	// Nothing is attached, so there is usually no relay to tell — but a
+	// client that reconnected between the check above and the kill would
+	// otherwise recreate the session with `new-session -A`. Announcing arms
+	// the reconnect guard as well as signalling. See terminate.go.
+	h.announceTermination(hostName, sessionName, "killed")
+
 	if err := h.Tmux.KillSession(client, sessionName); err != nil {
 		// The session may simply be gone already (user typed exit); that
 		// still means it should stop being tracked, so fall through.
@@ -87,14 +93,21 @@ func (h *Handlers) onClientDetached(hostName, sessionName string) {
 	}()
 }
 
-// StartThrowawaySweeper runs the idle collector until ctx-less shutdown. It
-// also keeps the idle clock fed: any throwaway with clients attached (per the
-// last poll) has its LastAttachedAt refreshed, so "idle" means "no client for
-// IdleTimeout", not "created IdleTimeout ago".
-func (h *Handlers) StartThrowawaySweeper() {
+// StartSweepers runs the background collectors until ctx-less shutdown.
+//
+// The throwaway pass also keeps the idle clock fed: any throwaway with
+// clients attached (per the last poll) has its LastAttachedAt refreshed, so
+// "idle" means "no client for IdleTimeout", not "created IdleTimeout ago".
+//
+// The auto-sleep pass shares the tick — both timeouts are far wider than a
+// minute, and a second ticker would buy nothing. It is a no-op unless the
+// idle-offload setting is on.
+func (h *Handlers) StartSweepers() {
 	go func() {
 		for range time.Tick(sweepInterval) {
-			h.sweepThrowaways(time.Now().UTC())
+			now := time.Now().UTC()
+			h.sweepThrowaways(now)
+			h.sweepIdleSessions(now)
 		}
 	}()
 }

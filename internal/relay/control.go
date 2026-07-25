@@ -283,7 +283,7 @@ func tmuxQuote(s string) string {
 // relayControlMode bridges a WebSocket to a tmux session via control mode.
 // Mirrors RelayWithOptions' lifecycle (kick channel, close codes, teardown)
 // but speaks the -C line protocol instead of relaying a PTY byte stream.
-func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Client, sessionName, windowSize string, historyLimit int) error {
+func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Client, sessionName, windowSize string, historyLimit int, hostName string) error {
 	// No PTY: control mode is a line protocol over pipes. A PTY would add
 	// input echo and CRLF translation that corrupt parsing.
 	session, err := client.NewSession()
@@ -377,6 +377,24 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	sendCmd(cmdHistory, fmt.Sprintf("capture-pane -p -e -J -S - -E - -t %s", target))
 
 	var wg sync.WaitGroup
+
+	// Deliberate kill/offload watcher — see relay.go for why this exists.
+	termReason := ""
+	if hostName != "" {
+		termCh := RegisterTerminateCh(hostName, sessionName)
+		defer UnregisterTerminateCh(hostName, sessionName, termCh)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case reason := <-termCh:
+				termReason = reason
+				msg, _ := json.Marshal(map[string]string{"type": "terminated", "reason": reason})
+				_ = ws.Write(ctx, websocket.MessageText, msg)
+			case <-ctx.Done():
+			}
+		}()
+	}
 
 	// Kick watcher: register under our tmux client_name (the PTY pipeline's
 	// tty path equivalent) once display-message answers.
@@ -502,6 +520,10 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	if wasKicked {
 		closeCode = 4001
 		closeMsg = "detached by another client"
+	}
+	if termReason != "" {
+		closeCode = 4002
+		closeMsg = termReason
 	}
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer closeCancel()

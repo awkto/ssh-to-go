@@ -238,6 +238,44 @@ const SortMenu = ({
     size: 14
   })))));
 };
+const autoSleepOn = () => STORE.settings && STORE.settings.idle_offload_hours > 0;
+const KeepAwakeButton = ({
+  session: s,
+  disabled
+}) => {
+  const [keep, setKeep] = React.useState(!!s.keepAwake);
+  if (!autoSleepOn()) return null;
+  const toggle = e => {
+    e.stopPropagation();
+    const next = !keep;
+    setKeep(next);
+    setSessionIconPatch(s.hostName, s.id, {
+      keep_awake: next
+    });
+  };
+  return React.createElement("button", {
+    className: `action-btn icon ${keep ? 'starred' : ''}`,
+    onClick: toggle,
+    disabled: disabled,
+    "data-tip": keep ? 'Keep awake: exempt from idle auto-offload' : 'Let this session auto-offload when idle',
+    "aria-label": keep ? 'Allow auto-offload' : 'Keep awake'
+  }, React.createElement(IconSun, {
+    size: 14
+  }));
+};
+const OffloadedNote = ({
+  session: s
+}) => {
+  if (!s.workingDir && !s.command) return null;
+  return React.createElement("div", {
+    className: "muted mono",
+    style: {
+      fontSize: 11,
+      marginTop: 2,
+      paddingLeft: 28
+    }
+  }, s.workingDir ? `resume in ${s.workingDir}` : 'resume', s.command ? ` · runs ${s.command}` : '');
+};
 const FullSessionRow = ({
   session: s,
   onOpen
@@ -359,14 +397,9 @@ const FullSessionRow = ({
     size: 12
   })), offloaded && React.createElement(Pill, {
     variant: "muted"
-  }, "offloaded")), offloaded && s.workingDir && React.createElement("div", {
-    className: "muted mono",
-    style: {
-      fontSize: 11,
-      marginTop: 2,
-      paddingLeft: 28
-    }
-  }, "resume in ", s.workingDir)), React.createElement("td", {
+  }, s.autoOffloaded ? 'slept' : 'offloaded')), offloaded && React.createElement(OffloadedNote, {
+    session: s
+  })), React.createElement("td", {
     className: "muted mono col-h3",
     style: {
       fontSize: 12.5
@@ -430,7 +463,10 @@ const FullSessionRow = ({
     "aria-label": "Copy SSH command"
   }, React.createElement(IconCopy, {
     size: 14
-  })), React.createElement("button", {
+  })), React.createElement(KeepAwakeButton, {
+    session: s,
+    disabled: !!busy
+  }), React.createElement("button", {
     className: `action-btn icon ${busy === 'offloading' ? 'busy' : ''}`,
     onClick: onOffload,
     disabled: !!busy,
@@ -450,5 +486,7 @@ const FullSessionRow = ({
 };
 Object.assign(window, {
   Sessions,
-  FullSessionRow
+  FullSessionRow,
+  KeepAwakeButton,
+  OffloadedNote
 });

@@ -34,6 +34,10 @@ type Handlers struct {
 	PollResults  chan<- tmux.PollResult
 	Done         <-chan struct{}
 	Version      string
+
+	// terminated remembers sessions killed/offloaded moments ago so a
+	// browser reconnect can't recreate them. See terminate.go.
+	terminated terminationGuard
 }
 
 func (h *Handlers) GetVersion(w http.ResponseWriter, r *http.Request) {
@@ -216,12 +220,20 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// A name reused right after killing the old session must not be refused
+	// by the reconnect guard — this create is the deliberate comeback.
+	h.clearTerminated(hostName, req.Name)
+
 	if h.Registry != nil {
 		// Incognito sessions are registered too. Hiding one requires knowing
 		// it exists, and the tmux session outlives this process — the entry
 		// is simply never surfaced (see Hub's hidden filter).
 		flags := sessionreg.Flags{Throwaway: req.Throwaway, Incognito: req.Incognito}
-		if err := h.Registry.AddWithFlags(hostName, req.Name, req.Cwd, flags); err != nil {
+		// The command is stored so Recreate can replay it and Duplicate can
+		// copy it; without it an offloaded `claude` session comes back as a
+		// bare shell in the right directory.
+		attrs := sessionreg.Attrs{WorkingDir: req.Cwd, Command: req.Command, Flags: flags}
+		if err := h.Registry.AddSession(hostName, req.Name, attrs); err != nil {
 			log.Printf("session registry add %s/%s: %v", hostName, req.Name, err)
 		}
 		if req.Incognito {
@@ -307,6 +319,10 @@ func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
+	// Tell any attached web terminal this is deliberate before tmux goes,
+	// or it reconnects and recreates the session. See terminate.go.
+	h.announceTermination(hostName, sessionName, "killed")
+
 	if err := h.Tmux.KillSession(client, sessionName); err != nil {
 		http.Error(w, fmt.Sprintf("kill session failed: %v", err), http.StatusInternalServerError)
 		return
@@ -368,6 +384,10 @@ func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
 			log.Printf("offload: registry add %s/%s: %v", hostName, regName, err)
 		}
 	}
+
+	// Same deliberate-termination announcement as Kill: without it the
+	// attached terminal reconnects and `new-session -A` undoes the offload.
+	h.announceTermination(hostName, sessionName, "offloaded")
 
 	if err := h.Tmux.KillSession(client, sessionName); err != nil {
 		http.Error(w, fmt.Sprintf("kill session failed: %v", err), http.StatusInternalServerError)
@@ -443,11 +463,15 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 	if h.Registry != nil {
 		if entry, ok := h.Registry.Get(hostName, sessionName); ok {
 			_ = h.Registry.Remove(hostName, sessionName)
-			// Carry the flavours across: renaming a throwaway must not
-			// quietly promote it to a permanent session (nor un-hide an
-			// incognito one).
-			_ = h.Registry.AddWithFlags(hostName, req.NewName, entry.WorkingDir,
-				sessionreg.Flags{Throwaway: entry.Throwaway, Incognito: entry.Incognito})
+			// Carry the flavours and the launch command across: renaming a
+			// throwaway must not quietly promote it to a permanent session
+			// (nor un-hide an incognito one), and a renamed session must
+			// still recreate with the command it was started with.
+			_ = h.Registry.AddSession(hostName, req.NewName, sessionreg.Attrs{
+				WorkingDir: entry.WorkingDir,
+				Command:    entry.Command,
+				Flags:      sessionreg.Flags{Throwaway: entry.Throwaway, Incognito: entry.Incognito},
+			})
 		}
 	}
 
@@ -1151,18 +1175,36 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	if err := h.Tmux.CreateSession(client, createName, h.Settings.TmuxWindowSize(), entry.WorkingDir, h.Settings.ScrollbackLines()); err != nil {
+	// Resume means resume: the recorded launch command is replayed, not just
+	// the directory. CreateDir is on because the directory that existed when
+	// the session was made may not have survived until now, and coming back
+	// to a recreated directory beats a resume that fails outright.
+	if err := h.Tmux.CreateSessionWith(client, createName, tmux.CreateOptions{
+		WindowSize:   h.Settings.TmuxWindowSize(),
+		Cwd:          entry.WorkingDir,
+		HistoryLimit: h.Settings.ScrollbackLines(),
+		CreateDir:    true,
+		Command:      entry.Command,
+	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	h.clearTerminated(hostName, createName)
+
 	// Migrate a legacy spaced entry to its sanitized key so it stops
-	// appearing separately, then refresh LastSeenAt. Add() preserves
-	// CreatedAt and WorkingDir when the entry already exists.
+	// appearing separately, then refresh LastSeenAt. AddSession preserves
+	// CreatedAt and the flavour flags when the entry already exists, and
+	// clears the auto-offloaded badge now the session is alive again.
 	if createName != sessionName {
 		_ = h.Registry.Remove(hostName, sessionName)
 	}
-	if err := h.Registry.Add(hostName, createName, entry.WorkingDir); err != nil {
+	attrs := sessionreg.Attrs{
+		WorkingDir: entry.WorkingDir,
+		Command:    entry.Command,
+		Flags:      sessionreg.Flags{Throwaway: entry.Throwaway, Incognito: entry.Incognito},
+	}
+	if err := h.Registry.AddSession(hostName, createName, attrs); err != nil {
 		log.Printf("session registry touch %s/%s: %v", hostName, createName, err)
 	}
 
@@ -1170,6 +1212,7 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 		"status":      "recreated",
 		"name":        createName,
 		"working_dir": entry.WorkingDir,
+		"command":     entry.Command,
 	})
 }
 

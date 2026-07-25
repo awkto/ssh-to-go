@@ -322,7 +322,7 @@ const MissingSessionsPanel = ({
     }
   }, "Session"), React.createElement("th", null, "Host"), React.createElement("th", {
     className: "hide-mobile"
-  }, "Last working dir"), React.createElement("th", {
+  }, "Resumes as"), React.createElement("th", {
     style: {
       textAlign: 'right'
     }
@@ -333,7 +333,9 @@ const MissingSessionsPanel = ({
       key: key
     }, React.createElement("td", null, React.createElement("span", {
       className: "mono"
-    }, m.name)), React.createElement("td", {
+    }, m.name), m.autoOffloaded && React.createElement(Pill, {
+      variant: "muted"
+    }, "slept")), React.createElement("td", {
       className: "muted mono",
       style: {
         fontSize: 12.5
@@ -343,7 +345,7 @@ const MissingSessionsPanel = ({
       style: {
         fontSize: 12
       }
-    }, m.workingDir || '—'), React.createElement("td", null, React.createElement("div", {
+    }, m.workingDir || '—', m.command ? ` · ${m.command}` : ''), React.createElement("td", null, React.createElement("div", {
       className: "actions-cell"
     }, React.createElement("button", {
       className: "action-btn primary",
@@ -477,14 +479,9 @@ const SessionRow = ({
     size: 12
   })), offloaded && React.createElement(Pill, {
     variant: "muted"
-  }, "offloaded")), offloaded && s.workingDir && React.createElement("div", {
-    className: "muted mono",
-    style: {
-      fontSize: 11,
-      marginTop: 2,
-      paddingLeft: 28
-    }
-  }, "resume in ", s.workingDir)), React.createElement("td", {
+  }, s.autoOffloaded ? 'slept' : 'offloaded')), offloaded && React.createElement(OffloadedNote, {
+    session: s
+  })), React.createElement("td", {
     className: "muted mono col-h3",
     style: {
       fontSize: 12.5
@@ -538,7 +535,10 @@ const SessionRow = ({
     "aria-label": "Copy SSH command"
   }, React.createElement(IconCopy, {
     size: 14
-  })), React.createElement("button", {
+  })), React.createElement(KeepAwakeButton, {
+    session: s,
+    disabled: !!busy
+  }), React.createElement("button", {
     className: `action-btn icon ${busy === 'offloading' ? 'busy' : ''}`,
     onClick: onOffload,
     disabled: !!busy,

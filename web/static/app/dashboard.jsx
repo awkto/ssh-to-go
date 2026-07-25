@@ -207,7 +207,7 @@ const MissingSessionsPanel = ({ missing }) => {
           <tr>
             <th style={{width:'24%'}}>Session</th>
             <th>Host</th>
-            <th className="hide-mobile">Last working dir</th>
+            <th className="hide-mobile">Resumes as</th>
             <th style={{textAlign:'right'}}>Actions</th>
           </tr>
         </thead>
@@ -217,9 +217,16 @@ const MissingSessionsPanel = ({ missing }) => {
             const b = busy[key];
             return (
               <tr key={key}>
-                <td><span className="mono">{m.name}</span></td>
+                <td>
+                  <span className="mono">{m.name}</span>
+                  {m.autoOffloaded && <Pill variant="muted">slept</Pill>}
+                </td>
                 <td className="muted mono" style={{fontSize:12.5}}>{m.host}</td>
-                <td className="mono muted hide-mobile" style={{fontSize:12}}>{m.workingDir || '—'}</td>
+                {/* Directory and launch command are both replayed on
+                    recreate, so show what you'll actually get back. */}
+                <td className="mono muted hide-mobile" style={{fontSize:12}}>
+                  {m.workingDir || '—'}{m.command ? ` · ${m.command}` : ''}
+                </td>
                 <td>
                   <div className="actions-cell">
                     <button className="action-btn primary" disabled={!!b} onClick={() => action(recreateSession, m, 'recreate')}>
@@ -315,11 +322,9 @@ const SessionRow = ({ session: s, onOpen }) => {
           </button>
           <span className="mono name" onClick={offloaded ? onRecreate : onOpen} style={{cursor:'pointer'}}>{s.id}</span>
           {!offloaded && <button className="rename-btn" onClick={onRename} data-tip="Rename this session" aria-label="Rename session"><IconEdit size={12}/></button>}
-          {offloaded && <Pill variant="muted">offloaded</Pill>}
+          {offloaded && <Pill variant="muted">{s.autoOffloaded ? 'slept' : 'offloaded'}</Pill>}
         </div>
-        {offloaded && s.workingDir && (
-          <div className="muted mono" style={{fontSize:11, marginTop:2, paddingLeft:28}}>resume in {s.workingDir}</div>
-        )}
+        {offloaded && <OffloadedNote session={s} />}
       </td>
       <td className="muted mono col-h3" style={{fontSize:12.5}}>{s.host}</td>
       <td className="col-act">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
@@ -343,6 +348,7 @@ const SessionRow = ({ session: s, onOpen }) => {
               <button className="action-btn icon" onClick={onHandoff} disabled={!!busy} data-tip="Copy the SSH command to attach from your own terminal" aria-label="Copy SSH command">
                 <IconCopy size={14} />
               </button>
+              <KeepAwakeButton session={s} disabled={!!busy} />
               <button className={`action-btn icon ${busy === 'offloading' ? 'busy' : ''}`} onClick={onOffload} disabled={!!busy}
                       data-tip="Offload: stop it now, resume later in the same directory" aria-label="Offload session">
                 <IconMoon size={14} />

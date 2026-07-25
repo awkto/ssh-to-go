@@ -202,6 +202,9 @@
             cursor: pointer;
         }
         .toolbar-menu-item:active { background: #3a3a5a; }
+        /* Kill sits two rows below Send Ctrl-C in a menu you open with one
+           click; colouring it stops it reading as one more ordinary action. */
+        .toolbar-menu-item.danger { color: #ff8a8a; }
         .toolbar-menu-divider { height: 1px; background: #3a3a5a; margin: 4px 0; }
 
         /* Theme picker */
@@ -384,6 +387,9 @@
                     <button class="toolbar-menu-item" id="rename-btn">Rename</button>
                     <button class="toolbar-menu-item" id="duplicate-btn">Duplicate</button>
                     <button class="toolbar-menu-item" id="detach-btn">Kick Other Clients</button>
+                    <div class="toolbar-menu-divider"></div>
+                    <button class="toolbar-menu-item" id="offload-btn">Offload</button>
+                    <button class="toolbar-menu-item danger" id="kill-btn">Kill Session</button>
                     <div class="toolbar-menu-divider"></div>
                     <button class="toolbar-menu-item" id="ctrl-c-btn">Send Ctrl-C</button>
                     <button class="toolbar-menu-item" id="ctrl-d-btn">Send Ctrl-D</button>

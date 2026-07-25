@@ -49,9 +49,15 @@ See all tmux sessions across all your hosts at a glance.
 - Dark and light themes
 
 ### Session Management
-- **Create** new tmux sessions with optional working directory
+- **Create** new tmux sessions with optional working directory and launch command
 - **Rename** sessions without interrupting running processes
-- **Kill** sessions from the UI
+- **Kill** sessions from the UI or the web terminal's menu
+- **Offload / Recreate** — stop a session to free memory on the host, then bring it back
+  later in the same working directory, running the same launch command
+- **Duplicate** — a second session beside this one (`foo` → `foo-COPY` → `foo-COPY2`), in
+  the directory it's in now and with the same launch command
+- **Auto-sleep** — optionally offload sessions that have had no client attached and
+  nothing running for a day or more; mark a session *keep awake* to exempt it
 - **Handoff** — copy a direct `ssh ... tmux attach` command to your clipboard
 
 ### Host Management
