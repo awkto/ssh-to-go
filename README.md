@@ -35,18 +35,12 @@ Full terminal emulation in the browser via xterm.js with WebSocket relay.
 - Binary data streaming for responsive I/O
 - SSH keepalive prevents idle timeouts
 
-<p align="center">
-  <img src="screenshots/theme-selector.png" width="200" alt="Theme Selector" />
-  <img src="screenshots/icon-selector.png" width="200" alt="Icon Selector" />
-</p>
 
 ### Dashboard
 See all tmux sessions across all your hosts at a glance.
+<img width="1389" height="1095" alt="image" src="https://github.com/user-attachments/assets/7e9ae86c-1c42-420f-81c8-d07e98afd052" />
+<img width="1389" height="1095" alt="image" src="https://github.com/user-attachments/assets/8eb82295-9dc0-4b51-abb2-454c45540f3e" />
 
-<p align="center">
-  <img src="screenshots/dashboard-dark.png" width="48%" alt="Dashboard - Dark" />
-  <img src="screenshots/dashboard-light.png" width="48%" alt="Dashboard - Light" />
-</p>
 
 - Real-time host status (online/offline) with OS detection
 - Session search and filtering by host, status, favorites
