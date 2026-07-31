@@ -130,6 +130,35 @@ separate `stdout`/`stderr`, capped at 256 KB per stream by default, with
 Set a default host for host-less requests under **Settings → default host**
 (`default_host` in `settings.json`).
 
+### CLI Client (`stogo`)
+
+A small native client for Linux/macOS that talks to the same API as the dashboard:
+
+```bash
+stogo auth login          # point it at your server (password → API token)
+stogo list                # sessions across all hosts
+stogo connect mysession   # attach in your real terminal (alias: stogo c)
+stogo offload mysession   # stop a session but keep it resumable
+stogo kill mysession      # kill a session
+stogo status              # server/host summary
+```
+
+`stogo connect` is deliberately thin: it fetches the server's handoff command and
+execs it, so your local `ssh` and the target host's `tmux` do all the work — no
+custom terminal emulation. You need SSH access to the target host and `tmux`
+installed there (which ssh-to-go already requires).
+
+Install from a [GitHub release](https://github.com/awkto/ssh-to-go/releases)
+(`stogo-linux-amd64`, `stogo-darwin-arm64`, … or the `sshtogo` .deb), or:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/awkto/ssh-to-go/main/scripts/install-cli.sh | bash
+```
+
+Config lives in `~/.config/stogo/config.json`; `STOGO_URL`/`STOGO_TOKEN`
+environment variables override it for headless use. Sessions are addressed as
+`NAME`, or `HOST/NAME` when the same name exists on several hosts.
+
 ### MCP Server (interactive TUIs)
 
 An MCP server (SSE at `/mcp/sse`, docs at `/mcpdocs`, enable it in Settings)
