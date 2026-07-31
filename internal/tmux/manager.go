@@ -376,6 +376,14 @@ func (m *Manager) DetachClients(client *ssh.Client, sessionName, excludeTTY stri
 // Two separate tmux invocations inside single quotes rather than tmux's own
 // "\;" chaining: the string is pasted into the user's local shell, and "\;"
 // would need a second layer of escaping to survive the trip to the remote one.
+//
+// escape-time is raised on every handoff because tmux 3.5 dropped its default
+// from 500ms to 10ms, and at attach tmux probes the connecting terminal
+// (DA1 "who are you", etc). When the terminal's reply arrives fragmented
+// across ssh packets with a >escape-time gap, tmux flushes the partial escape
+// sequence into the pane as literal keystrokes — the user sees garbage like
+// "61;4;6;7;...52c" typed at the prompt (issue #79, reproduced). 200ms rides
+// out network jitter while keeping a bare ESC keypress feeling instant.
 func (m *Manager) HandoffCommand(user, address string, port int, sessionName string, mouse bool) string {
 	if port == 0 {
 		port = 22
@@ -385,8 +393,9 @@ func (m *Manager) HandoffCommand(user, address string, port int, sessionName str
 		portOpt = fmt.Sprintf(" -p %d", port)
 	}
 	if mouse {
-		return fmt.Sprintf("ssh -t%s %s@%s 'tmux set-option -t %q mouse on 2>/dev/null; exec tmux attach-session -t %q'",
+		return fmt.Sprintf("ssh -t%s %s@%s 'tmux set-option -s escape-time 200 \\; set-option -t %q mouse on 2>/dev/null; exec tmux attach-session -t %q'",
 			portOpt, user, address, sessionName, sessionName)
 	}
-	return fmt.Sprintf("ssh -t%s %s@%s tmux attach-session -t %q", portOpt, user, address, sessionName)
+	return fmt.Sprintf("ssh -t%s %s@%s 'tmux set-option -s escape-time 200 2>/dev/null; exec tmux attach-session -t %q'",
+		portOpt, user, address, sessionName)
 }
