@@ -15,6 +15,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
+	"github.com/awkto/ssh-to-go/internal/sessionvars"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 )
@@ -165,6 +166,17 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Substitute $name/$date in the directory and the launch command. Done
+	// here — server-side, after sanitizing so $name is the name tmux will
+	// really use, and before anything downstream sees the strings — so the
+	// web form, other API callers and MCP all get the same rules from one
+	// implementation. The raw forms are kept: the chip list and Duplicate
+	// want the template, not this session's expansion of it.
+	rawCwd, rawCommand := req.Cwd, req.Command
+	vars := sessionvars.Vars{Name: req.Name, Now: time.Now()}
+	req.Cwd = sessionvars.Expand(req.Cwd, vars)
+	req.Command = sessionvars.Expand(req.Command, vars)
+
 	// Pre-flight: refuse the request if a session with this name is already
 	// alive on the host, OR if there's an offloaded entry under that name.
 	// Without this, tmux returns "duplicate session" with a 500 (live case)
@@ -214,9 +226,15 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	// hidden while the thing you ran in it sat in the New Session form for
 	// the next person at the browser. Non-fatal; a session is worth more
 	// than its bookkeeping.
+	//
+	// The chip records the command AS TYPED, variables and all. Recording
+	// the expansion would file `claude --name api`, `claude --name web`,
+	// `claude --name docs` as three separate commands — one dead chip per
+	// session, evicting everything useful inside a day given the 20-entry
+	// cap. `claude --name $name` is one chip that stays correct forever.
 	if h.RecentCmds != nil && !req.Incognito {
-		if err := h.RecentCmds.Record(req.Command); err != nil {
-			log.Printf("recent command record %q: %v", req.Command, err)
+		if err := h.RecentCmds.Record(rawCommand); err != nil {
+			log.Printf("recent command record %q: %v", rawCommand, err)
 		}
 	}
 
@@ -233,6 +251,16 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		// copy it; without it an offloaded `claude` session comes back as a
 		// bare shell in the right directory.
 		attrs := sessionreg.Attrs{WorkingDir: req.Cwd, Command: req.Command, Flags: flags}
+		// Keep the template alongside the expansion, but only when one was
+		// actually used — an entry created without variables must look on
+		// disk exactly as it did before this feature existed. See Entry for
+		// why both are stored.
+		if sessionvars.HasVars(rawCwd) {
+			attrs.WorkingDirTemplate = rawCwd
+		}
+		if sessionvars.HasVars(rawCommand) {
+			attrs.CommandTemplate = rawCommand
+		}
 		if err := h.Registry.AddSession(hostName, req.Name, attrs); err != nil {
 			log.Printf("session registry add %s/%s: %v", hostName, req.Name, err)
 		}
@@ -1199,7 +1227,13 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 	attrs := sessionreg.Attrs{
 		WorkingDir: entry.WorkingDir,
 		Command:    entry.Command,
-		Flags:      sessionreg.Flags{Throwaway: entry.Throwaway, Incognito: entry.Incognito},
+		// Passed explicitly because the legacy-key migration above can have
+		// dropped the entry: without these, recreating a spaced session
+		// would lose the templates and its next Duplicate would silently
+		// fall back to copying the original's expanded name.
+		WorkingDirTemplate: entry.WorkingDirTemplate,
+		CommandTemplate:    entry.CommandTemplate,
+		Flags:              sessionreg.Flags{Throwaway: entry.Throwaway, Incognito: entry.Incognito},
 	}
 	if err := h.Registry.AddSession(hostName, createName, attrs); err != nil {
 		log.Printf("session registry touch %s/%s: %v", hostName, createName, err)

@@ -24,9 +24,22 @@ type Entry struct {
 	// Recreate can replay it and Duplicate can copy it. Entries written
 	// before this field existed simply have none and recreate as a bare
 	// shell, exactly as they did then.
-	Command    string    `json:"command,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	LastSeenAt time.Time `json:"last_seen_at,omitempty"`
+	Command string `json:"command,omitempty"`
+	// WorkingDirTemplate and CommandTemplate are the strings as the user
+	// typed them, kept only when they actually contained a variable
+	// ($name/$date — see internal/sessionvars). WorkingDir and Command
+	// above stay expanded because Recreate brings THIS session back and has
+	// to land where it was: re-expanding $date months later would resurrect
+	// it into a directory that no longer exists. Duplicate wants the
+	// opposite — the template, re-expanded against the copy's own name, so
+	// `claude --name $name` doesn't make the copy announce itself as the
+	// original. Absent on every entry written before this existed, and on
+	// every session created without a variable, both of which behave
+	// exactly as they did.
+	WorkingDirTemplate string    `json:"working_dir_template,omitempty"`
+	CommandTemplate    string    `json:"command_template,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	LastSeenAt         time.Time `json:"last_seen_at,omitempty"`
 	// Throwaway sessions are collected once nothing is attached — see
 	// Flags. LastAttachedAt drives that idle clock: it is the last moment
 	// a client was observed on the session, or the creation time if one
@@ -116,7 +129,13 @@ type Attrs struct {
 	// leaves the recorded one alone — Add()'s callers (rename, poller cwd
 	// refresh) don't know it and must not erase it.
 	Command string
-	Flags   Flags
+	// WorkingDirTemplate and CommandTemplate are the pre-expansion strings,
+	// set only when the input actually used a variable. Same empty-means-
+	// leave-it-alone rule as Command: a rename or a poller refresh doesn't
+	// know them and must not wipe them.
+	WorkingDirTemplate string
+	CommandTemplate    string
+	Flags              Flags
 }
 
 // Add records a newly-created session. If one already exists with the same
@@ -145,6 +164,12 @@ func (s *Store) AddSession(host, name string, a Attrs) error {
 		if a.Command != "" {
 			existing.Command = a.Command
 		}
+		if a.WorkingDirTemplate != "" {
+			existing.WorkingDirTemplate = a.WorkingDirTemplate
+		}
+		if a.CommandTemplate != "" {
+			existing.CommandTemplate = a.CommandTemplate
+		}
 		// The session is alive again, so it is no longer asleep. Leaving
 		// this set would badge a recreated session as auto-offloaded for
 		// the rest of its life.
@@ -153,14 +178,16 @@ func (s *Store) AddSession(host, name string, a Attrs) error {
 		s.entries[k] = existing
 	} else {
 		s.entries[k] = Entry{
-			Host:       host,
-			Name:       name,
-			WorkingDir: a.WorkingDir,
-			Command:    a.Command,
-			CreatedAt:  now,
-			LastSeenAt: now,
-			Throwaway:  a.Flags.Throwaway,
-			Incognito:  a.Flags.Incognito,
+			Host:               host,
+			Name:               name,
+			WorkingDir:         a.WorkingDir,
+			Command:            a.Command,
+			WorkingDirTemplate: a.WorkingDirTemplate,
+			CommandTemplate:    a.CommandTemplate,
+			CreatedAt:          now,
+			LastSeenAt:         now,
+			Throwaway:          a.Flags.Throwaway,
+			Incognito:          a.Flags.Incognito,
 			// Never attached yet — the idle clock starts now, so a session
 			// created and forgotten is still collected.
 			LastAttachedAt: now,

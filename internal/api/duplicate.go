@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
+	"github.com/awkto/ssh-to-go/internal/sessionvars"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 )
@@ -70,6 +72,35 @@ func (h *Handlers) knownNames(hostName string) []string {
 	return names
 }
 
+// duplicateLaunch works out where a copy should start and what it should run.
+//
+// A session created from a template re-expands it against the COPY's own
+// name: that is the whole point of `claude --name $name`, so the copy
+// announces itself as the copy rather than as the original. A session created
+// without variables has no template and keeps the original behaviour exactly
+// — the live pane's directory (falling back to the recorded one) and the
+// command as recorded.
+//
+// Re-expanding the path means the copy lands in a directory of its own, which
+// by definition does not exist yet, so createDir comes back true. The old
+// reasoning — "the source session demonstrably runs in this directory" —
+// holds only for as long as the path is not recomputed.
+func duplicateLaunch(entry sessionreg.Entry, liveCwd, newName string, now time.Time) (cwd, command string, createDir bool) {
+	cwd, command = liveCwd, entry.Command
+	if cwd == "" {
+		cwd = entry.WorkingDir
+	}
+	vars := sessionvars.Vars{Name: newName, Now: now}
+	if entry.CommandTemplate != "" {
+		command = sessionvars.Expand(entry.CommandTemplate, vars)
+	}
+	if entry.WorkingDirTemplate != "" {
+		cwd = sessionvars.Expand(entry.WorkingDirTemplate, vars)
+		createDir = true
+	}
+	return cwd, command, createDir
+}
+
 // DuplicateSession creates a second session alongside an existing one,
 // carrying over what makes it that session: the directory it is sitting in
 // right now, the command it was launched with, and its icon/colour/theme.
@@ -108,18 +139,14 @@ func (h *Handlers) DuplicateSession(w http.ResponseWriter, r *http.Request) {
 	if h.Registry != nil {
 		entry, _ = h.Registry.Get(hostName, sanitizeSessionName(sessionName))
 	}
-	if cwd == "" {
-		cwd = entry.WorkingDir
-	}
+	cwd, command, createDir := duplicateLaunch(entry, cwd, newName, time.Now())
 
 	if err := h.Tmux.CreateSessionWith(client, newName, tmux.CreateOptions{
 		WindowSize:   h.Settings.TmuxWindowSize(),
 		Cwd:          cwd,
 		HistoryLimit: h.Settings.ScrollbackLines(),
-		// The source session demonstrably runs in this directory, so there
-		// is nothing to create and nothing to guard against.
-		CreateDir: false,
-		Command:   entry.Command,
+		CreateDir:    createDir,
+		Command:      command,
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
@@ -130,7 +157,12 @@ func (h *Handlers) DuplicateSession(w http.ResponseWriter, r *http.Request) {
 	if h.Registry != nil {
 		if err := h.Registry.AddSession(hostName, newName, sessionreg.Attrs{
 			WorkingDir: cwd,
-			Command:    entry.Command,
+			Command:    command,
+			// The templates travel too, so duplicating a copy re-expands
+			// again rather than freezing the first copy's name into the
+			// chain forever.
+			WorkingDirTemplate: entry.WorkingDirTemplate,
+			CommandTemplate:    entry.CommandTemplate,
 		}); err != nil {
 			log.Printf("session registry add %s/%s: %v", hostName, newName, err)
 		}
@@ -157,6 +189,6 @@ func (h *Handlers) DuplicateSession(w http.ResponseWriter, r *http.Request) {
 		"name":        newName,
 		"source":      sessionName,
 		"working_dir": cwd,
-		"command":     entry.Command,
+		"command":     command,
 	})
 }

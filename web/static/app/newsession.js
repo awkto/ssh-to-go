@@ -18,6 +18,58 @@ const nsSet = (k, v) => {
   } catch (_) {}
 };
 const nsAutoName = throwaway => (throwaway ? 'tmp-' : 'session-') + Math.random().toString(36).slice(2, 6);
+const NS_VARS = ['name', 'date'];
+const NS_VARS_HINT = '$name = this session’s name, $date = today as YYYY-MM-DD. ' + '${name} works too. Any other $VAR is left for the shell.';
+const nsIdent = c => /[A-Za-z0-9_]/.test(c);
+const nsSanitize = s => s.trim().replace(/[ \t]+/g, '-');
+const nsValue = (v, name) => name === 'name' ? v : new Date().toLocaleDateString('en-CA');
+const nsMatch = s => {
+  if (s.length < 2 || s[0] !== '$') return null;
+  if (s[1] === '{') {
+    const end = s.indexOf('}');
+    if (end < 0) return null;
+    const name = s.slice(2, end);
+    return NS_VARS.includes(name) ? {
+      name,
+      len: end + 1
+    } : null;
+  }
+  for (const name of NS_VARS) {
+    if (!s.startsWith(name, 1)) continue;
+    const rest = s.slice(1 + name.length);
+    if (rest && nsIdent(rest[0])) return null;
+    return {
+      name,
+      len: 1 + name.length
+    };
+  }
+  return null;
+};
+const nsExpand = (s, sessionName) => {
+  if (!s || s.indexOf('$') < 0) return s;
+  let out = '';
+  for (let i = 0; i < s.length;) {
+    if (s[i] === '\\' && s[i + 1] === '$') {
+      const esc = nsMatch(s.slice(i + 1));
+      if (esc) {
+        out += s.substr(i + 1, esc.len);
+        i += 1 + esc.len;
+        continue;
+      }
+    }
+    if (s[i] === '$') {
+      const m = nsMatch(s.slice(i));
+      if (m) {
+        out += nsValue(sessionName, m.name);
+        i += m.len;
+        continue;
+      }
+    }
+    out += s[i];
+    i++;
+  }
+  return out;
+};
 const NewSession = ({
   store,
   onClose
@@ -43,6 +95,7 @@ const NewSession = ({
   const copyTimer = React.useRef(null);
   const hostObj = HOSTS.find(h => h.id === host) || HOSTS[0] || null;
   const effName = name.trim() || autoName;
+  const varName = nsSanitize(effName);
   const isCommand = launch === 'command';
   const isHandoff = after === 'handoff';
   React.useEffect(() => {
@@ -117,9 +170,11 @@ const NewSession = ({
       setErr(ex.message || 'could not forget that command');
     }
   };
+  const shownCwd = nsExpand(cwd.trim(), varName);
+  const shownCommand = nsExpand(command.trim(), varName);
   const summary = (() => {
-    const head = isCommand ? `Runs ${command.trim() || '…'}` : 'Opens a shell';
-    const where = `in ${cwd.trim() || '~'} on ${hostObj ? hostObj.fqdn : 'this host'}`;
+    const head = isCommand ? `Runs ${shownCommand || '…'}` : 'Opens a shell';
+    const where = `in ${shownCwd || '~'} on ${hostObj ? hostObj.fqdn : 'this host'}`;
     const tail = [throwaway ? 'ends when you detach' : 'keeps running until killed'];
     if (incognito) tail.push('untracked');
     tail.push(isHandoff ? 'hands off to your terminal' : 'attaches in a web tab');
@@ -263,6 +318,7 @@ const NewSession = ({
     },
     onFocus: caretToEnd,
     placeholder: "~/",
+    title: NS_VARS_HINT,
     spellCheck: false
   }), React.createElement("button", {
     type: "button",
@@ -313,10 +369,11 @@ const NewSession = ({
     onChange: e => setCommand(e.target.value),
     onFocus: caretToEnd,
     placeholder: "claude",
+    title: NS_VARS_HINT,
     spellCheck: false
   })) : React.createElement("span", {
     className: "ns-ghost mono"
-  }, hostObj ? hostObj.user : 'you', "@", shortHost, ":", cwd.trim() || '~', "$", React.createElement("i", {
+  }, hostObj ? hostObj.user : 'you', "@", shortHost, ":", shownCwd || '~', "$", React.createElement("i", {
     className: "ns-caret"
   }))))), React.createElement("div", null, React.createElement("div", {
     className: "ns-labelline"

@@ -19,6 +19,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/relay"
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
+	"github.com/awkto/ssh-to-go/internal/sessionvars"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 	"golang.org/x/crypto/ssh"
@@ -59,13 +60,13 @@ var tools = []Tool{
 	},
 	{
 		Name:        "create_session",
-		Description: "Create a new tmux session on a host. MCP-created sessions default to a 200x50 pane (agents drive a TUI, not a phone) — override with width/height.",
+		Description: "Create a new tmux session on a host. MCP-created sessions default to a 200x50 pane (agents drive a TUI, not a phone) — override with width/height. `cwd` supports $name (this session's name) and $date (YYYY-MM-DD), e.g. cwd:\"~/sessions/$name\"; every other $VAR is left for the remote shell.",
 		InputSchema: InputSchema{
 			Type: "object",
 			Properties: map[string]PropertySchema{
 				"host":          {Type: "string", Description: "Host name to create the session on"},
 				"name":          {Type: "string", Description: "Name for the new tmux session"},
-				"cwd":           {Type: "string", Description: "Optional working directory for the session"},
+				"cwd":           {Type: "string", Description: "Optional working directory for the session. $name and $date are substituted (see the tool description)."},
 				"width":         {Type: "number", Description: "Pane width in columns. Default 200. Requires height."},
 				"height":        {Type: "number", Description: "Pane height in rows. Default 50. Requires width."},
 				"history_limit": {Type: "number", Description: "Scrollback depth (lines) for the session's first pane. Defaults to the server's configured scrollback."},
@@ -517,6 +518,10 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		if host == "" || sessionName == "" {
 			return toolError("host and name are required")
 		}
+		// Same $name/$date substitution the web form and the HTTP API get,
+		// from the same implementation, so an agent asking for
+		// "~/sessions/$name" lands where a person asking for it would.
+		cwd = sessionvars.Expand(cwd, sessionvars.Vars{Name: sessionName, Now: time.Now()})
 		hostCfg, ok := s.Hub.GetHostConfig(host)
 		if !ok {
 			return toolError("host not found: " + host)

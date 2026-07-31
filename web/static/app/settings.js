@@ -89,7 +89,7 @@ const Settings = ({
     className: "setting-row"
   }, React.createElement("div", {
     className: "setting-label"
-  }, React.createElement("h4", null, "New session directory"), React.createElement("p", null, "Prefills the working directory on the New Session form. Leave empty for ~/sessions/.")), React.createElement("div", null, React.createElement("input", {
+  }, React.createElement("h4", null, "New session directory"), React.createElement("p", null, "Prefills the working directory on the New Session form. Leave empty for ~/sessions/. Set it to ", React.createElement("code", null, "~/sessions/$name"), " to give every session a directory of its own; ", React.createElement("code", null, "$date"), " is today as YYYY-MM-DD.")), React.createElement("div", null, React.createElement("input", {
     className: "input mono",
     value: draft.new_session_dir || '',
     onChange: e => set({

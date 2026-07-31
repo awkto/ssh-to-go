@@ -73,7 +73,7 @@ const Settings = ({ store }) => {
             <div className="setting-row">
               <div className="setting-label">
                 <h4>New session directory</h4>
-                <p>Prefills the working directory on the New Session form. Leave empty for ~/sessions/.</p>
+                <p>Prefills the working directory on the New Session form. Leave empty for ~/sessions/. Set it to <code>~/sessions/$name</code> to give every session a directory of its own; <code>$date</code> is today as YYYY-MM-DD.</p>
               </div>
               <div>
                 <input className="input mono" value={draft.new_session_dir || ''} onChange={e => set({new_session_dir: e.target.value})} placeholder="~/sessions/" />

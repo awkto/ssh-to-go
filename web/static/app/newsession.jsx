@@ -34,6 +34,61 @@ const nsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
 const nsAutoName = (throwaway) =>
   (throwaway ? 'tmp-' : 'session-') + Math.random().toString(36).slice(2, 6);
 
+// --- $name / $date preview -------------------------------------------------
+//
+// A deliberately small mirror of internal/sessionvars (Go) and of
+// sanitizeSessionName. PREVIEW ONLY: the server does the substitution that
+// actually creates the session. This exists because the feature is invisible
+// otherwise — you discover it by watching $name turn into the name you just
+// typed. Keep the two in step: same variables, same word boundary, and above
+// all the same rule that every OTHER $-form is left for the remote shell.
+const NS_VARS = ['name', 'date'];
+const NS_VARS_HINT =
+  '$name = this session’s name, $date = today as YYYY-MM-DD. ' +
+  '${name} works too. Any other $VAR is left for the shell.';
+const nsIdent = (c) => /[A-Za-z0-9_]/.test(c);
+// Mirrors sanitizeSessionName: $name is the name tmux will really use, so a
+// typed "my session" previews as ~/sessions/my-session, not with a space.
+const nsSanitize = (s) => s.trim().replace(/[ \t]+/g, '-');
+const nsValue = (v, name) => (name === 'name' ? v : new Date().toLocaleDateString('en-CA'));
+// Returns the variable's name and how many characters the reference spans,
+// or null when it is not one of ours.
+const nsMatch = (s) => {
+  if (s.length < 2 || s[0] !== '$') return null;
+  if (s[1] === '{') {
+    const end = s.indexOf('}');
+    if (end < 0) return null;
+    const name = s.slice(2, end);
+    return NS_VARS.includes(name) ? { name, len: end + 1 } : null;
+  }
+  for (const name of NS_VARS) {
+    if (!s.startsWith(name, 1)) continue;
+    const rest = s.slice(1 + name.length);
+    if (rest && nsIdent(rest[0])) return null; // $nameless is not $name
+    return { name, len: 1 + name.length };
+  }
+  return null;
+};
+const nsExpand = (s, sessionName) => {
+  if (!s || s.indexOf('$') < 0) return s;
+  let out = '';
+  for (let i = 0; i < s.length; ) {
+    // \$name keeps the dollar literal for the shell; \$HOME is the shell's
+    // own escape and stays exactly as typed.
+    if (s[i] === '\\' && s[i + 1] === '$') {
+      const esc = nsMatch(s.slice(i + 1));
+      if (esc) { out += s.substr(i + 1, esc.len); i += 1 + esc.len; continue; }
+    }
+    if (s[i] === '$') {
+      const m = nsMatch(s.slice(i));
+      if (m) { out += nsValue(sessionName, m.name); i += m.len; continue; }
+    }
+    out += s[i];
+    i++;
+  }
+  return out;
+};
+
 const NewSession = ({ store, onClose }) => {
   const HOSTS = store.hosts;
   const defaultDir = (store.settings && store.settings.new_session_dir) || '~/sessions/';
@@ -60,6 +115,9 @@ const NewSession = ({ store, onClose }) => {
 
   const hostObj = HOSTS.find(h => h.id === host) || HOSTS[0] || null;
   const effName = name.trim() || autoName;
+  // What $name expands to: the sanitized form, because that is the name the
+  // server will give tmux.
+  const varName = nsSanitize(effName);
   const isCommand = launch === 'command';
   const isHandoff = after === 'handoff';
 
@@ -130,13 +188,19 @@ const NewSession = ({ store, onClose }) => {
     try { await forgetRecentCommand(cmd); } catch (ex) { setErr(ex.message || 'could not forget that command'); }
   };
 
+  // The directory and command with $name/$date filled in — what the session
+  // will actually get. Shown wherever the raw field would otherwise be
+  // echoed back, so typing a name visibly resolves the variables.
+  const shownCwd = nsExpand(cwd.trim(), varName);
+  const shownCommand = nsExpand(command.trim(), varName);
+
   // One sentence describing the session that is about to exist, recomposed
   // from state. It replaces the four hint paragraphs the old form carried.
   const summary = (() => {
     const head = isCommand
-      ? `Runs ${command.trim() || '…'}`
+      ? `Runs ${shownCommand || '…'}`
       : 'Opens a shell';
-    const where = `in ${cwd.trim() || '~'} on ${hostObj ? hostObj.fqdn : 'this host'}`;
+    const where = `in ${shownCwd || '~'} on ${hostObj ? hostObj.fqdn : 'this host'}`;
     const tail = [throwaway ? 'ends when you detach' : 'keeps running until killed'];
     if (incognito) tail.push('untracked');
     tail.push(isHandoff ? 'hands off to your terminal' : 'attaches in a web tab');
@@ -237,6 +301,7 @@ const NewSession = ({ store, onClose }) => {
                     onChange={e=>{ cwdEdited.current = true; setCwd(e.target.value); }}
                     onFocus={caretToEnd}
                     placeholder="~/"
+                    title={NS_VARS_HINT}
                     spellCheck={false}
                   />
                   <button
@@ -281,11 +346,12 @@ const NewSession = ({ store, onClose }) => {
                         onChange={e=>setCommand(e.target.value)}
                         onFocus={caretToEnd}
                         placeholder="claude"
+                        title={NS_VARS_HINT}
                         spellCheck={false}
                       />
                     </>
                   ) : (
-                    <span className="ns-ghost mono">{hostObj ? hostObj.user : 'you'}@{shortHost}:{cwd.trim() || '~'}$<i className="ns-caret" /></span>
+                    <span className="ns-ghost mono">{hostObj ? hostObj.user : 'you'}@{shortHost}:{shownCwd || '~'}$<i className="ns-caret" /></span>
                   )}
                 </div>
               </div>
