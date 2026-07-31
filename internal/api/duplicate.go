@@ -147,6 +147,7 @@ func (h *Handlers) DuplicateSession(w http.ResponseWriter, r *http.Request) {
 		HistoryLimit: h.Settings.ScrollbackLines(),
 		CreateDir:    createDir,
 		Command:      command,
+		Mouse:        h.Settings.NativeMouseMode(),
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return

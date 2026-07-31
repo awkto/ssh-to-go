@@ -51,6 +51,48 @@ func TestUpdateValidatesScrollback(t *testing.T) {
 	}
 }
 
+func TestNativeMouseModeDefaultsOn(t *testing.T) {
+	sm := &SettingsManager{} // zero value: NativeMouseMode unset
+	if !sm.NativeMouseMode() {
+		t.Error("NativeMouseMode() unset = false, want default true")
+	}
+}
+
+func TestUpdateNativeMouseMode(t *testing.T) {
+	dir := t.TempDir()
+	sm, err := NewSettingsManager(dir)
+	if err != nil {
+		t.Fatalf("NewSettingsManager: %v", err)
+	}
+	ks := &Store{}
+
+	// Omitted (nil) leaves the stored value alone.
+	if err := sm.Update(Settings{}, ks); err != nil {
+		t.Fatalf("Update(empty): %v", err)
+	}
+	if !sm.NativeMouseMode() {
+		t.Error("omitting native_mouse_mode must not change it")
+	}
+
+	// Explicit false turns it off — the whole reason the field is *bool.
+	off := false
+	if err := sm.Update(Settings{NativeMouseMode: &off}, ks); err != nil {
+		t.Fatalf("Update(off): %v", err)
+	}
+	if sm.NativeMouseMode() {
+		t.Error("NativeMouseMode() = true after setting false")
+	}
+
+	// And back on.
+	on := true
+	if err := sm.Update(Settings{NativeMouseMode: &on}, ks); err != nil {
+		t.Fatalf("Update(on): %v", err)
+	}
+	if !sm.NativeMouseMode() {
+		t.Error("NativeMouseMode() = false after setting true")
+	}
+}
+
 func TestNewSessionIconDefaultsToRandom(t *testing.T) {
 	sm := &SettingsManager{} // zero value: SessionIconMode unset
 

@@ -124,7 +124,7 @@ const NewSession = ({
     if (!hostObj) return '';
     const [addr, port] = String(hostObj.fqdn || '').split(':');
     const p = port && port !== '22' ? `-p ${port} ` : '';
-    return `ssh -t ${p}${hostObj.user}@${addr} tmux attach-session -t "${effName}"`;
+    return `ssh -t ${p}${hostObj.user}@${addr} 'tmux set-option -t "${effName}" mouse on 2>/dev/null; exec tmux attach-session -t "${effName}"'`;
   }, [hostObj && hostObj.fqdn, hostObj && hostObj.user, effName]);
   React.useEffect(() => {
     if (!host) return;

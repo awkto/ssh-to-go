@@ -90,6 +90,14 @@ type CreateOptions struct {
 	// shell OUTLIVES the command — when claude/codex/vim exits the user is
 	// left at a prompt in the right directory, not with a dead session.
 	Command string
+	// Mouse enables tmux's mouse option on the new session (per-session -t,
+	// never -g, so other sessions on the host are untouched). Without it a
+	// native-terminal attach gets the wheel as arrow keys: tmux holds the
+	// outer terminal in the alt screen and, with no mouse tracking asked for,
+	// the terminal's alternateScroll kicks in. The browser terminal ignores
+	// this option entirely — control-mode clients get no mouse DECSETs and
+	// the relay strips them on the legacy path.
+	Mouse bool
 }
 
 // CreateSessionWith is CreateSession with the optional knobs. See CreateOptions.
@@ -150,6 +158,9 @@ func buildCreateCmd(name string, opts CreateOptions) string {
 		base += " -c " + dir
 	}
 	cmd := fmt.Sprintf("%s \\; set-option -t %q window-size %s", base, name, sizeOpt)
+	if opts.Mouse {
+		cmd += fmt.Sprintf(" \\; set-option -t %q mouse on", name)
+	}
 	if dir != "" {
 		if opts.CreateDir {
 			// && so a failed mkdir (permissions, a file in the way) surfaces
@@ -352,12 +363,22 @@ func (m *Manager) DetachClients(client *ssh.Client, sessionName, excludeTTY stri
 }
 
 // HandoffCommand returns the SSH command to directly attach to a session.
-func (m *Manager) HandoffCommand(user, address string, port int, sessionName string) string {
+// With mouse, it also backfills the per-session mouse option before attaching
+// so sessions created before that option existed still get a working wheel.
+// Two separate tmux invocations inside single quotes rather than tmux's own
+// "\;" chaining: the string is pasted into the user's local shell, and "\;"
+// would need a second layer of escaping to survive the trip to the remote one.
+func (m *Manager) HandoffCommand(user, address string, port int, sessionName string, mouse bool) string {
 	if port == 0 {
 		port = 22
 	}
-	if port == 22 {
-		return fmt.Sprintf("ssh -t %s@%s tmux attach-session -t %q", user, address, sessionName)
+	portOpt := ""
+	if port != 22 {
+		portOpt = fmt.Sprintf(" -p %d", port)
 	}
-	return fmt.Sprintf("ssh -t -p %d %s@%s tmux attach-session -t %q", port, user, address, sessionName)
+	if mouse {
+		return fmt.Sprintf("ssh -t%s %s@%s 'tmux set-option -t %q mouse on 2>/dev/null; exec tmux attach-session -t %q'",
+			portOpt, user, address, sessionName, sessionName)
+	}
+	return fmt.Sprintf("ssh -t%s %s@%s tmux attach-session -t %q", portOpt, user, address, sessionName)
 }

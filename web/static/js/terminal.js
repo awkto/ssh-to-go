@@ -1009,7 +1009,7 @@ function initTerminal(host, session) {
     // Defense-in-depth: server already strips mouse-reporting DECSET sequences
     // for mouse=off attaches, but if anything slips through we also drop them
     // here so xterm.js never enters mouse-tracking mode.
-    const mouseSeqRegex = /\x1b\[\?(9|10(00|01|02|03|05|06|15))[hl]/g;
+    const mouseSeqRegex = /\x1b\[\?(9|10(00|01|02|03|05|06|15|16))[hl]/g;
 
     // No manual wheel forwarding — with mouse=off the relay isn't expecting
     // mouse-button reports, and xterm.js's native viewport handles wheel and

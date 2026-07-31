@@ -32,6 +32,9 @@ func TestStripperStripsMouseTracking(t *testing.T) {
 		{"a\x1b[?1002hb", "ab"},
 		{"a\x1b[?1003lb", "ab"},
 		{"a\x1b[?1006hb", "ab"},
+		{"a\x1b[?1015lb", "ab"},
+		{"a\x1b[?1016hb", "ab"},
+		{"a\x1b[?1016lb", "ab"},
 		{"a\x1b[?9hb", "ab"},
 	}
 	for _, c := range cases {

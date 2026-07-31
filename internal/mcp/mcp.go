@@ -546,7 +546,12 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		if v, ok := args["history_limit"].(float64); ok && v > 0 {
 			historyLimit = int(v)
 		}
-		if err := s.Tmux.CreateSession(client, sessionName, windowSize, cwd, historyLimit); err != nil {
+		if err := s.Tmux.CreateSessionWith(client, sessionName, tmux.CreateOptions{
+			WindowSize:   windowSize,
+			Cwd:          cwd,
+			HistoryLimit: historyLimit,
+			Mouse:        s.Settings.NativeMouseMode(),
+		}); err != nil {
 			return toolError("create session failed: " + err.Error())
 		}
 		return toolText(fmt.Sprintf("Session '%s' created on %s (%s).", sessionName, host, windowSize))

@@ -97,7 +97,11 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	// We print the tty on a single line followed by a NUL byte delimiter,
 	// then exec into tmux. The NUL byte ensures we can split cleanly even
 	// if tmux output arrives in the same read buffer.
-	mouseOpt := `set-option -g mouse on 2>/dev/null \; `
+	// Chained AFTER new-session so the session exists, and deliberately
+	// without -g: the old server-global write leaked mouse mode to every
+	// session on the host and nothing ever restored it. Without -g or -t,
+	// set-option applies to the session this client just attached.
+	mouseOpt := ` \; set-option mouse on`
 	if opts.Mouse == "off" {
 		mouseOpt = ""
 	}
@@ -129,8 +133,8 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 		)
 	} else {
 		cmd = fmt.Sprintf(
-			`printf '%%s\x00' "$(tty)"; exec tmux %s%snew-session -A -s %q \; set-option window-size %s`,
-			histInline, mouseOpt, sessionName, windowSize,
+			`printf '%%s\x00' "$(tty)"; exec tmux %snew-session -A -s %q \; set-option window-size %s%s`,
+			histInline, sessionName, windowSize, mouseOpt,
 		)
 	}
 	if err := session.Start(cmd); err != nil {

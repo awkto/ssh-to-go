@@ -64,7 +64,10 @@ See all tmux sessions across all your hosts at a glance.
   the directory it's in now and with the same launch command
 - **Auto-sleep** — optionally offload sessions that have had no client attached and
   nothing running for a day or more; mark a session *keep awake* to exempt it
-- **Handoff** — copy a direct `ssh ... tmux attach` command to your clipboard
+- **Handoff** — copy a direct `ssh ... tmux attach` command to your clipboard. Sessions get
+  tmux's per-session mouse mode so the wheel scrolls in a native terminal (hold Shift to
+  click-drag with the terminal's own selection instead of tmux copy-mode); set
+  `"native_mouse_mode": false` in `settings.json` to opt out
 
 ### Host Management
 - Add, edit, and remove hosts at runtime from the web UI

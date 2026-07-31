@@ -98,6 +98,29 @@ func TestBuildCreateCmdBlankCommandIgnored(t *testing.T) {
 	}
 }
 
+func TestBuildCreateCmdMousePerSession(t *testing.T) {
+	got := buildCreateCmd("work", CreateOptions{Mouse: true})
+	// Per-session -t, never -g: a global write would leak mouse mode to
+	// sessions ssh-to-go did not create (issue #78).
+	if !strings.Contains(got, `set-option -t "work" mouse on`) {
+		t.Errorf("missing per-session mouse option: %q", got)
+	}
+	if strings.Contains(got, "-g mouse") {
+		t.Errorf("mouse must not be set globally: %q", got)
+	}
+	newSess := strings.Index(got, "new-session")
+	mouse := strings.Index(got, "mouse on")
+	if mouse < newSess {
+		t.Errorf("mouse option must follow new-session so the session exists: %q", got)
+	}
+}
+
+func TestBuildCreateCmdMouseOffByDefault(t *testing.T) {
+	if got := buildCreateCmd("work", CreateOptions{}); strings.Contains(got, "mouse") {
+		t.Errorf("Mouse=false must not touch the mouse option: %q", got)
+	}
+}
+
 func TestBuildCreateCmdKeepsHistoryLimitFirst(t *testing.T) {
 	got := buildCreateCmd("work", CreateOptions{HistoryLimit: 50000, Cwd: "~/p", CreateDir: true})
 	hist := strings.Index(got, "history-limit")
@@ -124,6 +147,7 @@ func TestBuildCreateCmdAgainstRealTmux(t *testing.T) {
 		CreateDir:    true,
 		Command:      "echo hello-from-command",
 		HistoryLimit: 1000,
+		Mouse:        true,
 	})
 	// The remote runs this through a shell; -L keeps it off the user's server.
 	cmd = strings.Replace(cmd, "tmux ", "tmux -L "+sock+" ", 1)
@@ -158,6 +182,16 @@ func TestBuildCreateCmdAgainstRealTmux(t *testing.T) {
 	// The session must OUTLIVE the command — that is the point of send-keys.
 	if err := exec.Command("tmux", "-L", sock, "has-session", "-t", "createtest").Run(); err != nil {
 		t.Errorf("session died with the command: %v", err)
+	}
+
+	// Mouse mode must land on THIS session and stay off the server default.
+	sessMouse, _ := exec.Command("tmux", "-L", sock, "show-options", "-t", "createtest", "mouse").Output()
+	if !strings.Contains(string(sessMouse), "mouse on") {
+		t.Errorf("session mouse option = %q, want mouse on", sessMouse)
+	}
+	globalMouse, _ := exec.Command("tmux", "-L", sock, "show-options", "-g", "mouse").Output()
+	if strings.Contains(string(globalMouse), "mouse on") {
+		t.Errorf("global mouse option leaked on: %q", globalMouse)
 	}
 }
 

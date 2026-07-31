@@ -213,6 +213,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		HistoryLimit: h.Settings.ScrollbackLines(),
 		CreateDir:    req.CreateDir,
 		Command:      req.Command,
+		Mouse:        h.Settings.NativeMouseMode(),
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
@@ -600,7 +601,7 @@ func (h *Handlers) Handoff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := h.Tmux.HandoffCommand(hostCfg.User, hostCfg.Address, hostCfg.Port, sessionName)
+	cmd := h.Tmux.HandoffCommand(hostCfg.User, hostCfg.Address, hostCfg.Port, sessionName, h.Settings.NativeMouseMode())
 	writeJSON(w, map[string]string{"command": cmd})
 }
 
@@ -1210,6 +1211,7 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 		HistoryLimit: h.Settings.ScrollbackLines(),
 		CreateDir:    true,
 		Command:      entry.Command,
+		Mouse:        h.Settings.NativeMouseMode(),
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return

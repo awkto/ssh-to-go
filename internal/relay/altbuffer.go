@@ -68,6 +68,8 @@ var stripSequences = [][]byte{
 	[]byte("\x1b[?1006l"),
 	[]byte("\x1b[?1015h"),
 	[]byte("\x1b[?1015l"),
+	[]byte("\x1b[?1016h"),
+	[]byte("\x1b[?1016l"),
 }
 
 // Process consumes a chunk of bytes from the upstream stream and returns

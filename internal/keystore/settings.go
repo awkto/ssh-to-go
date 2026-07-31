@@ -44,6 +44,14 @@ type Settings struct {
 	// directory and launch command) once it has had no client and nothing
 	// running for this many hours. 0 — the default — is off.
 	IdleOffloadHours int `json:"idle_offload_hours"`
+	// NativeMouseMode enables tmux's per-session mouse option on sessions
+	// ssh-to-go creates, so the wheel scrolls (via tmux copy-mode) when
+	// attaching from a native terminal instead of arriving as arrow keys.
+	// Unset means on. The trade-off: with mouse on, click-drag selection in a
+	// native terminal goes through tmux copy-mode rather than the terminal's
+	// own selection (hold Shift to bypass). The browser terminal is unaffected
+	// either way — it scrolls its own scrollback and never forwards the wheel.
+	NativeMouseMode *bool `json:"native_mouse_mode,omitempty"`
 }
 
 // DefaultScrollbackLines is the scrollback depth used when the setting is
@@ -157,6 +165,9 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 		return fmt.Errorf("invalid idle_offload_hours %d: must be between 0 (off) and %d", s.IdleOffloadHours, 24*365)
 	}
 	sm.settings.IdleOffloadHours = s.IdleOffloadHours
+	if s.NativeMouseMode != nil {
+		sm.settings.NativeMouseMode = s.NativeMouseMode
+	}
 
 	return sm.save()
 }
@@ -205,6 +216,17 @@ func (sm *SettingsManager) ScrollbackLines() int {
 		return DefaultScrollbackLines
 	}
 	return sm.settings.ScrollbackLines
+}
+
+// NativeMouseMode reports whether tmux mouse mode should be enabled on
+// sessions ssh-to-go creates. Defaults to true when unset.
+func (sm *SettingsManager) NativeMouseMode() bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if sm.settings.NativeMouseMode == nil {
+		return true
+	}
+	return *sm.settings.NativeMouseMode
 }
 
 // IdleOffloadTimeout returns how long a session may sit idle before the
