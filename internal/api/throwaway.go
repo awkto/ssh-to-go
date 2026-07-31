@@ -69,6 +69,7 @@ func (h *Handlers) collectIfIdle(hostName, sessionName string) bool {
 		if err := h.Registry.Remove(hostName, sessionName); err != nil {
 			log.Printf("throwaway %s/%s: registry remove: %v", hostName, sessionName, err)
 		}
+		h.refreshHidden(hostName)
 	}
 	if h.SessionIcons != nil {
 		_ = h.SessionIcons.Delete(hostName, sessionName)

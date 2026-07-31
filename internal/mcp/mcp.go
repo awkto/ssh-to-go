@@ -18,6 +18,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/relay"
+	"github.com/awkto/ssh-to-go/internal/sessionreg"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 	"golang.org/x/crypto/ssh"
@@ -256,8 +257,46 @@ type Server struct {
 	ExecJobs *execjob.Store
 	Version  string
 
+	// Registry and SessionIcons are set by the router after construction.
+	// An agent renaming a session over MCP changes the same state a person
+	// renaming it in the browser does, so the two surfaces have to keep the
+	// same books — otherwise the registry entry, the icon and the incognito
+	// hide-list stay behind on a name nothing answers to any more.
+	Registry     *sessionreg.Store
+	SessionIcons *keystore.SessionIconStore
+
 	mu       sync.Mutex
 	sessions map[string]*Session
+}
+
+// refreshHidden re-publishes a host's incognito set to the hub. The hub hides
+// by session name, so any rename has to be followed by this or the session
+// reappears in every listing under its new name. Mirrors the API handler's.
+func (s *Server) refreshHidden(host string) {
+	if s.Registry == nil || s.Hub == nil {
+		return
+	}
+	s.Hub.SetHidden(host, s.Registry.HiddenNames(host))
+}
+
+// nameTaken reports whether a session name is already spoken for on a host —
+// live in tmux or tracked as an offloaded entry. tmux refuses the first case
+// itself, but not the second: renaming onto an offloaded name succeeds in tmux
+// and would then collide in the registry.
+func (s *Server) nameTaken(host, name string) bool {
+	if state, ok := s.Hub.GetHost(host); ok {
+		for _, sess := range state.Sessions {
+			if sess.Name == name {
+				return true
+			}
+		}
+	}
+	if s.Registry != nil {
+		if _, ok := s.Registry.Get(host, name); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func NewServer(h *hub.Hub, tm *tmux.Manager, ks *keystore.Store,
@@ -730,6 +769,9 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		if !ok {
 			return toolError("host not found: " + host)
 		}
+		if newName != session && s.nameTaken(host, newName) {
+			return toolError(fmt.Sprintf("session %q is already running or tracked on %s", newName, host))
+		}
 		keyPath := keystore.ResolveKeyPath(hostCfg, s.KeyStore, s.Settings)
 		client, err := sshutil.Dial(hostCfg.DialAddress(), hostCfg.User, keyPath)
 		if err != nil {
@@ -739,6 +781,23 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 		defer client.Close()
 		if err := s.Tmux.RenameSession(client, session, newName); err != nil {
 			return toolError("rename failed: " + err.Error())
+		}
+		// Same bookkeeping the web rename does: the registry entry (working
+		// directory, launch command, flavours) and the icon follow the name,
+		// and the incognito hide-list is rebuilt so a hidden session stays
+		// hidden. Failures here are logged, not returned — the rename itself
+		// succeeded and reporting it as failed would be worse than a stale
+		// icon.
+		if s.Registry != nil {
+			if _, err := s.Registry.Rename(host, session, newName); err != nil {
+				log.Printf("mcp rename: session registry %s/%s -> %s: %v", host, session, newName, err)
+			}
+			s.refreshHidden(host)
+		}
+		if s.SessionIcons != nil {
+			if err := s.SessionIcons.Rename(host, session, newName); err != nil {
+				log.Printf("mcp rename: session icon %s/%s -> %s: %v", host, session, newName, err)
+			}
 		}
 		return toolText(fmt.Sprintf("Session renamed from '%s' to '%s' on %s.", session, newName, host))
 

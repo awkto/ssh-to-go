@@ -236,9 +236,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		if err := h.Registry.AddSession(hostName, req.Name, attrs); err != nil {
 			log.Printf("session registry add %s/%s: %v", hostName, req.Name, err)
 		}
-		if req.Incognito {
-			h.Hub.SetHidden(hostName, h.Registry.HiddenNames(hostName))
-		}
+		h.refreshHidden(hostName)
 	}
 
 	// Assign the session's icon/color per the configured mode (random by
@@ -332,6 +330,7 @@ func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
 		if err := h.Registry.Remove(hostName, sessionName); err != nil {
 			log.Printf("session registry remove %s/%s: %v", hostName, sessionName, err)
 		}
+		h.refreshHidden(hostName)
 	}
 }
 
@@ -459,20 +458,18 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 	_ = h.SessionIcons.Rename(hostName, sessionName, req.NewName)
 
 	// Move the registry entry along with the rename so a future reboot
-	// recreates the session under its new name.
+	// recreates the session under its new name, carrying the flavours, the
+	// launch command and the clocks: renaming a throwaway must not quietly
+	// promote it to a permanent session (nor un-hide an incognito one), and a
+	// renamed session must still recreate with the command it was started
+	// with. The collision check above means ErrNameTaken can't fire here.
 	if h.Registry != nil {
-		if entry, ok := h.Registry.Get(hostName, sessionName); ok {
-			_ = h.Registry.Remove(hostName, sessionName)
-			// Carry the flavours and the launch command across: renaming a
-			// throwaway must not quietly promote it to a permanent session
-			// (nor un-hide an incognito one), and a renamed session must
-			// still recreate with the command it was started with.
-			_ = h.Registry.AddSession(hostName, req.NewName, sessionreg.Attrs{
-				WorkingDir: entry.WorkingDir,
-				Command:    entry.Command,
-				Flags:      sessionreg.Flags{Throwaway: entry.Throwaway, Incognito: entry.Incognito},
-			})
+		if _, err := h.Registry.Rename(hostName, sessionName, req.NewName); err != nil {
+			log.Printf("session registry rename %s/%s -> %s: %v", hostName, sessionName, req.NewName, err)
 		}
+		// The hub hides by name, so the incognito set has to follow the
+		// rename or the session becomes visible under its new name.
+		h.refreshHidden(hostName)
 	}
 
 	writeJSON(w, map[string]string{"status": "renamed", "old_name": sessionName, "new_name": req.NewName})
@@ -1231,6 +1228,7 @@ func (h *Handlers) ForgetSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.refreshHidden(hostName)
 	writeJSON(w, map[string]string{"status": "forgotten"})
 }
 

@@ -169,6 +169,39 @@ func (s *Store) AddSession(host, name string, a Attrs) error {
 	return s.saveLocked()
 }
 
+// ErrNameTaken is returned by Rename when the destination name is already
+// tracked on the host. Overwriting would silently destroy the other entry's
+// working directory and launch command — the very things it exists to hold.
+var ErrNameTaken = fmt.Errorf("a session with that name is already tracked")
+
+// Rename moves an entry to a new name on the same host, keeping everything
+// recorded about it: creation time, launch command, flavours and idle clock.
+// Renaming is not re-creating — a renamed throwaway is still the same
+// throwaway, as old and as idle as it was a moment ago.
+//
+// Reports whether it moved anything; an untracked oldName is not an error, so
+// callers can rename a hand-made tmux session without special-casing it.
+func (s *Store) Rename(host, oldName, newName string) (bool, error) {
+	if oldName == newName {
+		return false, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	oldKey, newKey := key(host, oldName), key(host, newName)
+	e, ok := s.entries[oldKey]
+	if !ok {
+		return false, nil
+	}
+	if _, taken := s.entries[newKey]; taken {
+		return false, ErrNameTaken
+	}
+	delete(s.entries, oldKey)
+	e.Name = newName
+	e.LastSeenAt = time.Now().UTC()
+	s.entries[newKey] = e
+	return true, s.saveLocked()
+}
+
 // MarkAutoOffloaded flags an entry as slept by the idle sweeper rather than
 // offloaded by hand, so the UI can say so. No-op for untracked sessions.
 func (s *Store) MarkAutoOffloaded(host, name string) {

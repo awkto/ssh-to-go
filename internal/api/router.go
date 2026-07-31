@@ -123,6 +123,11 @@ func NewRouter(rc RouterConfig) http.Handler {
 
 	// MCP (Model Context Protocol)
 	mcpServer := mcp.NewServer(rc.Hub, rc.Tmux, rc.KeyStore, rc.Settings, rc.Auth, rc.ExecJobs, rc.Version)
+	// An agent renaming a session has to update the same registry, icons and
+	// incognito hide-list the web UI does. Set here rather than in NewServer
+	// so the constructor's argument list stays readable.
+	mcpServer.Registry = rc.Registry
+	mcpServer.SessionIcons = rc.SessionIcons
 	mux.HandleFunc("GET /mcp/sse", mcpServer.HandleSSE)
 	mux.HandleFunc("POST /mcp/messages", mcpServer.HandleMessages)
 	mux.HandleFunc("GET /mcpdocs", mcpServer.HandleDocs)
