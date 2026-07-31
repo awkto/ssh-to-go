@@ -52,6 +52,8 @@ const (
 	cmdPane                          // display-message reply: "<pane_id>" (active window changed)
 	cmdAlt                           // display-message reply: "<alternate_on>" (0/1)
 	cmdHistory                       // capture-pane reply: scrollback prefill
+	cmdRepaint                       // capture-pane reply: visible-frame repaint after a foreign resize
+	cmdCursor                        // display-message reply: "<cursor_x>,<cursor_y>" for repaint
 )
 
 // controlParser consumes the control-mode line stream. It is driven from a
@@ -67,7 +69,9 @@ type controlParser struct {
 	blockLines []string
 
 	// historyDone gates %output forwarding: anything tmux emitted before the
-	// capture-pane reply finished is already inside the prefill.
+	// capture-pane reply finished is already inside the prefill. Guarded by mu
+	// because a repaint (triggered from a debounce timer goroutine) closes the
+	// gate again mid-stream.
 	historyDone bool
 	// paneID is the active pane whose %output we forward ("" = forward all).
 	paneID string
@@ -75,6 +79,25 @@ type controlParser struct {
 	emit            func(data []byte)       // terminal bytes for the browser
 	onMeta          func(clientName string) // client_name learned (may be "")
 	onWindowChanged func()                  // active window changed; re-query pane
+	onLayout        func(w, h int)          // window dimensions changed (%layout-change)
+}
+
+func (p *controlParser) gateOutput() {
+	p.mu.Lock()
+	p.historyDone = false
+	p.mu.Unlock()
+}
+
+func (p *controlParser) outputOpen() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.historyDone
+}
+
+func (p *controlParser) openOutput() {
+	p.mu.Lock()
+	p.historyDone = true
+	p.mu.Unlock()
 }
 
 func (p *controlParser) pushCmd(kind controlCmdKind) {
@@ -124,8 +147,8 @@ func (p *controlParser) feedLine(line string) {
 			return
 		}
 		pane := rest[:sp]
-		if !p.historyDone {
-			return // already contained in the capture-pane prefill
+		if !p.outputOpen() {
+			return // already contained in the capture-pane prefill (or pending repaint)
 		}
 		if p.paneID != "" && pane != p.paneID {
 			return
@@ -146,10 +169,48 @@ func (p *controlParser) feedLine(line string) {
 			p.onWindowChanged()
 		}
 
+	case strings.HasPrefix(line, "%layout-change "):
+		// "%layout-change @win layout visible-layout flags". The layout is
+		// "checksum,WxH,X,Y,...": the window dimensions live between the
+		// first comma and the next ',' or '{'/'['.
+		f := strings.Fields(line)
+		if len(f) >= 3 && p.onLayout != nil {
+			if w, h, ok := layoutDims(f[2]); ok {
+				p.onLayout(w, h)
+			}
+		}
+
 	default:
-		// %exit precedes EOF; %session-changed, %window-add, %layout-change,
-		// etc. don't affect a single-pane byte stream.
+		// %exit precedes EOF; %session-changed, %window-add, etc. don't
+		// affect a single-pane byte stream.
 	}
+}
+
+// layoutDims extracts the window dimensions from a tmux layout string like
+// "b25d,120x30,0,0,1" or "cafe,200x50,0,0{100x50,0,0,1,99x50,101,0,2}".
+func layoutDims(layout string) (w, h int, ok bool) {
+	i := strings.IndexByte(layout, ',')
+	if i < 0 {
+		return 0, 0, false
+	}
+	rest := layout[i+1:]
+	end := strings.IndexAny(rest, ",{[")
+	if end < 0 {
+		end = len(rest)
+	}
+	w, h, ok = parseDims(rest[:end])
+	return
+}
+
+func parseDims(s string) (w, h int, ok bool) {
+	x := strings.IndexByte(s, 'x')
+	if x <= 0 || x == len(s)-1 {
+		return 0, 0, false
+	}
+	if _, err := fmt.Sscanf(s, "%dx%d", &w, &h); err != nil || w <= 0 || h <= 0 {
+		return 0, 0, false
+	}
+	return w, h, true
 }
 
 // isBlockEnd matches %end/%error against the %begin identifiers so pane
@@ -166,7 +227,7 @@ func (p *controlParser) dispatchBlock(isErr bool) {
 	lines := p.blockLines
 	switch p.blockKind {
 	case cmdHistory:
-		p.historyDone = true
+		p.openOutput()
 		if isErr {
 			log.Printf("control relay: capture-pane failed: %s", strings.Join(lines, " | "))
 			return
@@ -183,6 +244,37 @@ func (p *controlParser) dispatchBlock(isErr bool) {
 		payload := strings.Join(lines[:end], "\r\n") + "\x1b[0m"
 		if p.emit != nil {
 			p.emit([]byte(payload))
+		}
+
+	case cmdRepaint:
+		// A foreign client resized the window (see the resync logic in
+		// relayControlMode): the frame on the browser's screen was drawn for
+		// a different width and is garbage. Clear the screen and paint the
+		// pane's current visible frame; a cmdCursor reply follows to put the
+		// cursor back. %output was gated when the repaint was queued — tmux's
+		// ordered event loop guarantees everything up to this reply is inside
+		// the capture, everything after arrives as %output events.
+		p.openOutput()
+		if isErr {
+			log.Printf("control relay: repaint capture failed: %s", strings.Join(lines, " | "))
+			return
+		}
+		end := len(lines)
+		for end > 0 && strings.TrimRight(lines[end-1], " ") == "" {
+			end--
+		}
+		payload := "\x1b[2J\x1b[H" + strings.Join(lines[:end], "\r\n") + "\x1b[0m"
+		if p.emit != nil {
+			p.emit([]byte(payload))
+		}
+
+	case cmdCursor:
+		if isErr || len(lines) == 0 || p.emit == nil {
+			return
+		}
+		var cx, cy int
+		if _, err := fmt.Sscanf(strings.TrimSpace(lines[0]), "%d,%d", &cx, &cy); err == nil {
+			p.emit([]byte(fmt.Sprintf("\x1b[%d;%dH", cy+1, cx+1)))
 		}
 
 	case cmdMeta:
@@ -364,6 +456,66 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 		sendCmd(cmdPane, fmt.Sprintf(`display-message -p -t %s "#{pane_id}"`, target))
 	}
 
+	// Resize-war resync (issue #80). The whole control-mode pipeline depends
+	// on one invariant: the tmux window width equals the browser grid width —
+	// cursor-relative TUI repaints are only correct then. With window-size
+	// "latest"/"largest", ANOTHER client (a native handoff terminal, another
+	// browser tab) can resize the window out from under us; from that moment
+	// every %output is rendered for the wrong width and the browser frame
+	// turns to soup. tmux re-renders native clients per-client; we get a raw
+	// stream, so instead: when %layout-change reports dimensions that differ
+	// from what this client declared, tell the browser to match its grid to
+	// the window (a "winsize" control message) and repaint the visible frame
+	// from scratch. When the window comes back to our declared size, restore
+	// the same way. Debounced: resize storms (a native user dragging their
+	// terminal) settle before we repaint.
+	var (
+		sizeMu     sync.Mutex
+		clientW    int // what the browser last declared via resize messages
+		clientH    int
+		winW       int // what %layout-change last reported
+		winH       int
+		overridden bool // browser grid currently forced to a foreign size
+		resyncTmr  *time.Timer
+	)
+	resync := func() {
+		sizeMu.Lock()
+		w, h := winW, winH
+		matches := w == clientW && h == clientH
+		wasOverridden := overridden
+		if clientW == 0 || w == 0 || (matches && !wasOverridden) {
+			// Never sized / our own resize echoing back: nothing to do.
+			sizeMu.Unlock()
+			return
+		}
+		overridden = !matches
+		sizeMu.Unlock()
+
+		msg, _ := json.Marshal(map[string]any{"type": "winsize", "cols": w, "rows": h})
+		_ = ws.Write(ctx, websocket.MessageText, msg)
+		// Gate %output BEFORE queueing the capture: everything tmux emitted
+		// before the reply is inside the capture, everything after streams.
+		parser.gateOutput()
+		sendCmd(cmdRepaint, fmt.Sprintf("capture-pane -p -e -t %s", target))
+		sendCmd(cmdCursor, fmt.Sprintf(`display-message -p -t %s "#{cursor_x},#{cursor_y}"`, target))
+	}
+	parser.onLayout = func(w, h int) {
+		sizeMu.Lock()
+		winW, winH = w, h
+		if resyncTmr != nil {
+			resyncTmr.Stop()
+		}
+		resyncTmr = time.AfterFunc(300*time.Millisecond, resync)
+		sizeMu.Unlock()
+	}
+	defer func() {
+		sizeMu.Lock()
+		if resyncTmr != nil {
+			resyncTmr.Stop()
+		}
+		sizeMu.Unlock()
+	}()
+
 	// The reply to the connect command (new-session -A on the tmux command
 	// line) is the first block on the wire.
 	parser.pushCmd(cmdConnect)
@@ -475,6 +627,9 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 				var msg resizeMsg
 				if json.Unmarshal(data, &msg) == nil && msg.Type == "resize" {
 					if msg.Cols > 0 && msg.Rows > 0 {
+						sizeMu.Lock()
+						clientW, clientH = msg.Cols, msg.Rows
+						sizeMu.Unlock()
 						sendCmd(cmdIgnore, fmt.Sprintf("refresh-client -C %dx%d", msg.Cols, msg.Rows))
 					}
 					continue

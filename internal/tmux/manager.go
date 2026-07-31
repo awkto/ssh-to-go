@@ -174,7 +174,15 @@ func buildCreateCmd(name string, opts CreateOptions) string {
 		}
 	}
 	if c := strings.TrimSpace(opts.Command); c != "" {
-		cmd += fmt.Sprintf(" \\; send-keys -t %q %s Enter", name, shellSingleQuote(c))
+		// NOT chained into the tmux "\;" sequence: send-keys would fire
+		// microseconds after the pane's shell spawns — before it has sourced
+		// rc files or printed a prompt — so the raw tty echoes the command at
+		// column 0 and a TUI then draws over the prompt line (issue #75).
+		// Wait until the shell has drawn its prompt (cursor_x > 0) before
+		// typing, with a ~5s cap; on timeout send anyway (";" not "&&") so an
+		// empty-prompt shell still gets the command, matching old behavior.
+		cmd += fmt.Sprintf("; for _ in $(seq 1 50); do [ \"$(tmux display-message -p -t %q '#{cursor_x}')\" != 0 ] && break; sleep 0.1; done; tmux send-keys -t %q %s Enter",
+			name, name, shellSingleQuote(c))
 	}
 	return cmd
 }

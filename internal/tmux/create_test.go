@@ -83,6 +83,30 @@ func TestBuildCreateCmdSendsCommandAfterCreate(t *testing.T) {
 	}
 }
 
+// The launch command must wait for the shell to draw its prompt before
+// typing (issue #75): send-keys chained straight into the create fires
+// before bash owns the tty, and the TUI then draws over the prompt line.
+func TestBuildCreateCmdWaitsForPromptBeforeCommand(t *testing.T) {
+	got := buildCreateCmd("work", CreateOptions{Command: "claude"})
+	wait := strings.Index(got, "cursor_x")
+	send := strings.Index(got, "send-keys")
+	if wait < 0 {
+		t.Fatalf("missing cursor_x prompt wait: %q", got)
+	}
+	if send < wait {
+		t.Errorf("send-keys must come after the prompt wait: %q", got)
+	}
+	// The wait must be OUTSIDE the atomic tmux "\;" chain — a plain shell
+	// sequence after it. "\; send-keys" would put it back in the race.
+	if strings.Contains(got, `\; send-keys`) {
+		t.Errorf("send-keys is still chained into the tmux invocation: %q", got)
+	}
+	// Timeout path sends anyway: the send-keys is joined with ";" not "&&".
+	if !strings.Contains(got, `done; tmux send-keys`) {
+		t.Errorf("send-keys must run even when the wait times out: %q", got)
+	}
+}
+
 func TestBuildCreateCmdCommandStaysLiteral(t *testing.T) {
 	// The command is typed into the pane, so the OUTER shell must not
 	// expand it — $(...) and backticks stay text.
@@ -150,7 +174,7 @@ func TestBuildCreateCmdAgainstRealTmux(t *testing.T) {
 		Mouse:        true,
 	})
 	// The remote runs this through a shell; -L keeps it off the user's server.
-	cmd = strings.Replace(cmd, "tmux ", "tmux -L "+sock+" ", 1)
+	cmd = strings.ReplaceAll(cmd, "tmux ", "tmux -L "+sock+" ")
 	if out, err := exec.Command("sh", "-c", cmd).CombinedOutput(); err != nil {
 		t.Fatalf("run %q: %v\n%s", cmd, err, out)
 	}
@@ -218,7 +242,7 @@ func TestCreateGuardRejectsMissingDirWithRealTmux(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "not", "there")
 
 	cmd := buildCreateCmd("guardtest", CreateOptions{Cwd: missing})
-	cmd = strings.Replace(cmd, "tmux ", "tmux -L "+sock+" ", 1)
+	cmd = strings.ReplaceAll(cmd, "tmux ", "tmux -L "+sock+" ")
 	out, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected failure for missing dir, got success: %s", out)

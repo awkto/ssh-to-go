@@ -143,6 +143,81 @@ func TestTmuxQuote(t *testing.T) {
 	}
 }
 
+func TestLayoutDims(t *testing.T) {
+	cases := []struct {
+		in   string
+		w, h int
+		ok   bool
+	}{
+		{"b25d,120x30,0,0,1", 120, 30, true},
+		{"cafe,200x50,0,0{100x50,0,0,1,99x50,101,0,2}", 200, 50, true},
+		{"dead,93x35,0,0[93x17,0,0,1,93x17,0,18,2]", 93, 35, true},
+		{"bogus", 0, 0, false},
+		{"abcd,notdims,0,0", 0, 0, false},
+	}
+	for _, c := range cases {
+		w, h, ok := layoutDims(c.in)
+		if w != c.w || h != c.h || ok != c.ok {
+			t.Errorf("layoutDims(%q) = %d,%d,%v want %d,%d,%v", c.in, w, h, ok, c.w, c.h, c.ok)
+		}
+	}
+}
+
+func TestParserLayoutChangeCallback(t *testing.T) {
+	var gotW, gotH int
+	p := &controlParser{onLayout: func(w, h int) { gotW, gotH = w, h }}
+	feed(p, "%layout-change @1 b25d,120x30,0,0,1 b25d,120x30,0,0,1 *")
+	if gotW != 120 || gotH != 30 {
+		t.Errorf("onLayout got %dx%d, want 120x30", gotW, gotH)
+	}
+}
+
+// A repaint after a foreign resize must clear the screen, paint the captured
+// frame, gate %output while pending, and restore the cursor from the
+// cmdCursor reply.
+func TestParserRepaintSequence(t *testing.T) {
+	var emitted []byte
+	p := &controlParser{emit: func(b []byte) { emitted = append(emitted, b...) }}
+	p.openOutput() // attach finished long ago
+
+	// Foreign resize detected: relay gates output and queues the repaint.
+	p.gateOutput()
+	p.pushCmd(cmdRepaint)
+	p.pushCmd(cmdCursor)
+
+	// %output racing the repaint is stale — the capture will contain it.
+	feed(p, `%output %0 stale-width-garbage`)
+	if len(emitted) != 0 {
+		t.Fatalf("gated %%output leaked: %q", emitted)
+	}
+
+	feed(p,
+		"%begin 7 1 0",
+		"frame line 1",
+		"frame line 2",
+		"",
+		"%end 7 1 0",
+	)
+	want := "\x1b[2J\x1b[Hframe line 1\r\nframe line 2\x1b[0m"
+	if string(emitted) != want {
+		t.Errorf("repaint payload = %q, want %q", emitted, want)
+	}
+
+	// Cursor restore: 0-based x,y -> 1-based CUP row;col.
+	emitted = nil
+	feed(p, "%begin 7 2 0", "5,2", "%end 7 2 0")
+	if string(emitted) != "\x1b[3;6H" {
+		t.Errorf("cursor restore = %q, want ESC[3;6H", emitted)
+	}
+
+	// Live output flows again after the repaint reply.
+	emitted = nil
+	feed(p, `%output %0 fresh`)
+	if string(emitted) != "fresh" {
+		t.Errorf("post-repaint output = %q", emitted)
+	}
+}
+
 func TestParserHistoryEmptySession(t *testing.T) {
 	p := &controlParser{emit: func(b []byte) { t.Errorf("empty capture emitted: %q", b) }}
 	p.pushCmd(cmdHistory)

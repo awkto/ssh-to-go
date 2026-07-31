@@ -324,6 +324,55 @@ function initTerminal(host, session) {
     term.open(container);
     fitAddon.fit();
 
+    // Resize-war handling (issue #80): when another tmux client (a native
+    // handoff terminal, another browser tab) resizes the window, the relay
+    // sends a "winsize" message and we force the xterm grid to the window's
+    // dimensions so the raw output stream keeps rendering correctly —
+    // scrolling the overflow instead of turning to soup. While overridden,
+    // browser resizes only report the would-be fit size to the server (so
+    // tmux still knows our real size) without touching the grid; when the
+    // window comes back to our size the override lifts and fit resumes.
+    let sizeOverride = false;
+    let applyingWinsize = false;
+    function sendFitSize() {
+        const prop = fitAddon.proposeDimensions();
+        if (prop && activeWs && activeWs.readyState === WebSocket.OPEN) {
+            activeWs.send(JSON.stringify({ type: "resize", cols: prop.cols, rows: prop.rows }));
+        }
+    }
+    function refit() {
+        if (sizeOverride) { sendFitSize(); return; }
+        fitAddon.fit();
+    }
+    function applyWinsize(cols, rows) {
+        const prop = fitAddon.proposeDimensions();
+        const matchesFit = prop && prop.cols === cols && prop.rows === rows;
+        // Erase the frame BEFORE resizing the grid: it was drawn for the old
+        // width, and resizing first would reflow it into wrapped junk that
+        // survives above the server's repaint. The write callback sequences
+        // the resize after the erase lands; the repaint bytes queue behind.
+        term.write("\x1b[2J\x1b[H", function () {
+            applyingWinsize = true;
+            try {
+                if (matchesFit) {
+                    sizeOverride = false;
+                    container.style.overflow = "";
+                    fitAddon.fit();
+                } else {
+                    sizeOverride = true;
+                    container.style.overflow = "auto";
+                    term.resize(cols, rows);
+                }
+            } finally {
+                applyingWinsize = false;
+            }
+        });
+    }
+    function clearWinsizeOverride() {
+        sizeOverride = false;
+        container.style.overflow = "";
+    }
+
     // On touch devices, .xterm-screen has pointer-events:none so finger
     // drags pass through to the sibling .xterm-viewport and the browser
     // scrolls it natively. Two complications we handle here:
@@ -457,6 +506,12 @@ function initTerminal(host, session) {
                 // (re)connect; start from a clean buffer so it never stacks.
                 term.reset();
             }
+            // A fresh relay knows nothing of a previous override; start from
+            // our own fit so both sides agree on the size again.
+            if (sizeOverride) {
+                clearWinsizeOverride();
+                fitAddon.fit();
+            }
             // Send initial size
             ws.send(JSON.stringify({
                 type: "resize",
@@ -479,6 +534,7 @@ function initTerminal(host, session) {
                 try {
                     const msg = JSON.parse(e.data);
                     if (msg.type === "resize") return;
+                    if (msg.type === "winsize") { applyWinsize(msg.cols, msg.rows); return; }
                     if (msg.type === "tty") { myTTY = msg.tty; return; }
                     if (msg.type === "kicked") { kicked = true; return; }
                     // Sent while the socket is still healthy, just before
@@ -522,15 +578,26 @@ function initTerminal(host, session) {
         if (onDataDisposable) { onDataDisposable.dispose(); }
         if (onResizeDisposable) { onResizeDisposable.dispose(); }
 
-        // Terminal input -> WebSocket
+        // Terminal input -> WebSocket. Strip terminal-report auto-replies
+        // (issue #79): xterm.js answers queries that reach it — DA1/DA2
+        // "who are you", DSR status, CPR cursor position — and query bytes
+        // can arrive embedded in captured history or repaint frames. tmux
+        // already answered the real query; a second reply typed into the
+        // pane surfaces as "?1;2c"-style garbage at the prompt. No keyboard
+        // produces these byte shapes, so stripping them is safe.
         onDataDisposable = term.onData(function (data) {
+            data = data.replace(reportReplyRegex, "");
+            if (data.length === 0) return;
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(new TextEncoder().encode(data));
             }
         });
 
-        // Handle resize
+        // Handle resize. Server-driven winsize overrides must not echo back
+        // as our declared size — the server tracks the browser's REAL fit
+        // size so it can tell when the window returns to it.
         onResizeDisposable = term.onResize(function (size) {
+            if (applyingWinsize) return;
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: "resize",
@@ -657,7 +724,7 @@ function initTerminal(host, session) {
         var el2 = document.getElementById("zoom-level-m");
         if (el1) el1.textContent = size;
         if (el2) el2.textContent = size;
-        fitAddon.fit();
+        refit();
     }
     document.getElementById("zoom-level").textContent = savedFontSize;
     // The font row lives inside the burger menu now. Browsers keep their menu
@@ -1011,6 +1078,12 @@ function initTerminal(host, session) {
     // here so xterm.js never enters mouse-tracking mode.
     const mouseSeqRegex = /\x1b\[\?(9|10(00|01|02|03|05|06|15|16))[hl]/g;
 
+    // Terminal-report replies xterm.js generates automatically: primary and
+    // secondary device attributes (CSI ? … c / CSI > … c), cursor position
+    // reports (CSI row;col R — digits required, so F-key variants like ESC[R
+    // never match), and DSR status (CSI 0n). See onData below (issue #79).
+    const reportReplyRegex = /\x1b\[\?[0-9;]*c|\x1b\[>[0-9;]*c|\x1b\[[0-9]+;[0-9]+R|\x1b\[0n/g;
+
     // No manual wheel forwarding — with mouse=off the relay isn't expecting
     // mouse-button reports, and xterm.js's native viewport handles wheel and
     // touch scrolling against its local 5000-row scrollback (which the relay
@@ -1250,7 +1323,7 @@ function initTerminal(host, session) {
         if (window.visualViewport) {
             window.visualViewport.addEventListener("resize", function () {
                 var atBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
-                fitAddon.fit();
+                refit();
                 if (atBottom) term.scrollToBottom();
             });
         }
@@ -1259,7 +1332,7 @@ function initTerminal(host, session) {
     // On any viewport resize (including mobile keyboard), refit and scroll to cursor
     window.addEventListener("resize", function () {
         var atBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
-        fitAddon.fit();
+        refit();
         if (atBottom) term.scrollToBottom();
     });
 
