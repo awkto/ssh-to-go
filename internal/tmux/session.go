@@ -7,6 +7,10 @@ import (
 )
 
 type Session struct {
+	// ID is the server-assigned short numeric ID, unique across hosts.
+	// Zero when no assigner is configured (or from parsers/tests) — the
+	// wire format then omits it, which older clients read as before.
+	ID              int       `json:"id,omitempty"`
 	Name            string    `json:"name"`
 	Windows         int       `json:"windows"`
 	Created         time.Time `json:"created"`

@@ -28,7 +28,7 @@ Usage:
   stogo version                                    print client version
 
 Sessions may be addressed as NAME (unique across hosts), HOST/NAME, or the
-numeric ID shown by "stogo list".
+server-assigned numeric ID shown by "stogo list".
 
 Config: ~/.config/stogo/config.json (overridable with STOGO_URL / STOGO_TOKEN
 environment variables for headless use).

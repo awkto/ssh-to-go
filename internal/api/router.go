@@ -9,6 +9,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
 	"github.com/awkto/ssh-to-go/internal/mcp"
+	"github.com/awkto/ssh-to-go/internal/sessionid"
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
 	"github.com/awkto/ssh-to-go/internal/tmux"
 )
@@ -21,6 +22,7 @@ type RouterConfig struct {
 	SessionIcons *keystore.SessionIconStore
 	RecentCmds   *keystore.RecentCommandStore
 	Registry     *sessionreg.Store
+	SessionIDs   *sessionid.Store
 	Auth         *auth.Manager
 	ExecJobs     *execjob.Store
 	StaticFS     http.FileSystem
@@ -40,6 +42,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 		SessionIcons: rc.SessionIcons,
 		RecentCmds:   rc.RecentCmds,
 		Registry:     rc.Registry,
+		SessionIDs:   rc.SessionIDs,
 		Auth:         rc.Auth,
 		ExecJobs:     rc.ExecJobs,
 		ConfigPath:   rc.ConfigPath,

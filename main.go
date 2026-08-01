@@ -16,6 +16,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
+	"github.com/awkto/ssh-to-go/internal/sessionid"
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
 	"github.com/awkto/ssh-to-go/internal/tmux"
@@ -74,6 +75,12 @@ func main() {
 	// In-memory index for one-off exec jobs launched via /api/exec.
 	execJobs := execjob.NewStore()
 
+	// Server-assigned short session IDs, unique across hosts.
+	sids, err := sessionid.NewStore(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("session ids: %v", err)
+	}
+
 	// Initialize auth
 	noAuth := os.Getenv("SSH_TO_GO_NO_AUTH") == "1"
 	am, err := auth.NewManager(cfg.DataDir, noAuth)
@@ -119,6 +126,7 @@ func main() {
 
 	// Set up hub and pollers
 	h := hub.New(cfg.Hosts)
+	h.SetIDAssigner(sids)
 	tm := tmux.NewManager()
 
 	pollResults := make(chan tmux.PollResult, max(len(cfg.Hosts)*2, 4))
@@ -169,6 +177,7 @@ func main() {
 		SessionIcons: sis,
 		RecentCmds:   rcs,
 		Registry:     reg,
+		SessionIDs:   sids,
 		Auth:         am,
 		ExecJobs:     execJobs,
 		StaticFS:     http.FS(staticSub),

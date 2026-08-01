@@ -51,20 +51,10 @@ func cmdList(args []string) error {
 		})
 	}
 
-	ids := assignIDs(sessions)
-
 	if *output == "json" {
-		type row struct {
-			ID int `json:"id"`
-			hostSession
-		}
-		rows := make([]row, len(sessions))
-		for i, hs := range sessions {
-			rows[i] = row{ID: ids[sessionKey(hs)], hostSession: hs}
-		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(rows)
+		return enc.Encode(sessions)
 	}
 
 	if len(sessions) == 0 {
@@ -79,8 +69,13 @@ func cmdList(args []string) error {
 		if hs.Session.Attached {
 			clients = fmt.Sprintf("%d", hs.Session.AttachedClients)
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%s\t%s\n",
-			ids[sessionKey(hs)], hs.Session.Name, hs.HostName, hs.Session.Windows, clients,
+		// An old server sends no IDs; "-" beats a column of zeros.
+		id := "-"
+		if hs.Session.ID > 0 {
+			id = fmt.Sprintf("%d", hs.Session.ID)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n",
+			id, hs.Session.Name, hs.HostName, hs.Session.Windows, clients,
 			relTime(hs.Session.Activity))
 	}
 	return w.Flush()

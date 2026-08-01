@@ -159,8 +159,10 @@ curl -fsSL https://raw.githubusercontent.com/awkto/ssh-to-go/main/scripts/instal
 Config lives in `~/.config/stogo/config.json`; `STOGO_URL`/`STOGO_TOKEN`
 environment variables override it for headless use. Sessions are addressed as
 `NAME`, `HOST/NAME` when the same name exists on several hosts, or the short
-numeric ID shown by `stogo list` (stable across runs for as long as the
-session lives).
+numeric ID shown by `stogo list`. IDs are assigned by the server (3-4 digits,
+unique across all hosts), so the same session has the same ID in every
+client, on every machine, for as long as it lives — surviving renames and
+offload/recreate.
 
 Tab completion for subcommands **and session names** ships with the .deb; for
 other installs add `source <(stogo completion bash)` to your `~/.bashrc`.

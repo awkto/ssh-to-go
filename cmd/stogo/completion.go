@@ -37,7 +37,7 @@ func cmdCompleteSessions() error {
 		if counts[hs.Session.Name] == 1 {
 			fmt.Println(hs.Session.Name)
 		} else {
-			fmt.Println(sessionKey(hs))
+			fmt.Println(hs.HostName + "/" + hs.Session.Name)
 		}
 	}
 	return nil

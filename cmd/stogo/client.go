@@ -91,6 +91,9 @@ func apiError(status int, body []byte) error {
 // API response shapes (mirrors internal/hub and internal/tmux wire formats).
 
 type tmuxSession struct {
+	// ID is the server-assigned short numeric ID (unique across hosts).
+	// Zero when talking to a server predating the feature.
+	ID              int       `json:"id"`
 	Name            string    `json:"name"`
 	Windows         int       `json:"windows"`
 	Created         time.Time `json:"created"`
@@ -147,9 +150,8 @@ func (c *apiClient) resolveSession(arg string) (host, session string, err error)
 		}
 		if len(matches) == 0 {
 			if id, aerr := strconv.Atoi(arg); aerr == nil && id > 0 {
-				ids := assignIDs(all)
 				for _, hs := range all {
-					if ids[sessionKey(hs)] == id {
+					if hs.Session.ID == id {
 						matches = append(matches, hs)
 					}
 				}

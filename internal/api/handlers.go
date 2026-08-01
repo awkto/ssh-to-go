@@ -14,6 +14,7 @@ import (
 	"github.com/awkto/ssh-to-go/internal/execjob"
 	"github.com/awkto/ssh-to-go/internal/hub"
 	"github.com/awkto/ssh-to-go/internal/keystore"
+	"github.com/awkto/ssh-to-go/internal/sessionid"
 	"github.com/awkto/ssh-to-go/internal/sessionreg"
 	"github.com/awkto/ssh-to-go/internal/sessionvars"
 	"github.com/awkto/ssh-to-go/internal/sshutil"
@@ -28,6 +29,7 @@ type Handlers struct {
 	SessionIcons *keystore.SessionIconStore
 	RecentCmds   *keystore.RecentCommandStore
 	Registry     *sessionreg.Store
+	SessionIDs   *sessionid.Store
 	Auth         *auth.Manager
 	ExecJobs     *execjob.Store
 	ConfigPath   string
@@ -485,6 +487,12 @@ func (h *Handlers) RenameSession(w http.ResponseWriter, r *http.Request) {
 
 	// Migrate session icon/color/star data to the new name
 	_ = h.SessionIcons.Rename(hostName, sessionName, req.NewName)
+
+	// The short ID follows the rename — it identifies the session, not the
+	// name, so `stogo connect 142` keeps working after a rename.
+	if h.SessionIDs != nil {
+		h.SessionIDs.Rename(hostName, sessionName, req.NewName)
+	}
 
 	// Move the registry entry along with the rename so a future reboot
 	// recreates the session under its new name, carrying the flavours, the

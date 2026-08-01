@@ -70,6 +70,9 @@ const nsExpand = (s, sessionName) => {
   }
   return out;
 };
+const NS_SLUG_MAX = 40;
+const nsDirSlug = s => s.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-{2,}/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, NS_SLUG_MAX).replace(/[-.]+$/, '');
+const nsJoinDir = (base, slug) => !slug ? base : base + (base.endsWith('/') ? '' : '/') + slug;
 const NewSession = ({
   store,
   onClose
@@ -91,7 +94,7 @@ const NewSession = ({
   const [copied, setCopied] = React.useState(false);
   const [sshCmd, setSshCmd] = React.useState('');
   const [hostMenu, setHostMenu] = React.useState(false);
-  const cwdEdited = React.useRef(false);
+  const [cwdEdited, setCwdEdited] = React.useState(false);
   const copyTimer = React.useRef(null);
   const hostObj = HOSTS.find(h => h.id === host) || HOSTS[0] || null;
   const effName = name.trim() || autoName;
@@ -102,8 +105,10 @@ const NewSession = ({
     if (!host && HOSTS[0]) setHost(HOSTS[0].id);
   }, [HOSTS.length]);
   React.useEffect(() => {
-    if (!cwdEdited.current) setCwd(defaultDir);
+    if (!cwdEdited) setCwd(defaultDir);
   }, [defaultDir]);
+  const defaultHasVar = nsExpand(defaultDir, 'x') !== defaultDir;
+  const effCwd = cwdEdited || defaultHasVar ? cwd : nsJoinDir(defaultDir, nsDirSlug(name));
   React.useEffect(() => {
     nsSet(NS_LS.createDir, createDir ? '1' : '0');
   }, [createDir]);
@@ -124,14 +129,14 @@ const NewSession = ({
     if (!hostObj) return '';
     const [addr, port] = String(hostObj.fqdn || '').split(':');
     const p = port && port !== '22' ? `-p ${port} ` : '';
-    return `ssh -t ${p}${hostObj.user}@${addr} 'tmux set-option -s escape-time 200 \\; set-option -t "${effName}" mouse on 2>/dev/null; exec tmux attach-session -t "${effName}"'`;
-  }, [hostObj && hostObj.fqdn, hostObj && hostObj.user, effName]);
+    return `ssh -t ${p}${hostObj.user}@${addr} 'tmux set-option -s escape-time 200 \\; set-option -t "${varName}" mouse on 2>/dev/null; exec tmux attach-session -t "${varName}"'`;
+  }, [hostObj && hostObj.fqdn, hostObj && hostObj.user, varName]);
   React.useEffect(() => {
     if (!host) return;
     let cancelled = false;
     setSshCmd('');
     const t = setTimeout(() => {
-      getHandoff(host, effName).then(cmd => {
+      getHandoff(host, varName).then(cmd => {
         if (!cancelled) setSshCmd(cmd);
       }).catch(() => {});
     }, 250);
@@ -139,7 +144,7 @@ const NewSession = ({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [host, effName]);
+  }, [host, varName]);
   const shownSsh = sshCmd || fallbackSsh;
   const caretToEnd = e => {
     const el = e.target;
@@ -170,7 +175,7 @@ const NewSession = ({
       setErr(ex.message || 'could not forget that command');
     }
   };
-  const shownCwd = nsExpand(cwd.trim(), varName);
+  const shownCwd = nsExpand(effCwd.trim(), varName);
   const shownCommand = nsExpand(command.trim(), varName);
   const summary = (() => {
     const head = isCommand ? `Runs ${shownCommand || '…'}` : 'Opens a shell';
@@ -194,7 +199,7 @@ const NewSession = ({
     setErr('');
     setBusy(true);
     try {
-      await createSession(host, effName, cwd.trim() || '', {
+      await createSession(host, effName, effCwd.trim() || '', {
         createDir,
         command: runCmd,
         throwaway,
@@ -206,7 +211,7 @@ const NewSession = ({
         } catch (_) {}
       }
       onClose();
-      if (!isHandoff) openTerminal(host, effName);
+      if (!isHandoff) openTerminal(host, varName);
     } catch (ex) {
       setErr(ex.message || 'failed');
     } finally {
@@ -311,9 +316,9 @@ const NewSession = ({
   }, React.createElement("input", {
     id: "ns-dir",
     className: "ns-bare mono",
-    value: cwd,
+    value: effCwd,
     onChange: e => {
-      cwdEdited.current = true;
+      setCwdEdited(true);
       setCwd(e.target.value);
     },
     onFocus: caretToEnd,
@@ -347,7 +352,7 @@ const NewSession = ({
     onClick: () => forgetRecent(rc.command),
     "aria-label": `Forget ${rc.command}`,
     title: `Forget ${rc.command}`
-  }, "\xD7")))), React.createElement("div", {
+  }, "×")))), React.createElement("div", {
     className: "ns-control"
   }, React.createElement("div", {
     className: "ns-segs"

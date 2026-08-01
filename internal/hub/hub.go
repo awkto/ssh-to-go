@@ -36,8 +36,15 @@ type HostSession struct {
 	Session  tmux.Session `json:"session"`
 }
 
+// IDAssigner hands out the persistent cross-host session IDs stamped onto
+// every session as poll results arrive. See internal/sessionid.
+type IDAssigner interface {
+	Assign(host, name string) int
+}
+
 type Hub struct {
 	mu    sync.RWMutex
+	ids   IDAssigner
 	hosts map[string]*HostState
 	// hidden is host -> set of incognito session names. Listings are built
 	// from live tmux state, not the registry, so this is where a session
@@ -55,6 +62,14 @@ func New(hosts []config.Host) *Hub {
 		h.hosts[host.Name] = &HostState{Config: host}
 	}
 	return h
+}
+
+// SetIDAssigner installs the session ID allocator. Must be called before
+// polling starts; nil leaves sessions without IDs.
+func (h *Hub) SetIDAssigner(ids IDAssigner) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.ids = ids
 }
 
 // SetHidden replaces the incognito set for a host. Passing nil clears it.
@@ -112,6 +127,11 @@ func (h *Hub) Update(result tmux.PollResult) {
 		state.Error = ""
 		state.Online = true
 		state.Sessions = result.Sessions
+		if h.ids != nil {
+			for i := range state.Sessions {
+				state.Sessions[i].ID = h.ids.Assign(result.HostName, state.Sessions[i].Name)
+			}
+		}
 	}
 	if result.DetectedOS != "" {
 		state.DetectedOS = result.DetectedOS

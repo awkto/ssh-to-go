@@ -89,6 +89,27 @@ const nsExpand = (s, sessionName) => {
   return out;
 };
 
+// --- name → directory link -------------------------------------------------
+//
+// The directory field follows the session name: typing "Kubernetes Lab"
+// shows ~/sessions/kubernetes-lab live, so the common case is typed once.
+// The link holds only until the user edits the directory field themselves —
+// from that keystroke on the field is entirely theirs. Directory names are a
+// stricter alphabet than session names (they land in shell commands and
+// prompts), hence the lowercase slug rather than the session's own sanitize.
+const NS_SLUG_MAX = 40;
+const nsDirSlug = (s) =>
+  s
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-') // spaces and specials collapse to one dash
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, NS_SLUG_MAX)
+    .replace(/[-.]+$/, '');
+const nsJoinDir = (base, slug) =>
+  !slug ? base : base + (base.endsWith('/') ? '' : '/') + slug;
+
 const NewSession = ({ store, onClose }) => {
   const HOSTS = store.hosts;
   const defaultDir = (store.settings && store.settings.new_session_dir) || '~/sessions/';
@@ -110,7 +131,10 @@ const NewSession = ({ store, onClose }) => {
   const [copied, setCopied] = React.useState(false);
   const [sshCmd, setSshCmd] = React.useState('');
   const [hostMenu, setHostMenu] = React.useState(false);
-  const cwdEdited = React.useRef(false);
+  // cwdEdited is the name→directory link breaker: false means the directory
+  // is still derived from the name, true means the user has taken the field
+  // over. State, not a ref — the derived value renders.
+  const [cwdEdited, setCwdEdited] = React.useState(false);
   const copyTimer = React.useRef(null);
 
   const hostObj = HOSTS.find(h => h.id === host) || HOSTS[0] || null;
@@ -125,7 +149,15 @@ const NewSession = ({ store, onClose }) => {
 
   // Settings can land after the modal mounts (first paint of a cold load).
   // Adopt the configured default then — but never overwrite typing.
-  React.useEffect(() => { if (!cwdEdited.current) setCwd(defaultDir); }, [defaultDir]);
+  React.useEffect(() => { if (!cwdEdited) setCwd(defaultDir); }, [defaultDir]);
+
+  // The directory the form is actually working with. While the link holds it
+  // is derived: default + slug of the typed name. A default that itself uses
+  // $name/$date is already a per-name scheme the user chose — the link
+  // defers to it and the template flows through untouched. Once the user
+  // edits the field, effCwd IS the field.
+  const defaultHasVar = nsExpand(defaultDir, 'x') !== defaultDir;
+  const effCwd = cwdEdited || defaultHasVar ? cwd : nsJoinDir(defaultDir, nsDirSlug(name));
 
   React.useEffect(() => { nsSet(NS_LS.createDir, createDir ? '1' : '0'); }, [createDir]);
   React.useEffect(() => { nsSet(NS_LS.launch, launch); }, [launch]);
@@ -146,20 +178,20 @@ const NewSession = ({ store, onClose }) => {
     if (!hostObj) return '';
     const [addr, port] = String(hostObj.fqdn || '').split(':');
     const p = port && port !== '22' ? `-p ${port} ` : '';
-    return `ssh -t ${p}${hostObj.user}@${addr} 'tmux set-option -s escape-time 200 \\; set-option -t "${effName}" mouse on 2>/dev/null; exec tmux attach-session -t "${effName}"'`;
-  }, [hostObj && hostObj.fqdn, hostObj && hostObj.user, effName]);
+    return `ssh -t ${p}${hostObj.user}@${addr} 'tmux set-option -s escape-time 200 \\; set-option -t "${varName}" mouse on 2>/dev/null; exec tmux attach-session -t "${varName}"'`;
+  }, [hostObj && hostObj.fqdn, hostObj && hostObj.user, varName]);
 
   React.useEffect(() => {
     if (!host) return;
     let cancelled = false;
     setSshCmd('');
     const t = setTimeout(() => {
-      getHandoff(host, effName)
+      getHandoff(host, varName)
         .then(cmd => { if (!cancelled) setSshCmd(cmd); })
         .catch(() => {});
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [host, effName]);
+  }, [host, varName]);
 
   const shownSsh = sshCmd || fallbackSsh;
 
@@ -191,7 +223,7 @@ const NewSession = ({ store, onClose }) => {
   // The directory and command with $name/$date filled in — what the session
   // will actually get. Shown wherever the raw field would otherwise be
   // echoed back, so typing a name visibly resolves the variables.
-  const shownCwd = nsExpand(cwd.trim(), varName);
+  const shownCwd = nsExpand(effCwd.trim(), varName);
   const shownCommand = nsExpand(command.trim(), varName);
 
   // One sentence describing the session that is about to exist, recomposed
@@ -214,14 +246,14 @@ const NewSession = ({ store, onClose }) => {
     if (isCommand && !runCmd) { setErr('Type a command, or switch back to shell.'); return; }
     setErr(''); setBusy(true);
     try {
-      await createSession(host, effName, cwd.trim() || '', { createDir, command: runCmd, throwaway, incognito });
+      await createSession(host, effName, effCwd.trim() || '', { createDir, command: runCmd, throwaway, incognito });
       if (isHandoff) {
         // Copy before closing: the modal owns the string, and the session
         // is useless to hand off if you can't paste it.
         try { await navigator.clipboard.writeText(shownSsh); } catch (_) {}
       }
       onClose();
-      if (!isHandoff) openTerminal(host, effName);
+      if (!isHandoff) openTerminal(host, varName);
     } catch (ex) {
       setErr(ex.message || 'failed');
     } finally {
@@ -297,8 +329,8 @@ const NewSession = ({ store, onClose }) => {
                   <input
                     id="ns-dir"
                     className="ns-bare mono"
-                    value={cwd}
-                    onChange={e=>{ cwdEdited.current = true; setCwd(e.target.value); }}
+                    value={effCwd}
+                    onChange={e=>{ setCwdEdited(true); setCwd(e.target.value); }}
                     onFocus={caretToEnd}
                     placeholder="~/"
                     title={NS_VARS_HINT}
