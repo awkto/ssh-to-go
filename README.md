@@ -136,8 +136,9 @@ A small native client for Linux/macOS that talks to the same API as the dashboar
 
 ```bash
 stogo auth login          # point it at your server (password → API token)
-stogo list                # sessions across all hosts
+stogo list                # sessions, most recently active first (-a: sort by name)
 stogo connect mysession   # attach in your real terminal (alias: stogo c)
+stogo connect 3           # ...or use the short ID from `stogo list`
 stogo offload mysession   # stop a session but keep it resumable
 stogo kill mysession      # kill a session
 stogo status              # server/host summary
@@ -157,7 +158,12 @@ curl -fsSL https://raw.githubusercontent.com/awkto/ssh-to-go/main/scripts/instal
 
 Config lives in `~/.config/stogo/config.json`; `STOGO_URL`/`STOGO_TOKEN`
 environment variables override it for headless use. Sessions are addressed as
-`NAME`, or `HOST/NAME` when the same name exists on several hosts.
+`NAME`, `HOST/NAME` when the same name exists on several hosts, or the short
+numeric ID shown by `stogo list` (stable across runs for as long as the
+session lives).
+
+Tab completion for subcommands **and session names** ships with the .deb; for
+other installs add `source <(stogo completion bash)` to your `~/.bashrc`.
 
 ### MCP Server (interactive TUIs)
 

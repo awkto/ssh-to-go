@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -124,8 +125,10 @@ func (c *apiClient) hosts() ([]hostState, error) {
 	return out, err
 }
 
-// resolveSession turns NAME or HOST/NAME into a concrete (host, session)
-// pair, rescanning once if nothing matches.
+// resolveSession turns NAME, HOST/NAME or a numeric ID (as shown by
+// `stogo list`) into a concrete (host, session) pair, rescanning once if
+// nothing matches. An exact name match wins over an ID interpretation, so a
+// session literally named "3" is still addressable.
 func (c *apiClient) resolveSession(arg string) (host, session string, err error) {
 	if h, s, ok := strings.Cut(arg, "/"); ok {
 		return h, s, nil
@@ -140,6 +143,16 @@ func (c *apiClient) resolveSession(arg string) (host, session string, err error)
 		for _, hs := range all {
 			if hs.Session.Name == arg {
 				matches = append(matches, hs)
+			}
+		}
+		if len(matches) == 0 {
+			if id, aerr := strconv.Atoi(arg); aerr == nil && id > 0 {
+				ids := assignIDs(all)
+				for _, hs := range all {
+					if ids[sessionKey(hs)] == id {
+						matches = append(matches, hs)
+					}
+				}
 			}
 		}
 		return matches, nil
@@ -161,7 +174,7 @@ func (c *apiClient) resolveSession(arg string) (host, session string, err error)
 	}
 	switch len(matches) {
 	case 0:
-		return "", "", fmt.Errorf("no session named %q found (try `stogo list`)", arg)
+		return "", "", fmt.Errorf("no session with name or ID %q found (try `stogo list`)", arg)
 	case 1:
 		return matches[0].HostName, matches[0].Session.Name, nil
 	default:

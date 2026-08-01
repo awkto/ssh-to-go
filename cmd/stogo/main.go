@@ -19,14 +19,16 @@ const usageText = `stogo — terminal client for ssh-to-go
 Usage:
   stogo auth login [-url URL] [-name TOKEN_NAME]   authenticate with a server
   stogo auth logout                                revoke token and forget server
-  stogo list | ls [-o json]                        list tmux sessions across hosts
-  stogo connect | c <session> [host/<session>]     attach to a session (interactive)
+  stogo list | ls [-t|-a] [-o json]                list tmux sessions (-t by activity, default; -a by name)
+  stogo connect | c <session>                      attach to a session (interactive)
   stogo offload <session>                          offload a session (stop it, keep it resumable)
   stogo kill <session>                             kill a session
   stogo status                                     server connectivity and summary
+  stogo completion bash                            print bash completion script
   stogo version                                    print client version
 
-Sessions may be addressed as NAME (unique across hosts) or HOST/NAME.
+Sessions may be addressed as NAME (unique across hosts), HOST/NAME, or the
+numeric ID shown by "stogo list".
 
 Config: ~/.config/stogo/config.json (overridable with STOGO_URL / STOGO_TOKEN
 environment variables for headless use).
@@ -56,6 +58,10 @@ func main() {
 		err = cmdKill(os.Args[2:])
 	case "status":
 		err = cmdStatus(os.Args[2:])
+	case "completion":
+		err = cmdCompletion(os.Args[2:])
+	case "__sessions": // hidden: feeds bash completion
+		err = cmdCompleteSessions()
 	case "version", "-v", "--version":
 		fmt.Println(Version)
 	case "help", "-h", "--help":

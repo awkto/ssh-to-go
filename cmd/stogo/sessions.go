@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -14,8 +15,13 @@ import (
 func cmdList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	output := fs.String("o", "", "output format (json)")
+	byTime := fs.Bool("t", false, "sort by last activity, most recent first (default)")
+	byName := fs.Bool("a", false, "sort alphabetically by session name")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *byTime && *byName {
+		return fmt.Errorf("-t and -a are mutually exclusive")
 	}
 
 	cfg, err := loadConfig()
@@ -27,10 +33,38 @@ func cmdList(args []string) error {
 		return err
 	}
 
+	if *byName {
+		sort.SliceStable(sessions, func(i, j int) bool {
+			a, b := strings.ToLower(sessions[i].Session.Name), strings.ToLower(sessions[j].Session.Name)
+			if a != b {
+				return a < b
+			}
+			return sessions[i].HostName < sessions[j].HostName
+		})
+	} else {
+		sort.SliceStable(sessions, func(i, j int) bool {
+			a, b := sessions[i].Session.Activity, sessions[j].Session.Activity
+			if !a.Equal(b) {
+				return a.After(b)
+			}
+			return sessions[i].Session.Name < sessions[j].Session.Name
+		})
+	}
+
+	ids := assignIDs(sessions)
+
 	if *output == "json" {
+		type row struct {
+			ID int `json:"id"`
+			hostSession
+		}
+		rows := make([]row, len(sessions))
+		for i, hs := range sessions {
+			rows[i] = row{ID: ids[sessionKey(hs)], hostSession: hs}
+		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(sessions)
+		return enc.Encode(rows)
 	}
 
 	if len(sessions) == 0 {
@@ -39,14 +73,14 @@ func cmdList(args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "HOST\tSESSION\tWINDOWS\tCLIENTS\tACTIVITY")
+	fmt.Fprintln(w, "ID\tSESSION\tHOST\tWINDOWS\tCLIENTS\tACTIVITY")
 	for _, hs := range sessions {
 		clients := "-"
 		if hs.Session.Attached {
 			clients = fmt.Sprintf("%d", hs.Session.AttachedClients)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
-			hs.HostName, hs.Session.Name, hs.Session.Windows, clients,
+		fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%s\t%s\n",
+			ids[sessionKey(hs)], hs.Session.Name, hs.HostName, hs.Session.Windows, clients,
 			relTime(hs.Session.Activity))
 	}
 	return w.Flush()

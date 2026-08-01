@@ -19,6 +19,12 @@ mkdir -p "$PKGDIR/DEBIAN" "$PKGDIR/usr/bin"
 
 install -m 0755 "$BINARY" "$PKGDIR/usr/bin/stogo"
 
+# Bash completion (same file the binary embeds for `stogo completion bash`).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+mkdir -p "$PKGDIR/usr/share/bash-completion/completions"
+install -m 0644 "$SCRIPT_DIR/../cmd/stogo/completion.bash" \
+  "$PKGDIR/usr/share/bash-completion/completions/stogo"
+
 cat > "$PKGDIR/DEBIAN/control" <<EOF
 Package: sshtogo
 Version: ${VERSION}
