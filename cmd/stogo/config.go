@@ -15,6 +15,47 @@ type cliConfig struct {
 	// NoAuth records that the server was configured without authentication
 	// at login time, so an empty Token is deliberate rather than broken.
 	NoAuth bool `json:"no_auth,omitempty"`
+	// New holds the remembered answers to `stogo new` prompts. Also
+	// hand-editable — this file is the explicit control surface for those
+	// defaults.
+	New *newDefaults `json:"new,omitempty"`
+}
+
+// newDefaults are the `stogo new` prompt answers worth carrying to the next
+// run. Dir and Command are stored as typed, $name/$date intact, so one
+// remembered value stays correct for every future session name.
+type newDefaults struct {
+	Host string `json:"host,omitempty"`
+	// Dir overrides the derived default (server new_session_dir + name
+	// slug) when set. Never written by the prompts — the web form likewise
+	// treats an edited directory as a one-off — but honored when set here.
+	Dir string `json:"dir,omitempty"`
+	// Command is nil when never answered (seed from the server's recent
+	// commands), and points at "" when the remembered answer is "no
+	// command".
+	Command *string `json:"command,omitempty"`
+	Attach  *bool   `json:"attach,omitempty"`
+}
+
+// updateNewDefaults mutates the stored `new` section and writes the file
+// back. It re-reads the file rather than saving a loadConfig result, so
+// STOGO_URL/STOGO_TOKEN env overrides never leak onto disk.
+func updateNewDefaults(mut func(*newDefaults)) error {
+	path, err := configPath()
+	if err != nil {
+		return err
+	}
+	cfg := &cliConfig{}
+	if data, rerr := os.ReadFile(path); rerr == nil {
+		if jerr := json.Unmarshal(data, cfg); jerr != nil {
+			return fmt.Errorf("parse %s: %w", path, jerr)
+		}
+	}
+	if cfg.New == nil {
+		cfg.New = &newDefaults{}
+	}
+	mut(cfg.New)
+	return saveConfig(cfg)
 }
 
 func configPath() (string, error) {

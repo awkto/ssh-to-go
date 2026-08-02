@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -116,6 +117,28 @@ type hostState struct {
 	Sessions []tmuxSession `json:"sessions"`
 }
 
+// serverSettings is the subset of GET /api/settings the CLI cares about.
+// An old server that lacks a field just yields the zero value, which every
+// caller treats as "no default configured".
+type serverSettings struct {
+	DefaultHost   string `json:"default_host"`
+	NewSessionDir string `json:"new_session_dir"`
+}
+
+type recentCommand struct {
+	Command string `json:"command"`
+}
+
+// createSessionReq mirrors the server's create-session request body. Cwd and
+// Command may contain $name/$date — the server expands them after
+// sanitizing the name, so the CLI never has to.
+type createSessionReq struct {
+	Name      string `json:"name"`
+	Cwd       string `json:"cwd,omitempty"`
+	CreateDir bool   `json:"create_dir,omitempty"`
+	Command   string `json:"command,omitempty"`
+}
+
 func (c *apiClient) sessions() ([]hostSession, error) {
 	var out []hostSession
 	err := c.do("GET", "/api/sessions", nil, &out)
@@ -126,6 +149,22 @@ func (c *apiClient) hosts() ([]hostState, error) {
 	var out []hostState
 	err := c.do("GET", "/api/hosts", nil, &out)
 	return out, err
+}
+
+func (c *apiClient) settings() (serverSettings, error) {
+	var out serverSettings
+	err := c.do("GET", "/api/settings", nil, &out)
+	return out, err
+}
+
+func (c *apiClient) recentCommands() ([]recentCommand, error) {
+	var out []recentCommand
+	err := c.do("GET", "/api/recent-commands", nil, &out)
+	return out, err
+}
+
+func (c *apiClient) createSession(host string, req createSessionReq) error {
+	return c.do("POST", "/api/hosts/"+url.PathEscape(host)+"/sessions", req, nil)
 }
 
 // resolveSession turns NAME, HOST/NAME or a numeric ID (as shown by

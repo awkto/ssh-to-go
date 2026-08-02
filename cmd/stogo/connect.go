@@ -25,7 +25,12 @@ func cmdConnect(args []string) error {
 	if err != nil {
 		return err
 	}
+	return attachSession(c, host, session)
+}
 
+// attachSession fetches the handoff command for a known (host, session) pair
+// and replaces the stogo process with it.
+func attachSession(c *apiClient, host, session string) error {
 	var out struct {
 		Command string `json:"command"`
 	}

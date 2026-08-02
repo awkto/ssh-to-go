@@ -20,6 +20,7 @@ Usage:
   stogo auth login [-url URL] [-name TOKEN_NAME]   authenticate with a server
   stogo auth logout                                revoke token and forget server
   stogo list | ls [-t|-a] [-o json]                list tmux sessions (-t by activity, default; -a by name)
+  stogo new [flags] <name>                         create a session (quick-confirm prompts; see below)
   stogo connect | c <session>                      attach to a session (interactive)
   stogo offload <session>                          offload a session (stop it, keep it resumable)
   stogo kill <session>                             kill a session
@@ -30,8 +31,15 @@ Usage:
 Sessions may be addressed as NAME (unique across hosts), HOST/NAME, or the
 server-assigned numeric ID shown by "stogo list".
 
+"stogo new" (alias "create") prompts for directory, launch command and
+whether to connect, prefilled with remembered defaults — Enter accepts.
+$name and $date in the directory or command expand server-side. Flags
+answer prompts ahead of time: -host H, -dir D, -cmd C (- for none),
+-attach | -bg, and -y accepts every default without prompting.
+
 Config: ~/.config/stogo/config.json (overridable with STOGO_URL / STOGO_TOKEN
-environment variables for headless use).
+environment variables for headless use). The "new" section there holds the
+remembered defaults and can be edited directly.
 `
 
 func usage() {
@@ -50,6 +58,8 @@ func main() {
 		err = cmdAuth(os.Args[2:])
 	case "list", "ls":
 		err = cmdList(os.Args[2:])
+	case "new", "create":
+		err = cmdNew(os.Args[2:])
 	case "connect", "c":
 		err = cmdConnect(os.Args[2:])
 	case "offload":

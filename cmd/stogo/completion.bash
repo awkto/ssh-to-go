@@ -9,7 +9,7 @@ _stogo() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "auth list ls connect c offload kill status completion version help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "auth list ls new create connect c offload kill status completion version help" -- "$cur") )
         return
     fi
 
@@ -20,6 +20,9 @@ _stogo() {
         list|ls)
             [[ "$prev" == "-o" ]] && COMPREPLY=( $(compgen -W "json" -- "$cur") ) \
                 || COMPREPLY=( $(compgen -W "-t -a -o" -- "$cur") )
+            ;;
+        new|create)
+            [[ "$cur" == -* ]] && COMPREPLY=( $(compgen -W "-host -dir -cmd -attach -bg -y" -- "$cur") )
             ;;
         connect|c|offload|kill)
             if [[ $COMP_CWORD -eq 2 ]]; then
