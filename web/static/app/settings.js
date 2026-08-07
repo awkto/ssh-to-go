@@ -1,3 +1,5 @@
+// Settings
+
 const Settings = ({
   store
 }) => {
@@ -100,7 +102,7 @@ const Settings = ({
     className: "setting-row"
   }, React.createElement("div", {
     className: "setting-label"
-  }, React.createElement("h4", null, "Recent commands"), React.createElement("p", null, "Commands sessions were started with, offered as chips on the New Session form. Removing one applies immediately \u2014 no need to Save.")), React.createElement("div", null, (store.recentCommands || []).length === 0 ? React.createElement("span", {
+  }, React.createElement("h4", null, "Recent commands"), React.createElement("p", null, "Commands sessions were started with, offered as chips on the New Session form. Removing one applies immediately — no need to Save.")), React.createElement("div", null, (store.recentCommands || []).length === 0 ? React.createElement("span", {
     className: "muted",
     style: {
       fontSize: 12.5
@@ -115,7 +117,7 @@ const Settings = ({
     title: rc.command
   }, rc.command), React.createElement("span", {
     className: "rc-count mono"
-  }, rc.count, "\xD7"), React.createElement("button", {
+  }, rc.count, "×"), React.createElement("button", {
     type: "button",
     className: "rc-forget",
     title: `Forget ${rc.command}`,
@@ -208,6 +210,33 @@ const Settings = ({
     className: "setting-row"
   }, React.createElement("div", {
     className: "setting-label"
+  }, React.createElement("h4", null, "File browser button"), React.createElement("p", null, "Adds a button to the terminal toolbar that opens the session's current directory in an external file browser (e.g. ", React.createElement("a", {
+    href: "https://filebrowser.org",
+    target: "_blank",
+    rel: "noopener"
+  }, "filebrowser"), ") running against the same filesystem. Off unless you run one.")), React.createElement("div", null, React.createElement("label", {
+    className: "checkbox"
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: !!draft.file_browser_enabled,
+    onChange: e => set({
+      file_browser_enabled: e.target.checked
+    })
+  }), " Show in terminal toolbar"))), !!draft.file_browser_enabled && React.createElement("div", {
+    className: "setting-row"
+  }, React.createElement("div", {
+    className: "setting-label"
+  }, React.createElement("h4", null, "File browser base URL"), React.createElement("p", null, "The session's directory is appended to this, e.g. ", React.createElement("code", null, "https://files.example.com/files"), " becomes ", React.createElement("code", null, "…/files/home/you/project"), ".")), React.createElement("div", null, React.createElement("input", {
+    className: "input mono",
+    value: draft.file_browser_base_url || '',
+    onChange: e => set({
+      file_browser_base_url: e.target.value
+    }),
+    placeholder: "https://files.example.com/files"
+  }))), React.createElement("div", {
+    className: "setting-row"
+  }, React.createElement("div", {
+    className: "setting-label"
   }, React.createElement("h4", null, "New session icon"), React.createElement("p", null, "The icon & color a session gets when it's created.")), React.createElement("div", null, React.createElement("select", {
     className: "select",
     value: draft.session_icon_mode || 'random',
@@ -264,7 +293,7 @@ const Settings = ({
     style: {
       fontSize: 12
     }
-  }, "Read-only \xB7 management UI coming soon")), React.createElement("div", {
+  }, "Read-only · management UI coming soon")), React.createElement("div", {
     className: "panel-body"
   }, store.keypairs.length === 0 && React.createElement("div", {
     className: "muted",
@@ -444,7 +473,7 @@ const ApiTokensPanel = () => {
   const [name, setName] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
-  const [justCreated, setJustCreated] = React.useState(null);
+  const [justCreated, setJustCreated] = React.useState(null); // { name, token }
   const [copied, setCopied] = React.useState(false);
   const load = React.useCallback(async () => {
     try {
@@ -532,7 +561,7 @@ const ApiTokensPanel = () => {
     style: {
       color: 'var(--ok)'
     }
-  }, "New token: ", justCreated.name), React.createElement("p", null, "Copy it now \u2014 it won't be shown again. Paste this into the Android app's \"API token\" field.")), React.createElement("div", {
+  }, "New token: ", justCreated.name), React.createElement("p", null, "Copy it now — it won't be shown again. Paste this into the Android app's \"API token\" field.")), React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -599,7 +628,7 @@ const ApiTokensPanel = () => {
     style: {
       fontSize: 13
     }
-  }, "Loading\u2026"), tokens && tokens.length === 0 && React.createElement("div", {
+  }, "Loading…"), tokens && tokens.length === 0 && React.createElement("div", {
     className: "muted",
     style: {
       fontSize: 13

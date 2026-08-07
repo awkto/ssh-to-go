@@ -44,6 +44,13 @@ type Settings struct {
 	// directory and launch command) once it has had no client and nothing
 	// running for this many hours. 0 — the default — is off.
 	IdleOffloadHours int `json:"idle_offload_hours"`
+	// FileBrowserEnabled + FileBrowserBaseURL add an optional button to the
+	// web terminal toolbar that opens the session's current directory in an
+	// external file browser (e.g. filebrowser running on the same host):
+	// the session's absolute path is appended to the base URL and opened in
+	// a new tab. Off by default — most installs have no such service.
+	FileBrowserEnabled bool   `json:"file_browser_enabled,omitempty"`
+	FileBrowserBaseURL string `json:"file_browser_base_url,omitempty"`
 	// NativeMouseMode enables tmux's per-session mouse option on sessions
 	// ssh-to-go creates, so the wheel scrolls (via tmux copy-mode) when
 	// attaching from a native terminal instead of arriving as arrow keys.
@@ -168,6 +175,17 @@ func (sm *SettingsManager) Update(s Settings, ks *Store) error {
 	if s.NativeMouseMode != nil {
 		sm.settings.NativeMouseMode = s.NativeMouseMode
 	}
+	// Unconditional like NewSessionDir: clearing the field must stick. The
+	// trailing slash is stripped so the terminal can naively append paths.
+	fbURL := strings.TrimRight(strings.TrimSpace(s.FileBrowserBaseURL), "/")
+	if fbURL != "" && !strings.HasPrefix(fbURL, "http://") && !strings.HasPrefix(fbURL, "https://") {
+		return fmt.Errorf("invalid file_browser_base_url %q: must start with http:// or https://", fbURL)
+	}
+	if s.FileBrowserEnabled && fbURL == "" {
+		return fmt.Errorf("file_browser_base_url is required when the file browser button is enabled")
+	}
+	sm.settings.FileBrowserBaseURL = fbURL
+	sm.settings.FileBrowserEnabled = s.FileBrowserEnabled
 
 	return sm.save()
 }

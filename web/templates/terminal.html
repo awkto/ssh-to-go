@@ -90,6 +90,10 @@
             touch-action: manipulation;
         }
         .btn-icon:hover { background: #3a3a5a; color: #fff; }
+        /* The files button is an <a>; out-specialize the generic #toolbar a
+           link styling so it looks like its .btn-icon siblings. */
+        #toolbar a.btn-icon { color: #ccc; }
+        #toolbar a.btn-icon:hover { color: #fff; text-decoration: none; }
         .btn-icon svg { display: block; }
         .btn-icon.ok { color: #4ade80; border-color: #4ade80; }
         /* Tooltips for the icon-only toolbar buttons. Below and right-aligned:
@@ -340,6 +344,16 @@
             <span class="status" id="ws-status"></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
+            <!-- Optional file-browser link — hidden unless enabled in Settings
+                 with a base URL. Opens the session's current directory in an
+                 external file browser (base URL + absolute path) in a new tab. -->
+            <a class="btn-icon" id="files-btn" style="display:none;" target="_blank" rel="noopener"
+               data-tip="Open this session's directory in the file browser" aria-label="Open in file browser">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+            </a>
             <div style="position:relative;">
                 <!-- Swatch grid doubles as a preview: applyTheme() paints these
                      four squares with muted colours from the active theme. -->
@@ -464,7 +478,37 @@
                 var title = window.formatTabTitle(host, session);
                 document.title = title;
                 document.getElementById("session-label").textContent = title;
+                if (s.file_browser_enabled && s.file_browser_base_url) {
+                    setupFilesButton(s.file_browser_base_url);
+                }
             }).catch(function() {});
+
+            // File-browser button: looks up the session's current directory
+            // at click time and opens base URL + path in a new tab. The tab
+            // is opened synchronously (popup blockers require a user gesture)
+            // and pointed at the right place once the cwd lookup lands.
+            function setupFilesButton(baseUrl) {
+                var btn = document.getElementById('files-btn');
+                var base = baseUrl.replace(/\/+$/, '');
+                btn.href = base; // fallback for middle-click / open-in-new-tab
+                btn.style.display = '';
+                btn.addEventListener('click', function(e) {
+                    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    var tab = window.open('', '_blank');
+                    fetch('/api/hosts/' + encodeURIComponent(host) + '/sessions/' + encodeURIComponent(session) + '/cwd')
+                        .then(function(r) { if (!r.ok) throw new Error('cwd lookup failed'); return r.json(); })
+                        .then(function(d) {
+                            var url = d.cwd ? base + encodeURI(d.cwd) : base;
+                            if (tab) { tab.location = url; } else { window.open(url, '_blank'); }
+                        })
+                        .catch(function() {
+                            // Host unreachable or session gone — the base URL
+                            // still lands somewhere useful.
+                            if (tab) { tab.location = base; }
+                        });
+                });
+            }
         })();
     </script>
 </body>

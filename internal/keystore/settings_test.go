@@ -144,3 +144,44 @@ func TestUpdateValidatesSessionIconMode(t *testing.T) {
 		t.Errorf("after Update NewSessionIcon() = %+v, want cpu/sky", got)
 	}
 }
+
+func TestUpdateValidatesFileBrowser(t *testing.T) {
+	sm, err := NewSettingsManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewSettingsManager: %v", err)
+	}
+	ks := &Store{}
+
+	// A non-http(s) URL is rejected.
+	if err := sm.Update(Settings{FileBrowserBaseURL: "ftp://files.example.com"}, ks); err == nil {
+		t.Error("Update(ftp URL) = nil error, want validation error")
+	}
+	// Enabling the button without a URL is rejected.
+	if err := sm.Update(Settings{FileBrowserEnabled: true}, ks); err == nil {
+		t.Error("Update(enabled, no URL) = nil error, want validation error")
+	}
+
+	// Valid: URL is stored with the trailing slash stripped.
+	if err := sm.Update(Settings{FileBrowserEnabled: true, FileBrowserBaseURL: "https://files.example.com/files/"}, ks); err != nil {
+		t.Fatalf("Update(valid): %v", err)
+	}
+	got := sm.Get()
+	if !got.FileBrowserEnabled || got.FileBrowserBaseURL != "https://files.example.com/files" {
+		t.Errorf("settings = enabled=%v url=%q, want enabled with trimmed URL", got.FileBrowserEnabled, got.FileBrowserBaseURL)
+	}
+
+	// Turning it off keeps the URL for easy re-enabling; clearing the URL sticks.
+	if err := sm.Update(Settings{FileBrowserEnabled: false, FileBrowserBaseURL: "https://files.example.com/files"}, ks); err != nil {
+		t.Fatalf("Update(disable): %v", err)
+	}
+	got = sm.Get()
+	if got.FileBrowserEnabled || got.FileBrowserBaseURL != "https://files.example.com/files" {
+		t.Errorf("after disable: enabled=%v url=%q, want disabled with URL kept", got.FileBrowserEnabled, got.FileBrowserBaseURL)
+	}
+	if err := sm.Update(Settings{}, ks); err != nil {
+		t.Fatalf("Update(clear): %v", err)
+	}
+	if got := sm.Get(); got.FileBrowserBaseURL != "" {
+		t.Errorf("after clear: url=%q, want empty", got.FileBrowserBaseURL)
+	}
+}

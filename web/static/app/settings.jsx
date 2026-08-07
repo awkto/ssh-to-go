@@ -177,6 +177,28 @@ const Settings = ({ store }) => {
             </div>
             <div className="setting-row">
               <div className="setting-label">
+                <h4>File browser button</h4>
+                <p>Adds a button to the terminal toolbar that opens the session's current directory in an external file browser (e.g. <a href="https://filebrowser.org" target="_blank" rel="noopener">filebrowser</a>) running against the same filesystem. Off unless you run one.</p>
+              </div>
+              <div>
+                <label className="checkbox">
+                  <input type="checkbox" checked={!!draft.file_browser_enabled} onChange={e => set({file_browser_enabled: e.target.checked})} /> Show in terminal toolbar
+                </label>
+              </div>
+            </div>
+            {!!draft.file_browser_enabled && (
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>File browser base URL</h4>
+                  <p>The session's directory is appended to this, e.g. <code>https://files.example.com/files</code> becomes <code>…/files/home/you/project</code>.</p>
+                </div>
+                <div>
+                  <input className="input mono" value={draft.file_browser_base_url || ''} onChange={e => set({file_browser_base_url: e.target.value})} placeholder="https://files.example.com/files" />
+                </div>
+              </div>
+            )}
+            <div className="setting-row">
+              <div className="setting-label">
                 <h4>New session icon</h4>
                 <p>The icon &amp; color a session gets when it's created.</p>
               </div>
