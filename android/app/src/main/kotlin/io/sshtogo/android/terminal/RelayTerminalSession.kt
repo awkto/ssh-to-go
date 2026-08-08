@@ -68,6 +68,12 @@ class RelayTerminalSession(
          * the session.
          */
         val FINAL_CLOSE_CODES = setOf(1000, 4000, 4001, 4002)
+
+        /** Max size of one queued output chunk (giant frames are pre-sliced). */
+        const val PUMP_CHUNK = 32 * 1024
+
+        /** Bytes the pump parses per main-loop pass before yielding to input/draw. */
+        const val PUMP_BUDGET = 64 * 1024
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -138,6 +144,80 @@ class RelayTerminalSession(
     @Volatile
     private var emulatorReady = false
 
+    // ── Output pump ──────────────────────────────────────────────────────
+    // Incoming terminal data is NOT appended to the emulator directly. A
+    // heavy session's control-mode history prefill arrives as ONE WebSocket
+    // frame that can run to megabytes (a long Claude session's transcript),
+    // and parsing it in a single main-thread pass blocks input dispatch past
+    // the ~5s ANR threshold — the "terminal freezes, then Android offers to
+    // close the app" failure on opening such a session. (The legacy PTY
+    // pipeline had the same failure intermittently: the history arrived as a
+    // flood of 32KB frames, i.e. hundreds of queued main-thread posts.)
+    //
+    // Instead, everything the emulator must see IN ORDER — output bytes,
+    // notices, and order-sensitive actions like the winsize resize — goes
+    // through [pending], and [pump] processes a bounded budget per main-loop
+    // pass, re-posting itself while work remains so input events and drawing
+    // interleave with the parse. The terminal fills progressively instead of
+    // freezing. emulatorAppend itself must stay on the main thread (termux
+    // emulator is not thread-safe against rendering), so bounding the pass
+    // is the whole fix.
+
+    /** Queue of ByteArray chunks and Runnable actions; guarded by itself. */
+    private val pending = ArrayDeque<Any>()
+
+    /** Whether [pump] is posted/running; guarded by [pending]. */
+    private var pumpScheduled = false
+
+    private fun enqueueBytes(data: ByteArray) {
+        if (data.isEmpty()) return
+        synchronized(pending) {
+            // Pre-slice giant frames so one queue item never exceeds the
+            // budget — the pump processes whole items.
+            var off = 0
+            while (off < data.size) {
+                val end = minOf(off + PUMP_CHUNK, data.size)
+                pending.addLast(if (off == 0 && end == data.size) data else data.copyOfRange(off, end))
+                off = end
+            }
+            schedulePumpLocked()
+        }
+    }
+
+    /** Run [action] on the main thread, ordered after everything queued before it. */
+    private fun enqueueAction(action: Runnable) {
+        synchronized(pending) {
+            pending.addLast(action)
+            schedulePumpLocked()
+        }
+    }
+
+    private fun schedulePumpLocked() {
+        if (!pumpScheduled) {
+            pumpScheduled = true
+            main.post(pump)
+        }
+    }
+
+    private val pump = object : Runnable {
+        override fun run() {
+            var budget = PUMP_BUDGET
+            while (budget > 0) {
+                val item = synchronized(pending) { pending.removeFirstOrNull() } ?: break
+                when (item) {
+                    is Runnable -> item.run()
+                    is ByteArray -> {
+                        emulatorAppend(item, item.size)
+                        budget -= item.size
+                    }
+                }
+            }
+            synchronized(pending) {
+                if (pending.isEmpty()) pumpScheduled = false else main.post(this)
+            }
+        }
+    }
+
     fun ttyPath(): String? = hostTty
 
     override fun initializeEmulator(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
@@ -172,8 +252,10 @@ class RelayTerminalSession(
      */
     private fun applyWinsize(cols: Int, rows: Int) {
         if (cols <= 0 || rows <= 0) return
-        main.post {
-            if (emulator == null || lastCellW <= 0 || lastCellH <= 0) return@post
+        // Through the queue, not main.post: output that arrived BEFORE the
+        // winsize must be parsed at the old grid before we erase and resize.
+        enqueueAction {
+            if (emulator == null || lastCellW <= 0 || lastCellH <= 0) return@enqueueAction
             val clear = "\u001B[2J\u001B[H".toByteArray()
             emulatorAppend(clear, clear.size)
             suppressResizeEcho = true
@@ -257,12 +339,10 @@ class RelayTerminalSession(
         val attempt = retryCount.coerceAtMost(5)
         val delayMs = (1000L shl attempt).coerceAtMost(30_000L) // 1, 2, 4, 8, 16, 30, 30, …
         retryCount++
-        val notice = "\r\n[reconnecting in ${delayMs / 1000}s …]".toByteArray()
-        emulatorAppend(notice, notice.size)
+        enqueueBytes("\r\n[reconnecting in ${delayMs / 1000}s …]".toByteArray())
         val r = Runnable {
             if (userClosed) return@Runnable
-            val msg = "\r\n[reconnecting…]".toByteArray()
-            emulatorAppend(msg, msg.size)
+            enqueueBytes("\r\n[reconnecting…]".toByteArray())
             connect()
         }
         reconnectRunnable = r
@@ -290,8 +370,10 @@ class RelayTerminalSession(
                     // or every reconnect appends a duplicate copy of the
                     // whole transcript. First connect starts empty; skip.
                     if (connectedOnce) {
-                        val clear = "\u001B[3J\u001B[2J\u001B[H".toByteArray()
-                        emulatorAppend(clear, clear.size)
+                        // Stale bytes from the dead connection are garbage
+                        // now — the fresh prefill replaces them wholesale.
+                        synchronized(pending) { pending.clear() }
+                        enqueueBytes("\u001B[3J\u001B[2J\u001B[H".toByteArray())
                     }
                     connectedOnce = true
                 }
@@ -299,8 +381,7 @@ class RelayTerminalSession(
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                val bytesArr = bytes.toByteArray()
-                main.post { emulatorAppend(bytesArr, bytesArr.size) }
+                enqueueBytes(bytes.toByteArray())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -308,15 +389,11 @@ class RelayTerminalSession(
                     val msg = JSONObject(text)
                     when (msg.optString("type")) {
                         "tty" -> hostTty = msg.optString("tty").takeIf { it.isNotBlank() }
-                        "kicked" -> {
-                            val notice = "\r\n[detached by another client]".toByteArray()
-                            main.post { emulatorAppend(notice, notice.size) }
-                        }
+                        "kicked" -> enqueueBytes("\r\n[detached by another client]".toByteArray())
                         "winsize" -> applyWinsize(msg.optInt("cols"), msg.optInt("rows"))
                         "terminated" -> {
                             val reason = msg.optString("reason").ifBlank { "terminated" }
-                            val notice = "\r\n[session $reason]".toByteArray()
-                            main.post { emulatorAppend(notice, notice.size) }
+                            enqueueBytes("\r\n[session $reason]".toByteArray())
                         }
                     }
                 } catch (_: Throwable) {
@@ -328,8 +405,7 @@ class RelayTerminalSession(
                 main.post {
                     if (webSocket !== ws) return@post // a socket we've already replaced (pause/reconnect)
                     ws = null // dead — lets resume() reconnect immediately instead of early-returning
-                    val notice = "\r\n[connection closed${if (reason.isNotBlank()) " — $reason" else ""}]".toByteArray()
-                    emulatorAppend(notice, notice.size)
+                    enqueueBytes("\r\n[connection closed${if (reason.isNotBlank()) " — $reason" else ""}]".toByteArray())
                     // 4000/4001/4002 are deliberate ends (session over, kicked,
                     // killed/offloaded) — reconnecting would new-session -A the
                     // session straight back to life. Only network-shaped
@@ -346,8 +422,7 @@ class RelayTerminalSession(
                 main.post {
                     if (webSocket !== ws) return@post // a socket we've already replaced (pause/reconnect)
                     ws = null // dead — lets resume() reconnect immediately instead of early-returning
-                    val notice = "\r\n[connection error: ${t.message ?: t.javaClass.simpleName}]".toByteArray()
-                    emulatorAppend(notice, notice.size)
+                    enqueueBytes("\r\n[connection error: ${t.message ?: t.javaClass.simpleName}]".toByteArray())
                     if (!userClosed) scheduleReconnect()
                 }
             }
