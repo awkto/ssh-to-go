@@ -35,6 +35,20 @@ class RelayTerminalSession(
     client: TerminalSessionClient,
 ) : TerminalSession(null, client) {
 
+    private companion object {
+        /**
+         * Terminal-report replies the termux emulator auto-generates (never
+         * typed by a user): primary/secondary device attributes (CSI ? … c,
+         * CSI > … c), cursor-position reports incl. DECXCPR (CSI [?] r;c[;p] R
+         * — digits required, so the bare F-key shape ESC[R passes through),
+         * and DSR-ok (CSI 0 n). Kept in sync with reportReplyRegex in
+         * web/static/js/terminal.js.
+         */
+        val REPORT_REPLY = Regex(
+            "\u001B\\[\\?[0-9;]*c|\u001B\\[>[0-9;]*c|\u001B\\[\\??[0-9]+;[0-9]+(?:;[0-9]+)?R|\u001B\\[0n"
+        )
+    }
+
     private val main = Handler(Looper.getMainLooper())
 
     private val http: OkHttpClient = OkHttpClient.Builder()
@@ -91,7 +105,22 @@ class RelayTerminalSession(
     override fun write(data: ByteArray, offset: Int, count: Int) {
         // Skip mTerminalToProcessIOQueue entirely — send straight through the socket.
         val socket = ws ?: return
-        val slice = if (offset == 0 && count == data.size) data else data.copyOfRange(offset, offset + count)
+        var slice = if (offset == 0 && count == data.size) data else data.copyOfRange(offset, offset + count)
+        // Strip terminal-report auto-replies the emulator generates when a query
+        // reaches it — DA1/DA2 "who are you", DSR status, CPR cursor position
+        // (plain and DECXCPR forms). Mirrors reportReplyRegex in
+        // web/static/js/terminal.js (#79): no keyboard produces these byte
+        // shapes, and forwarding them is the one injection path that's ours —
+        // at the tmux end an unexpected reply gets typed into the pane as
+        // garbage like "?61;4;...52c". ISO-8859-1 round-trips bytes losslessly.
+        if (slice.contains(0x1b.toByte())) {
+            val s = String(slice, Charsets.ISO_8859_1)
+            val filtered = REPORT_REPLY.replace(s, "")
+            if (filtered.length != s.length) {
+                if (filtered.isEmpty()) return
+                slice = filtered.toByteArray(Charsets.ISO_8859_1)
+            }
+        }
         socket.send(ByteString.of(*slice))
     }
 
@@ -119,11 +148,14 @@ class RelayTerminalSession(
     }
 
     /**
-     * Called when the app returns to the foreground (screen wakes). The OS
-     * tears WebSockets down while backgrounded and the failure often isn't
+     * Called when the app returns to the foreground (screen wakes) and when
+     * this session's page becomes the visible one in the swipe carousel. The
+     * OS tears WebSockets down while backgrounded and the failure often isn't
      * observed until pings resume — leaving the page dead with no reconnect in
-     * flight. Reconnecting here makes wake-up recovery immediate. No-op if
-     * already connected, user-closed, or before the first connect.
+     * flight. Reconnecting here makes wake-up recovery immediate, and the
+     * page-change call guarantees a swipe never lands on a dead socket waiting
+     * out a reconnect backoff. No-op if already connected, user-closed, or
+     * before the first connect.
      */
     fun resume() {
         if (userClosed || !emulatorReady || ws != null) return
@@ -195,6 +227,7 @@ class RelayTerminalSession(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 main.post {
                     if (webSocket !== ws) return@post // a socket we've already replaced (pause/reconnect)
+                    ws = null // dead — lets resume() reconnect immediately instead of early-returning
                     val notice = "\r\n[connection closed${if (reason.isNotBlank()) " — $reason" else ""}]".toByteArray()
                     emulatorAppend(notice, notice.size)
                     if (!userClosed && code != 1000) scheduleReconnect()
@@ -204,6 +237,7 @@ class RelayTerminalSession(
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 main.post {
                     if (webSocket !== ws) return@post // a socket we've already replaced (pause/reconnect)
+                    ws = null // dead — lets resume() reconnect immediately instead of early-returning
                     val notice = "\r\n[connection error: ${t.message ?: t.javaClass.simpleName}]".toByteArray()
                     emulatorAppend(notice, notice.size)
                     if (!userClosed) scheduleReconnect()

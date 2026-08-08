@@ -4,6 +4,7 @@ import android.graphics.Typeface
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -17,6 +18,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.DropdownMenu
@@ -30,11 +32,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -107,21 +111,93 @@ fun TerminalScreen(
     fun sessionIndexFor(page: Int): Int = if (pageCount > 0) page % pageCount else 0
     val currentIndex = sessionIndexFor(pagerState.currentPage)
     val currentSession = list.getOrNull(currentIndex) ?: sessionName
+    val scope = rememberCoroutineScope()
+
+    // Reconnect relays across screen-off/on for the WHOLE working set, not
+    // just the visible page. This used to live inside SessionTerminal — with
+    // beyondViewportPageCount = 0 only the visible page is composed, so only
+    // the visible session got a clean pause(): every other opened session's
+    // socket died silently in the background, and a later swipe landed on a
+    // dead terminal until the 20s WebSocket ping finally noticed. Pause all
+    // cleanly on background; resume all on foreground so every tab is warm
+    // the moment it's swiped to (an idle attached tmux session sends nothing,
+    // so keeping the sockets open while foregrounded costs only pings).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, sessions) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> sessions.values.forEach { it.session.pause() }
+                Lifecycle.Event.ON_RESUME -> sessions.values.forEach { it.session.resume() }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // A swipe (or list jump) must never land on a dead socket: when the
+    // current page changes, nudge the session — reconnects immediately if the
+    // relay is down instead of waiting out a scheduled backoff. No-op on a
+    // healthy connection.
+    LaunchedEffect(pagerState, list) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            sessions[list[sessionIndexFor(page)]]?.session?.resume()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            "$currentSession @ $hostName",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        if (loop) {
+                    // The opened-sessions list ("tabs" overview): tapping the
+                    // title drops down the working set — the sessions opened
+                    // this run, same list the swipe carousel steps through —
+                    // and picking one jumps straight to it. Complements swipe
+                    // without any edge gesture (gesture nav owns both edges).
+                    var sessionListOpen by remember { mutableStateOf(false) }
+                    Box {
+                        Column(
+                            modifier = if (!loop) Modifier
+                            else Modifier.clickable { sessionListOpen = true },
+                        ) {
                             Text(
-                                "${currentIndex + 1} / $pageCount  ·  swipe to switch",
-                                style = MaterialTheme.typography.labelSmall,
+                                "$currentSession @ $hostName",
+                                style = MaterialTheme.typography.titleMedium,
                             )
+                            if (loop) {
+                                Text(
+                                    "${currentIndex + 1} / $pageCount  ·  tap for list · swipe to switch",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = sessionListOpen,
+                            onDismissRequest = { sessionListOpen = false },
+                        ) {
+                            list.forEachIndexed { idx, name ->
+                                DropdownMenuItem(
+                                    leadingIcon = if (idx == currentIndex)
+                                        { { Icon(Icons.Default.Check, contentDescription = null) } } else null,
+                                    text = { Text(name) },
+                                    onClick = {
+                                        sessionListOpen = false
+                                        if (idx != currentIndex) {
+                                            // Instant jump (scrollToPage, not animate):
+                                            // animating a multi-page scroll would compose —
+                                            // and therefore connect — every session it
+                                            // slides past, exactly what the opened-set
+                                            // design avoids. Nearest wrap direction keeps
+                                            // the virtual page near the middle of the range.
+                                            var delta = idx - currentIndex
+                                            if (delta > pageCount / 2) delta -= pageCount
+                                            if (delta < -pageCount / 2) delta += pageCount
+                                            val target = pagerState.currentPage + delta
+                                            scope.launch { pagerState.scrollToPage(target) }
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
                 },
@@ -194,7 +270,6 @@ fun TerminalScreen(
             )
         },
     ) { pad ->
-        val scope = rememberCoroutineScope()
         val switchThresholdPx = with(LocalDensity.current) { 56.dp.toPx() }
 
         // The pager is driven programmatically; we read touches ourselves on the
@@ -280,21 +355,8 @@ private fun SessionTerminal(holder: SessionHolder, hostName: String, sessionName
         onDispose { sessionClient.view = null }
     }
 
-    // Reconnect the relay across screen-off/on. The OS drops the WebSocket
-    // while backgrounded; close it on pause and re-establish on resume so the
-    // visible page recovers on wake instead of sitting on a dead socket.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, session) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> session.pause()
-                Lifecycle.Event.ON_RESUME -> session.resume()
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    // Pause/resume across screen-off/on is handled at the screen level (over
+    // the whole session cache), not per-page — see TerminalScreen.
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
