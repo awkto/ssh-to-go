@@ -207,7 +207,16 @@ class RelayTerminalSession(
                 when (item) {
                     is Runnable -> item.run()
                     is ByteArray -> {
-                        emulatorAppend(item, item.size)
+                        // emulatorAppendNow, NOT emulatorAppend: the latter
+                        // funnels through a bounded (64KB) blocking ByteQueue
+                        // whose drain side is this very thread — one pass
+                        // whose writes exceed the free space (e.g. the 8-byte
+                        // alt-screen preamble plus two full chunks) parked
+                        // the main thread in ByteQueue.write forever, the
+                        // blank-terminal ANR on heavy sessions. Direct append
+                        // has no queue, so nothing to block on; this pump is
+                        // already the ordering + batching layer.
+                        emulatorAppendNow(item, item.size)
                         budget -= item.size
                     }
                 }
@@ -257,7 +266,7 @@ class RelayTerminalSession(
         enqueueAction {
             if (emulator == null || lastCellW <= 0 || lastCellH <= 0) return@enqueueAction
             val clear = "\u001B[2J\u001B[H".toByteArray()
-            emulatorAppend(clear, clear.size)
+            emulatorAppendNow(clear, clear.size)
             suppressResizeEcho = true
             try {
                 updateSize(cols, rows, lastCellW, lastCellH)

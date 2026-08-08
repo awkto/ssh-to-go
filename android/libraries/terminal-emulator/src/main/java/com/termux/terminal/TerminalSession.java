@@ -144,12 +144,28 @@ public class TerminalSession extends TerminalOutput {
 
     /**
      * Push bytes received from the transport into the emulator on the main thread.
-     * Safe to call from any thread.
+     * Safe to call from any BACKGROUND thread. Do NOT call on the main thread:
+     * the queue is bounded (64KB) and write() blocks when full, while the
+     * consumer (MainThreadHandler) IS the main thread — a main-thread call
+     * that exceeds the free space deadlocks the app (frozen terminal → ANR).
+     * Main-thread callers use {@link #emulatorAppendNow} instead.
      */
     public void emulatorAppend(byte[] bytes, int length) {
         if (length <= 0) return;
         mProcessToTerminalIOQueue.write(bytes, 0, length);
         mMainThreadHandler.sendEmptyMessage(MSG_NEW_INPUT);
+    }
+
+    /**
+     * Parse bytes into the emulator immediately, bypassing the IO queue.
+     * MUST be called on the main thread, with the caller bounding its own
+     * batch sizes (see the relay's output pump). No queue means no capacity
+     * limit and no blocking — the ByteQueue self-deadlock above cannot occur.
+     */
+    public void emulatorAppendNow(byte[] bytes, int length) {
+        if (length <= 0 || mEmulator == null) return;
+        mEmulator.append(bytes, length);
+        notifyScreenUpdate();
     }
 
     public void reset() {
