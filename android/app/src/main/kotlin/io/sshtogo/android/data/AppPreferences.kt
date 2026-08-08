@@ -49,6 +49,27 @@ class AppPreferences(context: Context) {
             prefs.edit().putBoolean(KEY_SORT_BY_RECENT, value).apply()
         }
 
+    /**
+     * New Session form: last-used values, persisted so a repeat create is
+     * just tap-+, tap-Create — the mobile analog of the web form's
+     * localStorage defaults and stogo's ~/.config defaults. The directory
+     * and command are stored AS TYPED ($name and all): the template is the
+     * useful default, its expansion is one session's worth.
+     * An empty newSessionDir means "never set" — fall back to the server's
+     * new_session_dir setting.
+     */
+    var newSessionDir: String
+        get() = prefs.getString(KEY_NS_DIR, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_NS_DIR, value).apply() }
+
+    var newSessionCommand: String
+        get() = prefs.getString(KEY_NS_COMMAND, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_NS_COMMAND, value).apply() }
+
+    var newSessionCreateDir: Boolean
+        get() = prefs.getBoolean(KEY_NS_CREATE_DIR, true)
+        set(value) { prefs.edit().putBoolean(KEY_NS_CREATE_DIR, value).apply() }
+
     /** Terminal font size in sp. Default 14, range [TerminalFontSizeMinSp, TerminalFontSizeMaxSp]. */
     var terminalFontSizeSp: Float
         get() = prefs.getFloat(KEY_FONT_SIZE_SP, DEFAULT_FONT_SIZE_SP)
@@ -93,6 +114,9 @@ class AppPreferences(context: Context) {
         private const val KEY_PALETTE_PREFIX = "palette."
         private const val KEY_THEME_MODE = "app_theme_mode"
         private const val KEY_SORT_BY_RECENT = "sort_sessions_by_recent"
+        private const val KEY_NS_DIR = "new_session_dir"
+        private const val KEY_NS_COMMAND = "new_session_command"
+        private const val KEY_NS_CREATE_DIR = "new_session_create_dir"
         const val DEFAULT_FONT_SIZE_SP = 14f
         const val DEFAULT_PALETTE_NAME = "DEFAULT"
         const val TerminalFontSizeMinSp = 8f

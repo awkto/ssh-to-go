@@ -34,9 +34,25 @@ interface SshToGoApi {
 
     // Create a new tmux session on a host. Mirrors the web UI's
     // POST /api/hosts/{host}/sessions. The server sanitizes the name
-    // (spaces -> hyphens) and returns 409 if it already exists.
+    // (spaces -> hyphens), expands $name/$date in cwd and command
+    // server-side, and returns 409 if the name already exists (live or
+    // offloaded). The response carries the sanitized name — open the
+    // terminal with THAT, not the typed name.
     @POST("api/hosts/{host}/sessions")
-    suspend fun createSession(@Path("host") host: String, @Body req: CreateSessionRequest)
+    suspend fun createSession(
+        @Path("host") host: String,
+        @Body req: CreateSessionRequest,
+    ): CreateSessionResponse
+
+    // Commands sessions were started with, most recent first (server-side
+    // list, shared with the web New Session form's chips; capped at 20).
+    @GET("api/recent-commands")
+    suspend fun recentCommands(): List<RecentCommand>
+
+    // Server settings. Only the fields the app uses are modelled; the JSON
+    // decoder ignores the rest.
+    @GET("api/settings")
+    suspend fun settings(): ServerSettings
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -101,6 +117,40 @@ data class TmuxSession(
 data class CreateSessionRequest(
     val name: String,
     val cwd: String = "",
+    // Create the working directory on the host if it doesn't exist yet.
+    @SerialName("create_dir") val createDir: Boolean = false,
+    // Launch command typed into the fresh session (send-keys after the
+    // shell prompt appears). Empty = plain shell.
+    val command: String = "",
+    // Throwaway sessions are killed by the server sweeper after sitting
+    // idle with no client attached.
+    val throwaway: Boolean = false,
+    // Incognito sessions are hidden from listings and never recorded in
+    // the recent-commands chips.
+    val incognito: Boolean = false,
+)
+
+@Serializable
+data class CreateSessionResponse(
+    val status: String = "",
+    // The sanitized name tmux really uses (typed "my session" becomes
+    // "my-session") — the name to open the terminal with.
+    val name: String = "",
+)
+
+@Serializable
+data class RecentCommand(
+    val command: String,
+    @SerialName("last_used") val lastUsed: String = "",
+    val count: Int = 0,
+)
+
+// Subset of the server settings the app reads; unknown fields are ignored.
+@Serializable
+data class ServerSettings(
+    // Prefill for the New Session working-directory field (server default
+    // is "~/sessions/"). Used only when the app has no persisted last value.
+    @SerialName("new_session_dir") val newSessionDir: String = "",
 )
 
 @Serializable

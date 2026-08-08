@@ -18,6 +18,13 @@ data class DashboardState(
     val error: String? = null,
     val hosts: List<HostState> = emptyList(),
     val sessions: List<HostSession> = emptyList(),
+    // New Session form context, fetched alongside the dashboard data.
+    // recentCommands feeds the command chips (server-side list, shared with
+    // the web form); serverNewSessionDir is the directory prefill fallback
+    // when the app has no persisted last value. Both are best-effort — a
+    // failure just means an emptier form, never a failed dashboard.
+    val recentCommands: List<String> = emptyList(),
+    val serverNewSessionDir: String = "",
 )
 
 class DashboardViewModel(private val profile: ServerProfile) : ViewModel() {
@@ -36,7 +43,17 @@ class DashboardViewModel(private val profile: ServerProfile) : ViewModel() {
             try {
                 val hosts = api.hosts()
                 val sessions = api.sessions().map { it.toHostSession() }
-                _state.value = DashboardState(loading = false, hosts = hosts, sessions = sessions)
+                val recents = runCatching { api.recentCommands().map { it.command } }
+                    .getOrDefault(_state.value.recentCommands)
+                val serverDir = runCatching { api.settings().newSessionDir }
+                    .getOrDefault(_state.value.serverNewSessionDir)
+                _state.value = DashboardState(
+                    loading = false,
+                    hosts = hosts,
+                    sessions = sessions,
+                    recentCommands = recents,
+                    serverNewSessionDir = serverDir,
+                )
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(loading = false, error = t.message ?: "Failed to load")
             }
@@ -44,19 +61,25 @@ class DashboardViewModel(private val profile: ServerProfile) : ViewModel() {
     }
 
     /**
-     * Create a new tmux session on [hostName]. Invokes [onResult] with null on
-     * success (and refreshes the list) or an error message on failure (e.g. a
-     * 409 when the name already exists).
+     * Create a new tmux session on [hostName]. Invokes [onResult] with
+     * (null, sanitizedName) on success — the server's sanitized name is the
+     * one tmux really uses, so the terminal must be opened with it — or
+     * (errorMessage, null) on failure (e.g. a 409 when the name collides
+     * with a live or offloaded session).
      */
-    fun createSession(hostName: String, name: String, cwd: String, onResult: (error: String?) -> Unit) {
+    fun createSession(
+        hostName: String,
+        req: CreateSessionRequest,
+        onResult: (error: String?, createdName: String?) -> Unit,
+    ) {
         viewModelScope.launch {
             val api = SshToGoClient.forProfile(profile)
             try {
-                api.createSession(hostName, CreateSessionRequest(name = name.trim(), cwd = cwd.trim()))
-                onResult(null)
+                val resp = api.createSession(hostName, req)
+                onResult(null, resp.name.ifBlank { req.name })
                 refresh()
             } catch (t: Throwable) {
-                onResult(t.message ?: "Failed to create session")
+                onResult(t.message ?: "Failed to create session", null)
             }
         }
     }

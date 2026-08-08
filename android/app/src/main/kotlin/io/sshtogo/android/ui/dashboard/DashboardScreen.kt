@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.sshtogo.android.SshToGoApplication
 import io.sshtogo.android.appVersionName
+import io.sshtogo.android.net.CreateSessionRequest
 import io.sshtogo.android.net.HostSession
 import io.sshtogo.android.net.HostState
 
@@ -170,8 +171,10 @@ fun DashboardScreen(
                     modifier = Modifier.padding(pad),
                     hosts = state.hosts,
                     sessions = state.sessions,
+                    recentCommands = state.recentCommands,
+                    serverNewSessionDir = state.serverNewSessionDir,
                     onOpenSession = onOpenSession,
-                    onCreateSession = { host, name, cwd, cb -> vm.createSession(host, name, cwd, cb) },
+                    onCreateSession = { host, req, cb -> vm.createSession(host, req, cb) },
                 )
             }
         }
@@ -183,8 +186,10 @@ private fun DashboardList(
     modifier: Modifier,
     hosts: List<HostState>,
     sessions: List<HostSession>,
+    recentCommands: List<String>,
+    serverNewSessionDir: String,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
-    onCreateSession: (host: String, name: String, cwd: String, onResult: (String?) -> Unit) -> Unit,
+    onCreateSession: (host: String, req: CreateSessionRequest, onResult: (String?, String?) -> Unit) -> Unit,
 ) {
     val sessionsByHost = sessions.groupBy { it.host }
     // Reading this state-backed pref here re-sorts the list when toggled.
@@ -203,6 +208,8 @@ private fun DashboardList(
                 sessions = if (sortByRecent)
                     hostSessions.sortedByDescending { it.activityEpochMs }
                 else hostSessions,
+                recentCommands = recentCommands,
+                serverNewSessionDir = serverNewSessionDir,
                 onOpenSession = onOpenSession,
                 onCreateSession = onCreateSession,
             )
@@ -214,60 +221,26 @@ private fun DashboardList(
 private fun HostCard(
     host: HostState,
     sessions: List<HostSession>,
+    recentCommands: List<String>,
+    serverNewSessionDir: String,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
-    onCreateSession: (host: String, name: String, cwd: String, onResult: (String?) -> Unit) -> Unit,
+    onCreateSession: (host: String, req: CreateSessionRequest, onResult: (String?, String?) -> Unit) -> Unit,
 ) {
     var showCreate by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
-    var newCwd by remember { mutableStateOf("") }
-    var creating by remember { mutableStateOf(false) }
-    var createError by remember { mutableStateOf<String?>(null) }
 
     if (showCreate) {
-        AlertDialog(
-            onDismissRequest = { if (!creating) showCreate = false },
-            title = { Text("New session on ${host.name}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it; createError = null },
-                        label = { Text("Session name") },
-                        singleLine = true,
-                        enabled = !creating,
-                    )
-                    OutlinedTextField(
-                        value = newCwd,
-                        onValueChange = { newCwd = it },
-                        label = { Text("Working directory (optional)") },
-                        singleLine = true,
-                        enabled = !creating,
-                    )
-                    createError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
+        NewSessionDialog(
+            hostName = host.name,
+            recentCommands = recentCommands,
+            serverNewSessionDir = serverNewSessionDir,
+            onCreate = { req, cb -> onCreateSession(host.name, req, cb) },
+            onCreated = { createdName ->
+                showCreate = false
+                // Straight into the terminal — the mobile analog of the web
+                // form's "then attach".
+                onOpenSession(host.name, createdName)
             },
-            confirmButton = {
-                TextButton(
-                    enabled = newName.isNotBlank() && !creating,
-                    onClick = {
-                        creating = true
-                        createError = null
-                        onCreateSession(host.name, newName, newCwd) { err ->
-                            creating = false
-                            if (err == null) {
-                                showCreate = false; newName = ""; newCwd = ""
-                            } else {
-                                createError = err
-                            }
-                        }
-                    },
-                ) { Text(if (creating) "Creating…" else "Create") }
-            },
-            dismissButton = {
-                TextButton(enabled = !creating, onClick = { showCreate = false }) { Text("Cancel") }
-            },
+            onDismiss = { showCreate = false },
         )
     }
 
@@ -281,7 +254,7 @@ private fun HostCard(
                     modifier = Modifier.padding(start = 8.dp),
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = { newName = ""; newCwd = ""; createError = null; showCreate = true }) {
+                IconButton(onClick = { showCreate = true }) {
                     Icon(Icons.Default.Add, contentDescription = "New session on ${host.name}")
                 }
             }
