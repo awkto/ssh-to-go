@@ -18,15 +18,27 @@ import java.util.concurrent.TimeUnit
  * A TerminalSession that pipes the emulator's I/O through ssh-to-go's
  * /ws/{host}/{session} relay instead of a local PTY.
  *
+ * Attaches with mode=control — the tmux control-mode pipeline the web
+ * client has defaulted to since the control-mode rewrite: history is
+ * prefilled over the control channel and live output streams as %output
+ * events, so reconnects prefill cleanly instead of replaying capture-pane
+ * repaints over existing scrollback.
+ *
  * Wire protocol:
  *  - Binary frames are raw terminal bytes (server → client = tmux output,
  *    client → server = user input).
  *  - Text frames are JSON control messages:
- *      {"type":"tty",  "tty":"/dev/pts/N"}  (informational; sent on attach)
- *      {"type":"kicked"}                    (another client took over)
- *      {"type":"resize","cols":C,"rows":R}  (sent by us on size change)
+ *      {"type":"tty",  "tty":"..."}          (informational; sent on attach)
+ *      {"type":"kicked"}                     (another client took over)
+ *      {"type":"terminated","reason":"..."}  (session deliberately killed/offloaded)
+ *      {"type":"winsize","cols":C,"rows":R}  (another client resized the tmux
+ *                                             window; match our grid to it — #80)
+ *      {"type":"resize","cols":C,"rows":R}   (sent by us on size change)
+ *  - Close codes 4000 (session ended), 4001 (kicked) and 4002 (terminated)
+ *    are FINAL — reconnecting after them would run new-session -A and
+ *    resurrect a session someone just deliberately killed.
  *  - mouse=off disables tmux mouse mode so swipes aren't forwarded into
- *    copy-mode (smooth scroll comes from the view layer in Phase 3).
+ *    copy-mode (smooth scroll comes from the view layer).
  */
 class RelayTerminalSession(
     private val profile: ServerProfile,
@@ -47,6 +59,15 @@ class RelayTerminalSession(
         val REPORT_REPLY = Regex(
             "\u001B\\[\\?[0-9;]*c|\u001B\\[>[0-9;]*c|\u001B\\[\\??[0-9]+;[0-9]+(?:;[0-9]+)?R|\u001B\\[0n"
         )
+
+        /**
+         * Relay close codes that mean the session is over on purpose:
+         * 1000 clean close, 4000 session ended, 4001 kicked by another
+         * client, 4002 deliberately killed/offloaded. Never reconnect after
+         * these — the control-mode attach (new-session -A) would resurrect
+         * the session.
+         */
+        val FINAL_CLOSE_CODES = setOf(1000, 4000, 4001, 4002)
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -68,9 +89,38 @@ class RelayTerminalSession(
     @Volatile
     private var lastRows: Int = 0
 
+    @Volatile
+    private var lastCellW: Int = 0
+
+    @Volatile
+    private var lastCellH: Int = 0
+
+    /**
+     * Set while applying a server-forced winsize: the resulting
+     * onSizeChanged must NOT echo back to the server as our declared size,
+     * or the relay would treat the foreign window size as ours and never
+     * lift the override (mirrors the web client's applyWinsize guard).
+     */
+    @Volatile
+    private var suppressResizeEcho = false
+
+    /** True after the first successful open — a later open is a reconnect. */
+    @Volatile
+    private var connectedOnce = false
+
     /** Set when finishIfRunning() is called — no reconnect after a user-initiated close. */
     @Volatile
     private var userClosed = false
+
+    /**
+     * Set when the relay closed with a FINAL code (session ended, kicked,
+     * killed/offloaded). Gates resume() as well as the backoff: swiping back
+     * to this page must not reconnect either — new-session -A would
+     * resurrect the session. Cleared only by recreating the holder (reopen
+     * from the dashboard).
+     */
+    @Volatile
+    private var sessionOver = false
 
     /** Number of consecutive failed reconnects; resets on a healthy onOpen. */
     @Volatile
@@ -91,15 +141,48 @@ class RelayTerminalSession(
     fun ttyPath(): String? = hostTty
 
     override fun initializeEmulator(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
+        lastCellW = cellWidthPixels
+        lastCellH = cellHeightPixels
         super.initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels)
         connect()
         emulatorReady = true
     }
 
     override fun onSizeChanged(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
+        lastCellW = cellWidthPixels
+        lastCellH = cellHeightPixels
+        // A server-forced winsize is not OUR size: don't record it as the
+        // declared grid and don't echo it back (see suppressResizeEcho).
+        if (suppressResizeEcho) return
         lastCols = columns
         lastRows = rows
         sendResize(columns, rows)
+    }
+
+    /**
+     * Another client resized the tmux window (issue #80): control-mode output
+     * is only correct while the window width equals our grid width, so the
+     * relay tells us to match the window. Erase the stale frame first — it
+     * can't be correct at the new width and would reflow into wrapped junk —
+     * then resize the emulator; the relay follows up with a full repaint of
+     * the visible frame. When the window returns to our declared size the
+     * relay sends a winsize with our own dimensions and the same path
+     * restores. The view clips columns beyond its width until then (the web
+     * client scrolls horizontally instead).
+     */
+    private fun applyWinsize(cols: Int, rows: Int) {
+        if (cols <= 0 || rows <= 0) return
+        main.post {
+            if (emulator == null || lastCellW <= 0 || lastCellH <= 0) return@post
+            val clear = "\u001B[2J\u001B[H".toByteArray()
+            emulatorAppend(clear, clear.size)
+            suppressResizeEcho = true
+            try {
+                updateSize(cols, rows, lastCellW, lastCellH)
+            } finally {
+                suppressResizeEcho = false
+            }
+        }
     }
 
     override fun write(data: ByteArray, offset: Int, count: Int) {
@@ -158,7 +241,7 @@ class RelayTerminalSession(
      * before the first connect.
      */
     fun resume() {
-        if (userClosed || !emulatorReady || ws != null) return
+        if (userClosed || sessionOver || !emulatorReady || ws != null) return
         reconnectRunnable?.let { main.removeCallbacks(it) }
         reconnectRunnable = null
         retryCount = 0
@@ -191,7 +274,7 @@ class RelayTerminalSession(
         val wsUrl = base
             .replaceFirst(Regex("^https://"), "wss://")
             .replaceFirst(Regex("^http://"), "ws://") +
-            "/ws/" + encode(hostName) + "/" + encode(sessionName) + "?mouse=off"
+            "/ws/" + encode(hostName) + "/" + encode(sessionName) + "?mouse=off&mode=control"
 
         val req = Request.Builder()
             .url(wsUrl)
@@ -200,7 +283,18 @@ class RelayTerminalSession(
 
         ws = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                main.post { retryCount = 0 }
+                main.post {
+                    retryCount = 0
+                    // A reconnect gets the full history prefilled again over
+                    // the control channel — wipe screen AND scrollback first
+                    // or every reconnect appends a duplicate copy of the
+                    // whole transcript. First connect starts empty; skip.
+                    if (connectedOnce) {
+                        val clear = "\u001B[3J\u001B[2J\u001B[H".toByteArray()
+                        emulatorAppend(clear, clear.size)
+                    }
+                    connectedOnce = true
+                }
                 if (lastCols > 0 && lastRows > 0) sendResize(lastCols, lastRows)
             }
 
@@ -218,6 +312,12 @@ class RelayTerminalSession(
                             val notice = "\r\n[detached by another client]".toByteArray()
                             main.post { emulatorAppend(notice, notice.size) }
                         }
+                        "winsize" -> applyWinsize(msg.optInt("cols"), msg.optInt("rows"))
+                        "terminated" -> {
+                            val reason = msg.optString("reason").ifBlank { "terminated" }
+                            val notice = "\r\n[session $reason]".toByteArray()
+                            main.post { emulatorAppend(notice, notice.size) }
+                        }
                     }
                 } catch (_: Throwable) {
                     // Ignore malformed control frames.
@@ -230,7 +330,15 @@ class RelayTerminalSession(
                     ws = null // dead — lets resume() reconnect immediately instead of early-returning
                     val notice = "\r\n[connection closed${if (reason.isNotBlank()) " — $reason" else ""}]".toByteArray()
                     emulatorAppend(notice, notice.size)
-                    if (!userClosed && code != 1000) scheduleReconnect()
+                    // 4000/4001/4002 are deliberate ends (session over, kicked,
+                    // killed/offloaded) — reconnecting would new-session -A the
+                    // session straight back to life. Only network-shaped
+                    // closes are worth retrying.
+                    if (code in FINAL_CLOSE_CODES) {
+                        sessionOver = true
+                    } else if (!userClosed) {
+                        scheduleReconnect()
+                    }
                 }
             }
 
