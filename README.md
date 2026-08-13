@@ -1,3 +1,5 @@
+
+
 # ssh-to-go
 
 **Your terminal sessions, anywhere.** A web-based tmux session manager that lets you access persistent terminal sessions from any device with a browser — no agents, no plugins, single binary.
@@ -192,6 +194,17 @@ offload/recreate.
 Tab completion for subcommands **and session names** ships with the .deb; for
 other installs add `source <(stogo completion bash)` to your `~/.bashrc`.
 
+### Android App
+
+A native Android client for on-the-go access. Download the APK from a
+[GitHub release](https://github.com/awkto/ssh-to-go/releases) tagged with
+`android-v*`.
+
+Connect by entering your server URL and an API token (created in Settings →
+API Tokens on the web UI). The app supports the full session dashboard with
+tap-to-open terminals, custom color palettes per session, and most-recently-used
+sorting. See `android/README.md` for build and architecture details.
+
 ### MCP Server (interactive TUIs)
 
 An MCP server (SSE at `/mcp/sse`, docs at `/mcpdocs`, enable it in Settings)
@@ -291,6 +304,9 @@ docker run -p 8080:8080 \
 # Fully ephemeral
 docker run -p 8080:8080 awkto/ssh-to-go
 ```
+
+See `docker-config.yaml` in the repository for a working Docker config example.
+Note: the `data_dir` must be set to `/data` to match the mounted volume.
 
 ---
 
