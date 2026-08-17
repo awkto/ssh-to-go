@@ -792,9 +792,16 @@ function initTerminal(host, session) {
             refit();
         }
         if (f.css && document.fonts && document.fonts.load) {
+            // The 400 face must load too even when another weight is picked:
+            // xterm's CharSizeService measure element only sets font-family
+            // and font-size, so it measures at the inherited normal (400)
+            // weight. Without the 400 face the grid is measured against the
+            // fallback font and fit() packs in extra columns — the glyph rows
+            // then overflow the window and typing drags the view sideways.
             Promise.all([
                 document.fonts.load(weight + " 14px " + f.css),
                 document.fonts.load(boldWeight + " 14px " + f.css),
+                document.fonts.load("400 14px " + f.css),
             ]).then(set, set);
         } else {
             set();
