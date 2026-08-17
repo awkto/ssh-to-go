@@ -1,0 +1,62 @@
+/* Self-hosted terminal fonts (woff2, latin subset) for the web terminal's
+   font picker. Sourced from fontsource (jsDelivr) except Hack, which comes
+   from the hack-font npm package. font-display:block — a terminal canvas
+   measured against a fallback font and then repainted in the real one would
+   reflow the whole grid; better to wait the few ms the local fetch takes.
+
+   Families with only 400/700 rely on the browser picking the nearest weight
+   when Light (300) or Semibold (600) is selected — acceptable, and the
+   picker in terminal.js knows which weights each family really has. */
+
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 300; font-display: block; src: url("jetbrains-mono-300.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("jetbrains-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: block; src: url("jetbrains-mono-500.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("jetbrains-mono-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Fira Code"; font-style: normal; font-weight: 300; font-display: block; src: url("fira-code-300.woff2") format("woff2"); }
+@font-face { font-family: "Fira Code"; font-style: normal; font-weight: 400; font-display: block; src: url("fira-code-400.woff2") format("woff2"); }
+@font-face { font-family: "Fira Code"; font-style: normal; font-weight: 500; font-display: block; src: url("fira-code-500.woff2") format("woff2"); }
+@font-face { font-family: "Fira Code"; font-style: normal; font-weight: 700; font-display: block; src: url("fira-code-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Cascadia Code"; font-style: normal; font-weight: 300; font-display: block; src: url("cascadia-code-300.woff2") format("woff2"); }
+@font-face { font-family: "Cascadia Code"; font-style: normal; font-weight: 400; font-display: block; src: url("cascadia-code-400.woff2") format("woff2"); }
+@font-face { font-family: "Cascadia Code"; font-style: normal; font-weight: 500; font-display: block; src: url("cascadia-code-500.woff2") format("woff2"); }
+@font-face { font-family: "Cascadia Code"; font-style: normal; font-weight: 700; font-display: block; src: url("cascadia-code-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 300; font-display: block; src: url("source-code-pro-300.woff2") format("woff2"); }
+@font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 400; font-display: block; src: url("source-code-pro-400.woff2") format("woff2"); }
+@font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 500; font-display: block; src: url("source-code-pro-500.woff2") format("woff2"); }
+@font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 700; font-display: block; src: url("source-code-pro-700.woff2") format("woff2"); }
+
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 300; font-display: block; src: url("ibm-plex-mono-300.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("ibm-plex-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: block; src: url("ibm-plex-mono-500.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("ibm-plex-mono-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Roboto Mono"; font-style: normal; font-weight: 300; font-display: block; src: url("roboto-mono-300.woff2") format("woff2"); }
+@font-face { font-family: "Roboto Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("roboto-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "Roboto Mono"; font-style: normal; font-weight: 500; font-display: block; src: url("roboto-mono-500.woff2") format("woff2"); }
+@font-face { font-family: "Roboto Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("roboto-mono-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Inconsolata"; font-style: normal; font-weight: 300; font-display: block; src: url("inconsolata-300.woff2") format("woff2"); }
+@font-face { font-family: "Inconsolata"; font-style: normal; font-weight: 400; font-display: block; src: url("inconsolata-400.woff2") format("woff2"); }
+@font-face { font-family: "Inconsolata"; font-style: normal; font-weight: 500; font-display: block; src: url("inconsolata-500.woff2") format("woff2"); }
+@font-face { font-family: "Inconsolata"; font-style: normal; font-weight: 700; font-display: block; src: url("inconsolata-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Hack"; font-style: normal; font-weight: 400; font-display: block; src: url("hack-400.woff2") format("woff2"); }
+@font-face { font-family: "Hack"; font-style: normal; font-weight: 700; font-display: block; src: url("hack-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Ubuntu Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("ubuntu-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "Ubuntu Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("ubuntu-mono-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("space-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("space-mono-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Anonymous Pro"; font-style: normal; font-weight: 400; font-display: block; src: url("anonymous-pro-400.woff2") format("woff2"); }
+@font-face { font-family: "Anonymous Pro"; font-style: normal; font-weight: 700; font-display: block; src: url("anonymous-pro-700.woff2") format("woff2"); }
+
+@font-face { font-family: "DejaVu Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("dejavu-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "DejaVu Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("dejavu-mono-700.woff2") format("woff2"); }
+
+@font-face { font-family: "Cousine"; font-style: normal; font-weight: 400; font-display: block; src: url("cousine-400.woff2") format("woff2"); }
+@font-face { font-family: "Cousine"; font-style: normal; font-weight: 700; font-display: block; src: url("cousine-700.woff2") format("woff2"); }

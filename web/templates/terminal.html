@@ -6,6 +6,7 @@
     <title>{{if eq .TabTitleFormat "host-only"}}{{.Host}}{{else if eq .TabTitleFormat "session-only"}}{{.Session}}{{else if eq .TabTitleFormat "session-host"}}{{.Session}} / {{.Host}}{{else}}{{.Host}} / {{.Session}}{{end}}</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 17 10 11 4 5'/%3E%3Cline x1='12' y1='19' x2='20' y2='19'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/vendor/xterm.css">
+    <link rel="stylesheet" href="/static/vendor/fonts/fonts.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; background: #1a1a2e; overflow: hidden; }
@@ -273,6 +274,61 @@
             border: 1px solid rgba(255,255,255,0.1);
         }
 
+        /* Font picker — same chrome as the theme dropdown. Holds the size
+           row (moved here from the burger menu), a weight selector, and the
+           family list, each family previewed in its own face. */
+        .font-dropdown {
+            right: 0; left: auto;
+            max-height: 420px;
+            overflow-y: auto;
+            min-width: 230px;
+            padding: 4px 0;
+        }
+        .font-section-label {
+            padding: 8px 14px 2px;
+            font-size: 10.5px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #8a8aa8;
+        }
+        .font-weight-row {
+            display: flex;
+            gap: 4px;
+            padding: 6px 12px 8px;
+        }
+        .font-weight-row button {
+            flex: 1;
+            background: #2a2a4a;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 5px 0;
+            font-family: inherit;
+            touch-action: manipulation;
+        }
+        .font-weight-row button:hover { background: #3a3a5a; color: #fff; }
+        .font-weight-row button.active {
+            background: #2a2a5a;
+            border-color: #7c83ff;
+            color: #fff;
+        }
+        .font-option {
+            display: block;
+            width: 100%;
+            padding: 7px 14px;
+            background: none;
+            border: none;
+            color: #e0e0e8;
+            font-size: 13px;
+            text-align: left;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .font-option:hover { background: #3a3a5a; }
+        .font-option.active { background: #2a2a5a; font-weight: 600; }
+
         #terminal { flex: 1; min-height: 0; overflow: hidden; }
         /* xterm.js's local viewport scrollbar is the real scrollback now —
            the relay strips tmux's mouse/alt-screen escapes and prefills
@@ -370,6 +426,36 @@
                      many to step through blind. -->
                 <div id="theme-flash" class="theme-flash" aria-live="polite"></div>
             </div>
+            <div style="position:relative;">
+                <button class="btn-icon" id="font-btn" data-tip="Font, size and weight" aria-label="Terminal font" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="4 7 4 4 20 4 20 7"/>
+                        <line x1="9" y1="20" x2="15" y2="20"/>
+                        <line x1="12" y1="4" x2="12" y2="20"/>
+                    </svg>
+                </button>
+                <div id="font-dropdown" class="toolbar-dropdown font-dropdown" style="display:none;">
+                    <div class="menu-zoom">
+                        <span class="menu-zoom-label">Size</span>
+                        <div class="menu-zoom-ctl">
+                            <button type="button" id="zoom-out-btn" title="Smaller">&#8722;</button>
+                            <button type="button" id="zoom-reset-btn" title="Reset"><span id="zoom-level">14</span></button>
+                            <button type="button" id="zoom-in-btn" title="Larger">+</button>
+                        </div>
+                    </div>
+                    <div class="toolbar-menu-divider"></div>
+                    <div class="font-section-label">Weight</div>
+                    <div class="font-weight-row" id="font-weight-row">
+                        <button type="button" data-weight="300">Light</button>
+                        <button type="button" data-weight="400">Regular</button>
+                        <button type="button" data-weight="500">Medium</button>
+                    </div>
+                    <div class="toolbar-menu-divider"></div>
+                    <div class="font-section-label">Font</div>
+                    <div id="font-list"></div>
+                </div>
+            </div>
             <button class="btn-icon" id="handoff-btn" data-tip="Copy the SSH command to attach from your own terminal" aria-label="Copy SSH command">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -388,15 +474,6 @@
                     </svg>
                 </button>
                 <div id="toolbar-menu" class="toolbar-dropdown" style="display:none;">
-                    <div class="menu-zoom">
-                        <span class="menu-zoom-label">Font size</span>
-                        <div class="menu-zoom-ctl">
-                            <button type="button" id="zoom-out-btn" title="Smaller">&#8722;</button>
-                            <button type="button" id="zoom-reset-btn" title="Reset"><span id="zoom-level">14</span></button>
-                            <button type="button" id="zoom-in-btn" title="Larger">+</button>
-                        </div>
-                    </div>
-                    <div class="toolbar-menu-divider"></div>
                     <button class="toolbar-menu-item" id="paste-btn">Paste</button>
                     <button class="toolbar-menu-item" id="rename-btn">Rename</button>
                     <button class="toolbar-menu-item" id="duplicate-btn">Duplicate</button>

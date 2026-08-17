@@ -291,11 +291,41 @@ var TERMINAL_THEMES = {
     },
 };
 
+// ── Terminal Fonts ──
+// Self-hosted woff2 faces (web/static/vendor/fonts/) plus the original
+// system-font stack as the default. `css` is the quoted family name used in
+// document.fonts.load(); `weights` lists the weights that actually shipped —
+// the picker greys nothing out (browsers nearest-match missing weights) but
+// it's documentation for anyone adding faces.
+var TERMINAL_FONTS = [
+    { id: "default",         name: "System Default",  css: null,               family: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace", weights: [400, 700] },
+    { id: "jetbrains-mono",  name: "JetBrains Mono",  css: "'JetBrains Mono'", family: "'JetBrains Mono', monospace",  weights: [300, 400, 500, 700] },
+    { id: "fira-code",       name: "Fira Code",       css: "'Fira Code'",      family: "'Fira Code', monospace",       weights: [300, 400, 500, 700] },
+    { id: "cascadia-code",   name: "Cascadia Code",   css: "'Cascadia Code'",  family: "'Cascadia Code', monospace",   weights: [300, 400, 500, 700] },
+    { id: "source-code-pro", name: "Source Code Pro", css: "'Source Code Pro'",family: "'Source Code Pro', monospace", weights: [300, 400, 500, 700] },
+    { id: "ibm-plex-mono",   name: "IBM Plex Mono",   css: "'IBM Plex Mono'",  family: "'IBM Plex Mono', monospace",   weights: [300, 400, 500, 700] },
+    { id: "roboto-mono",     name: "Roboto Mono",     css: "'Roboto Mono'",    family: "'Roboto Mono', monospace",     weights: [300, 400, 500, 700] },
+    { id: "inconsolata",     name: "Inconsolata",     css: "'Inconsolata'",    family: "'Inconsolata', monospace",     weights: [300, 400, 500, 700] },
+    { id: "hack",            name: "Hack",            css: "'Hack'",           family: "'Hack', monospace",            weights: [400, 700] },
+    { id: "ubuntu-mono",     name: "Ubuntu Mono",     css: "'Ubuntu Mono'",    family: "'Ubuntu Mono', monospace",     weights: [400, 700] },
+    { id: "dejavu-mono",     name: "DejaVu Mono",     css: "'DejaVu Mono'",    family: "'DejaVu Mono', monospace",     weights: [400, 700] },
+    { id: "anonymous-pro",   name: "Anonymous Pro",   css: "'Anonymous Pro'",  family: "'Anonymous Pro', monospace",   weights: [400, 700] },
+    { id: "space-mono",      name: "Space Mono",      css: "'Space Mono'",     family: "'Space Mono', monospace",      weights: [400, 700] },
+    { id: "cousine",         name: "Cousine",         css: "'Cousine'",        family: "'Cousine', monospace",         weights: [400, 700] },
+];
+
 function initTerminal(host, session) {
     const DEFAULT_FONT_SIZE = 14;
     const MIN_FONT_SIZE = 8;
     const MAX_FONT_SIZE = 32;
     const savedFontSize = parseInt(localStorage.getItem("term-font-size"), 10) || DEFAULT_FONT_SIZE;
+
+    // Saved font family + weight (global preference, like font size). The
+    // terminal is constructed on the default stack and the saved face is
+    // applied asynchronously below once its woff2 has loaded — constructing
+    // straight onto an unloaded web font would measure the fallback.
+    var currentFontId = localStorage.getItem("term-font-family") || "default";
+    var currentFontWeight = parseInt(localStorage.getItem("term-font-weight"), 10) || 400;
 
     // Determine initial theme — check localStorage for a session-specific override,
     // then fall back to "default". The server-saved theme is applied asynchronously.
@@ -715,7 +745,9 @@ function initTerminal(host, session) {
         }
     });
 
-    // Zoom controls
+    // Zoom controls — the size row lives inside the font panel, which
+    // swallows its own clicks (see the font picker below), so stepping the
+    // size never closes the panel.
     function setFontSize(size) {
         size = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size));
         term.options.fontSize = size;
@@ -727,11 +759,6 @@ function initTerminal(host, session) {
         refit();
     }
     document.getElementById("zoom-level").textContent = savedFontSize;
-    // The font row lives inside the burger menu now. Browsers keep their menu
-    // open while you step the zoom, so swallow the click before the
-    // document-level handler closes ours — and don't steal focus back to the
-    // terminal, which would close it too.
-    document.querySelector(".menu-zoom").addEventListener("click", function (e) { e.stopPropagation(); });
     document.getElementById("zoom-in-btn").addEventListener("click", function () {
         setFontSize(term.options.fontSize + 2);
     });
@@ -741,6 +768,112 @@ function initTerminal(host, session) {
     document.getElementById("zoom-reset-btn").addEventListener("click", function () {
         setFontSize(DEFAULT_FONT_SIZE);
     });
+
+    // ── Font family & weight ──
+    // xterm measures the cell grid off the current face, so the woff2 must
+    // be fetched BEFORE the options change — otherwise the canvas measures
+    // the fallback font and every glyph lands in the wrong cell until the
+    // next repaint. document.fonts.load() resolves once the face is usable;
+    // weights the family doesn't ship nearest-match to the ones it does.
+    function applyFont(fontId, weight) {
+        var f = null;
+        for (var i = 0; i < TERMINAL_FONTS.length; i++) {
+            if (TERMINAL_FONTS[i].id === fontId) { f = TERMINAL_FONTS[i]; break; }
+        }
+        if (!f) f = TERMINAL_FONTS[0];
+        weight = parseInt(weight, 10) || 400;
+        currentFontId = f.id;
+        currentFontWeight = weight;
+        var boldWeight = Math.min(weight + 300, 800);
+        function set() {
+            term.options.fontFamily = f.family;
+            term.options.fontWeight = weight;
+            term.options.fontWeightBold = boldWeight;
+            refit();
+        }
+        if (f.css && document.fonts && document.fonts.load) {
+            Promise.all([
+                document.fonts.load(weight + " 14px " + f.css),
+                document.fonts.load(boldWeight + " 14px " + f.css),
+            ]).then(set, set);
+        } else {
+            set();
+        }
+        localStorage.setItem("term-font-family", f.id);
+        localStorage.setItem("term-font-weight", weight);
+    }
+
+    // Font picker dropdown
+    (function () {
+        var fontBtn = document.getElementById("font-btn");
+        var fontDropdown = document.getElementById("font-dropdown");
+        var fontList = document.getElementById("font-list");
+        var weightRow = document.getElementById("font-weight-row");
+        if (!fontBtn || !fontDropdown || !fontList) return;
+
+        // Each option previews in its own face — the browser only fetches a
+        // face when something renders in it, so the woff2s load lazily the
+        // first time the panel opens.
+        var html = "";
+        TERMINAL_FONTS.forEach(function (f) {
+            html += '<button class="font-option' + (f.id === currentFontId ? ' active' : '') + '"' +
+                ' data-font-id="' + f.id + '" style="font-family:' +
+                (f.family || "inherit").replace(/'/g, "&#39;") + '">' + f.name + '</button>';
+        });
+        fontList.innerHTML = html;
+
+        function markActive() {
+            fontList.querySelectorAll(".font-option").forEach(function (el) {
+                el.classList.toggle("active", el.dataset.fontId === currentFontId);
+            });
+            if (weightRow) {
+                weightRow.querySelectorAll("button").forEach(function (el) {
+                    el.classList.toggle("active", parseInt(el.dataset.weight, 10) === currentFontWeight);
+                });
+            }
+        }
+        markActive();
+
+        fontBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var isOpen = fontDropdown.style.display !== "none";
+            // One toolbar panel at a time.
+            var themeDd = document.getElementById("theme-dropdown");
+            if (themeDd) themeDd.style.display = "none";
+            var burger = document.getElementById("toolbar-menu");
+            if (burger) burger.style.display = "none";
+            fontDropdown.style.display = isOpen ? "none" : "block";
+            fontBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+        });
+
+        // The panel stays open across clicks — it's a settings surface you
+        // tweak repeatedly (size, weight, compare two faces), unlike the
+        // pick-one-and-done theme list. Click anywhere else to close it.
+        fontDropdown.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var opt = e.target.closest(".font-option");
+            if (opt) {
+                applyFont(opt.dataset.fontId, currentFontWeight);
+                markActive();
+                return;
+            }
+            var w = e.target.closest("[data-weight]");
+            if (w) {
+                applyFont(currentFontId, w.dataset.weight);
+                markActive();
+            }
+        });
+
+        document.addEventListener("click", function () {
+            fontDropdown.style.display = "none";
+            fontBtn.setAttribute("aria-expanded", "false");
+        });
+    })();
+
+    // Apply the saved font once at startup (async: waits for the woff2).
+    if (currentFontId !== "default" || currentFontWeight !== 400) {
+        applyFont(currentFontId, currentFontWeight);
+    }
 
     // ── Theme switching ──
     function applyTheme(themeId) {
@@ -912,9 +1045,11 @@ function initTerminal(host, session) {
             e.stopPropagation();
             var isOpen = themeDropdown.style.display !== "none";
             // Only one toolbar panel open at a time — the click that opens
-            // this one is swallowed above, so the other won't self-close.
+            // this one is swallowed above, so the others won't self-close.
             var burger = document.getElementById("toolbar-menu");
             if (burger) burger.style.display = "none";
+            var fontDd = document.getElementById("font-dropdown");
+            if (fontDd) fontDd.style.display = "none";
             themeDropdown.style.display = isOpen ? "none" : "block";
             themeBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
         });
@@ -963,9 +1098,11 @@ function initTerminal(host, session) {
     burgerBtn.addEventListener("click", async function (e) {
         e.stopPropagation();
         var opening = burgerMenu.style.display === "none";
-        // See the theme button: the two panels are mutually exclusive.
+        // See the theme button: the toolbar panels are mutually exclusive.
         var themeDd = document.getElementById("theme-dropdown");
         if (themeDd) themeDd.style.display = "none";
+        var fontDd = document.getElementById("font-dropdown");
+        if (fontDd) fontDd.style.display = "none";
         burgerMenu.style.display = opening ? "block" : "none";
         burgerBtn.setAttribute("aria-expanded", opening ? "true" : "false");
         if (opening) {
