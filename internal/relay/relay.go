@@ -213,25 +213,26 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 		}()
 	}
 
-	// SSH stdout -> WebSocket. For mouse=off attaches we also strip
-	// alt-screen-buffer escape sequences so TUI apps' output flows into
-	// the client emulator's main buffer (and scrollback), letting native
-	// clients smooth-scroll over it.
+	// SSH stdout -> WebSocket. For mouse=off attaches the stream passes
+	// through the mouse-mode filter: mouse-tracking enables are dropped
+	// while the pane is on the normal buffer (so the client smooth-scrolls
+	// its own scrollback) and passed through while a fullscreen TUI owns
+	// the alternate buffer (so the TUI gets real wheel events).
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer cancel()
-		var stripper *altBufferStripper
+		var filter *mouseModeFilter
 		if opts.Mouse == "off" {
-			stripper = &altBufferStripper{}
+			filter = &mouseModeFilter{}
 		}
 		buf := make([]byte, 32*1024)
 		for {
 			n, err := stdout.Read(buf)
 			if n > 0 {
 				out := buf[:n]
-				if stripper != nil {
-					out = stripper.Process(out)
+				if filter != nil {
+					out = filter.Process(out)
 				}
 				if len(out) > 0 {
 					if writeErr := ws.Write(ctx, websocket.MessageBinary, out); writeErr != nil {

@@ -228,3 +228,38 @@ func TestParserHistoryEmptySession(t *testing.T) {
 	}
 	_ = strings.TrimSpace("")
 }
+
+// Attaching while a fullscreen TUI already owns the pane: the cmdAlt reply
+// must enter the client's alt buffer AND re-assert the pane's mouse modes,
+// so the TUI (opencode) keeps receiving real wheel reports instead of
+// xterm.js's alt-scroll arrow keys.
+func TestParserAltSyncReassertsMouseModes(t *testing.T) {
+	var emitted []byte
+	p := &controlParser{emit: func(b []byte) { emitted = append(emitted, b...) }}
+
+	// alternate_on=1, button(1002)+sgr(1006) set, std/all/utf8 unset.
+	p.pushCmd(cmdAlt)
+	feed(p, "%begin 3 1 0", "1,0,1,0,1,0", "%end 3 1 0")
+	want := "\x1b[?1049h\x1b[?1002h\x1b[?1006h"
+	if string(emitted) != want {
+		t.Errorf("alt sync = %q, want %q", emitted, want)
+	}
+
+	// Normal buffer: nothing emitted, regardless of the mouse flags.
+	emitted = nil
+	p2 := &controlParser{emit: func(b []byte) { emitted = append(emitted, b...) }}
+	p2.pushCmd(cmdAlt)
+	feed(p2, "%begin 3 2 0", "0,0,1,0,1,0", "%end 3 2 0")
+	if len(emitted) != 0 {
+		t.Errorf("normal-buffer alt sync emitted: %q", emitted)
+	}
+
+	// Older tmux without the mouse format names answers "1" alone.
+	emitted = nil
+	p3 := &controlParser{emit: func(b []byte) { emitted = append(emitted, b...) }}
+	p3.pushCmd(cmdAlt)
+	feed(p3, "%begin 3 3 0", "1", "%end 3 3 0")
+	if string(emitted) != "\x1b[?1049h" {
+		t.Errorf("legacy alt sync = %q, want just the alt switch", emitted)
+	}
+}

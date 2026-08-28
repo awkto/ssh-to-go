@@ -50,7 +50,7 @@ const (
 	cmdIgnore                        // reply carries nothing we need (send-keys, refresh-client, ...)
 	cmdMeta                          // display-message reply: "<client_name>,<pane_id>"
 	cmdPane                          // display-message reply: "<pane_id>" (active window changed)
-	cmdAlt                           // display-message reply: "<alternate_on>" (0/1)
+	cmdAlt                           // display-message reply: "<alternate_on>,<mouse flags...>" (0/1 each)
 	cmdHistory                       // capture-pane reply: scrollback prefill
 	cmdRepaint                       // capture-pane reply: visible-frame repaint after a foreign resize
 	cmdCursor                        // display-message reply: "<cursor_x>,<cursor_y>" for repaint
@@ -298,14 +298,38 @@ func (p *controlParser) dispatchBlock(isErr bool) {
 
 	case cmdAlt:
 		// If the pane's app was already in the alternate screen buffer when
-		// we attached (e.g. Claude Code already running), enter the alt
+		// we attached (e.g. opencode already running), enter the alt
 		// buffer on the client BEFORE the capture-pane frame is painted, so
 		// the app's in-place, absolute-positioned live repaints land in the
 		// alt buffer and align instead of stacking on the normal buffer.
 		// This reply is queued ahead of cmdHistory, so ordering holds.
-		if !isErr && len(lines) > 0 && strings.TrimSpace(lines[0]) == "1" && p.emit != nil {
-			p.emit([]byte("\x1b[?1049h"))
+		//
+		// The reply also carries the pane's mouse-mode flags; re-assert
+		// those on the client too. The modes were set by the app long
+		// before we attached, so they never appear in the %output stream —
+		// without this the client sits in the alt buffer with no mouse
+		// tracking and xterm.js turns the wheel into arrow keys (opencode
+		// then walks its prompt history instead of scrolling its feed).
+		if isErr || len(lines) == 0 || p.emit == nil {
+			return
 		}
+		f := strings.Split(strings.TrimSpace(lines[0]), ",")
+		if f[0] != "1" {
+			return
+		}
+		payload := "\x1b[?1049h"
+		// Query order: alternate_on, standard(1000), button(1002),
+		// all(1003), sgr(1006), utf8(1005). Missing fields (older tmux)
+		// simply don't match.
+		altMouseEnables := []string{
+			"\x1b[?1000h", "\x1b[?1002h", "\x1b[?1003h", "\x1b[?1006h", "\x1b[?1005h",
+		}
+		for i, en := range altMouseEnables {
+			if i+1 < len(f) && f[i+1] == "1" {
+				payload += en
+			}
+		}
+		p.emit([]byte(payload))
 
 	default: // cmdConnect, cmdIgnore
 		if isErr {
@@ -422,7 +446,7 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	stripper := &altBufferStripper{}
+	filter := &mouseModeFilter{}
 	parser := &controlParser{}
 
 	var stdinMu sync.Mutex
@@ -440,7 +464,7 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	wasKicked := false
 
 	parser.emit = func(data []byte) {
-		out := stripper.Process(data)
+		out := filter.Process(data)
 		if len(out) == 0 {
 			return
 		}
@@ -524,8 +548,10 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	sendCmd(cmdMeta, fmt.Sprintf(`display-message -p -t %s "#{client_name},#{pane_id}"`, target))
 	// Query alt-buffer state BEFORE the history capture so, if a fullscreen
 	// TUI is already running, we can enter the client's alt buffer ahead of
-	// painting the captured frame (see cmdAlt in dispatchBlock).
-	sendCmd(cmdAlt, fmt.Sprintf(`display-message -p -t %s "#{alternate_on}"`, target))
+	// painting the captured frame (see cmdAlt in dispatchBlock). The pane's
+	// mouse-mode flags ride along so a running TUI's mouse tracking is
+	// re-asserted on the client as well.
+	sendCmd(cmdAlt, fmt.Sprintf(`display-message -p -t %s "#{alternate_on},#{mouse_standard_flag},#{mouse_button_flag},#{mouse_all_flag},#{mouse_sgr_flag},#{mouse_utf8_flag}"`, target))
 	sendCmd(cmdHistory, fmt.Sprintf("capture-pane -p -e -J -S - -E - -t %s", target))
 
 	var wg sync.WaitGroup

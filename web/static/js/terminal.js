@@ -531,6 +531,12 @@ function initTerminal(host, session) {
 
         ws.onopen = function () {
             statusEl.className = "status connected";
+            // A fresh relay starts on the normal buffer with a fresh
+            // server-side mouse filter; resync the client-side filter's
+            // state too (the cmdAlt attach handshake re-enters the alt
+            // buffer and re-asserts mouse modes if a TUI is running).
+            mouseFilterAlt = false;
+            mouseFilterPending = "";
             if (relayMode === "control") {
                 // The server resends the full tmux history on every
                 // (re)connect; start from a clean buffer so it never stacks.
@@ -555,7 +561,7 @@ function initTerminal(host, session) {
                 // Filter mouse mode sequences from binary data
                 var bytes = new Uint8Array(e.data);
                 var str = decoder.decode(bytes, { stream: true });
-                var filtered = str.replace(mouseSeqRegex, "");
+                var filtered = filterMouseSeqs(str);
                 if (filtered.length > 0) {
                     term.write(filtered);
                 }
@@ -571,7 +577,7 @@ function initTerminal(host, session) {
                     // the server tears tmux down on purpose.
                     if (msg.type === "terminated") { terminated = msg.reason || "killed"; return; }
                 } catch (_) {}
-                term.write(e.data.replace(mouseSeqRegex, ""));
+                term.write(filterMouseSeqs(e.data));
             }
         };
 
@@ -1217,10 +1223,61 @@ function initTerminal(host, session) {
         }, 150);
     });
 
-    // Defense-in-depth: server already strips mouse-reporting DECSET sequences
-    // for mouse=off attaches, but if anything slips through we also drop them
-    // here so xterm.js never enters mouse-tracking mode.
-    const mouseSeqRegex = /\x1b\[\?(9|10(00|01|02|03|05|06|15|16))[hl]/g;
+    // Defense-in-depth mouse-mode filter, mirroring the relay's server-side
+    // filter (which is authoritative). Mouse-tracking ENABLES are dropped
+    // while xterm is on the NORMAL buffer so the wheel keeps scrolling the
+    // local scrollback; on the ALTERNATE buffer (fullscreen TUIs: opencode,
+    // vim, …) they pass through so the app receives real wheel reports and
+    // can scroll its own feed — without them xterm.js's alt-scroll fallback
+    // translates wheel events into arrow keys, which a TUI reads as
+    // prompt-history navigation. DISABLES always pass (harmless no-op when
+    // tracking was never enabled). Skipped entirely for ?mouse=on
+    // passthrough attaches, where xterm.js is meant to be a real terminal.
+    const mouseFilterOff = mouseParam === "on";
+    let mouseFilterAlt = false;
+    let mouseFilterPending = "";
+    // Longest ids first so alternation can't match a shorter prefix.
+    const mouseSeqScan = /\x1b\[\?(1049|1047|47|1016|1015|1006|1005|1003|1002|1001|1000|9)([hl])/g;
+    const MOUSE_TRACKED = [
+        "\x1b[?47h", "\x1b[?47l", "\x1b[?1047h", "\x1b[?1047l", "\x1b[?1049h", "\x1b[?1049l",
+        "\x1b[?9h", "\x1b[?9l", "\x1b[?1000h", "\x1b[?1000l", "\x1b[?1001h", "\x1b[?1001l",
+        "\x1b[?1002h", "\x1b[?1002l", "\x1b[?1003h", "\x1b[?1003l", "\x1b[?1005h", "\x1b[?1005l",
+        "\x1b[?1006h", "\x1b[?1006l", "\x1b[?1015h", "\x1b[?1015l", "\x1b[?1016h", "\x1b[?1016l",
+    ];
+    function filterMouseSeqs(str) {
+        if (mouseFilterOff) return str;
+        if (mouseFilterPending) {
+            str = mouseFilterPending + str;
+            mouseFilterPending = "";
+        }
+        // Hold back a trailing partial that could grow into a tracked seq.
+        var esc = str.lastIndexOf("\x1b");
+        if (esc >= 0) {
+            var tail = str.slice(esc);
+            for (var i = 0; i < MOUSE_TRACKED.length; i++) {
+                if (MOUSE_TRACKED[i].length > tail.length && MOUSE_TRACKED[i].indexOf(tail) === 0) {
+                    mouseFilterPending = tail;
+                    str = str.slice(0, esc);
+                    break;
+                }
+            }
+        }
+        var out = "", last = 0, m;
+        mouseSeqScan.lastIndex = 0;
+        while ((m = mouseSeqScan.exec(str)) !== null) {
+            var id = m[1], enable = m[2] === "h";
+            if (id === "1049" || id === "1047" || id === "47") {
+                mouseFilterAlt = enable;
+                continue; // alt-screen switches always pass
+            }
+            if (enable && !mouseFilterAlt) {
+                out += str.slice(last, m.index);
+                last = m.index + m[0].length;
+            }
+        }
+        out += str.slice(last);
+        return out;
+    }
 
     // Terminal-report replies xterm.js generates automatically: primary and
     // secondary device attributes (CSI ? … c / CSI > … c), cursor position
@@ -1228,10 +1285,13 @@ function initTerminal(host, session) {
     // never match), and DSR status (CSI 0n). See onData below (issue #79).
     const reportReplyRegex = /\x1b\[\?[0-9;]*c|\x1b\[>[0-9;]*c|\x1b\[[0-9]+;[0-9]+R|\x1b\[0n/g;
 
-    // No manual wheel forwarding — with mouse=off the relay isn't expecting
-    // mouse-button reports, and xterm.js's native viewport handles wheel and
-    // touch scrolling against its local 5000-row scrollback (which the relay
-    // prefilled via tmux capture-pane on attach).
+    // No manual wheel forwarding. On the normal buffer, xterm.js's native
+    // viewport handles wheel and touch scrolling against its local
+    // 5000-row scrollback (which the relay prefilled via tmux capture-pane
+    // on attach). On the alternate buffer, mouse tracking is live (the
+    // filter above passes the TUI's enables through), so xterm.js itself
+    // encodes wheel/clicks as mouse reports that flow through onData into
+    // the pane — no extra wiring needed here.
 
     // Clipboard helper that works on HTTP (non-secure contexts)
     function clipCopy(text) {
