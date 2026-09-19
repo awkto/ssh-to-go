@@ -19,10 +19,10 @@ _stogo() {
             ;;
         list|ls)
             [[ "$prev" == "-o" ]] && COMPREPLY=( $(compgen -W "json" -- "$cur") ) \
-                || COMPREPLY=( $(compgen -W "-t -a -o" -- "$cur") )
+                || COMPREPLY=( $(compgen -W "active offloaded all -t -a -o" -- "$cur") )
             ;;
         new|create)
-            [[ "$cur" == -* ]] && COMPREPLY=( $(compgen -W "-host -dir -cmd -attach -bg -y" -- "$cur") )
+            [[ "$cur" == -* ]] && COMPREPLY=( $(compgen -W "-host -dir -cmd -bg -y" -- "$cur") )
             ;;
         connect|c|offload|kill)
             if [[ $COMP_CWORD -eq 2 ]]; then

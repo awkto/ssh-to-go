@@ -12,6 +12,37 @@ import (
 	"time"
 )
 
+// listRow is one line of `stogo list`: a live tmux session, or an offloaded
+// one the server still tracks (and can recreate) but tmux no longer runs.
+// Exactly one of Session / Offloaded is set, matching State.
+type listRow struct {
+	HostName  string            `json:"host_name"`
+	State     string            `json:"state"` // "active" | "offloaded"
+	Session   *tmuxSession      `json:"session,omitempty"`
+	Offloaded *offloadedSession `json:"offloaded,omitempty"`
+}
+
+func (r listRow) name() string {
+	if r.Offloaded != nil {
+		return r.Offloaded.Name
+	}
+	return r.Session.Name
+}
+
+// when is the sort/display timestamp: tmux activity for a live session, the
+// last time the poller saw it for an offloaded one.
+func (r listRow) when() time.Time {
+	if r.Offloaded != nil {
+		if !r.Offloaded.LastSeenAt.IsZero() {
+			return r.Offloaded.LastSeenAt
+		}
+		return r.Offloaded.CreatedAt
+	}
+	return r.Session.Activity
+}
+
+const listUsage = "usage: stogo list [active|offloaded|all] [-t|-a] [-o json]"
+
 func cmdList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	output := fs.String("o", "", "output format (json)")
@@ -19,6 +50,22 @@ func cmdList(args []string) error {
 	byName := fs.Bool("a", false, "sort alphabetically by session name")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	// The filter word may sit before or after the flags ("list all -a",
+	// "list -a all"); flag stops at the first positional, so parse the
+	// remainder again.
+	filter := "active"
+	if rest := fs.Args(); len(rest) > 0 {
+		filter = rest[0]
+		if err := fs.Parse(rest[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() > 0 {
+			return fmt.Errorf("%s", listUsage)
+		}
+	}
+	if filter != "active" && filter != "offloaded" && filter != "all" {
+		return fmt.Errorf("unknown filter %q\n%s", filter, listUsage)
 	}
 	if *byTime && *byName {
 		return fmt.Errorf("-t and -a are mutually exclusive")
@@ -28,57 +75,135 @@ func cmdList(args []string) error {
 	if err != nil {
 		return err
 	}
-	sessions, err := newClient(cfg).sessions()
-	if err != nil {
-		return err
+	c := newClient(cfg)
+
+	var rows []listRow
+	if filter != "offloaded" {
+		sessions, err := c.sessions()
+		if err != nil {
+			return err
+		}
+		for i := range sessions {
+			rows = append(rows, listRow{HostName: sessions[i].HostName, State: "active", Session: &sessions[i].Session})
+		}
+	}
+	if filter != "active" {
+		// Offloaded sessions ride along on the hosts endpoint — the same
+		// missing_sessions the dashboard's Resumable list is built from.
+		hosts, err := c.hosts()
+		if err != nil {
+			return err
+		}
+		for _, h := range hosts {
+			for i := range h.MissingSessions {
+				rows = append(rows, listRow{HostName: h.Config.Name, State: "offloaded", Offloaded: &h.MissingSessions[i]})
+			}
+		}
 	}
 
-	if *byName {
-		sort.SliceStable(sessions, func(i, j int) bool {
-			a, b := strings.ToLower(sessions[i].Session.Name), strings.ToLower(sessions[j].Session.Name)
-			if a != b {
-				return a < b
+	// Active sessions always sort ahead of offloaded ones; -t/-a order
+	// within each group.
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a.State != b.State {
+			return a.State == "active"
+		}
+		if *byName {
+			an, bn := strings.ToLower(a.name()), strings.ToLower(b.name())
+			if an != bn {
+				return an < bn
 			}
-			return sessions[i].HostName < sessions[j].HostName
-		})
-	} else {
-		sort.SliceStable(sessions, func(i, j int) bool {
-			a, b := sessions[i].Session.Activity, sessions[j].Session.Activity
-			if !a.Equal(b) {
-				return a.After(b)
-			}
-			return sessions[i].Session.Name < sessions[j].Session.Name
-		})
-	}
+			return a.HostName < b.HostName
+		}
+		if at, bt := a.when(), b.when(); !at.Equal(bt) {
+			return at.After(bt)
+		}
+		return a.name() < b.name()
+	})
 
 	if *output == "json" {
+		if rows == nil {
+			rows = []listRow{}
+		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(sessions)
+		return enc.Encode(rows)
 	}
 
-	if len(sessions) == 0 {
-		fmt.Println("No sessions.")
+	if len(rows) == 0 {
+		switch filter {
+		case "offloaded":
+			fmt.Println("No offloaded sessions.")
+		case "all":
+			fmt.Println("No sessions.")
+		default:
+			fmt.Println("No active sessions.")
+		}
 		return nil
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSESSION\tHOST\tWINDOWS\tCLIENTS\tACTIVITY")
-	for _, hs := range sessions {
-		clients := "-"
-		if hs.Session.Attached {
-			clients = fmt.Sprintf("%d", hs.Session.AttachedClients)
+	switch filter {
+	case "offloaded":
+		fmt.Fprintln(w, "SESSION\tHOST\tDIR\tCOMMAND\tLAST SEEN")
+		for _, r := range rows {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+				r.name(), r.HostName, dash(r.Offloaded.WorkingDir), dash(r.Offloaded.Command),
+				offloadedWhen(r))
 		}
-		// An old server sends no IDs; "-" beats a column of zeros.
-		id := "-"
-		if hs.Session.ID > 0 {
-			id = fmt.Sprintf("%d", hs.Session.ID)
+	case "all":
+		fmt.Fprintln(w, "ID\tSESSION\tHOST\tSTATE\tWINDOWS\tCLIENTS\tACTIVITY")
+		for _, r := range rows {
+			if r.Offloaded != nil {
+				fmt.Fprintf(w, "-\t%s\t%s\toffloaded\t-\t-\t%s\n", r.name(), r.HostName, offloadedWhen(r))
+				continue
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\tactive\t%d\t%s\t%s\n",
+				sessionID(r.Session), r.name(), r.HostName, r.Session.Windows,
+				sessionClients(r.Session), relTime(r.Session.Activity))
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n",
-			id, hs.Session.Name, hs.HostName, hs.Session.Windows, clients,
-			relTime(hs.Session.Activity))
+	default:
+		fmt.Fprintln(w, "ID\tSESSION\tHOST\tWINDOWS\tCLIENTS\tACTIVITY")
+		for _, r := range rows {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n",
+				sessionID(r.Session), r.name(), r.HostName, r.Session.Windows,
+				sessionClients(r.Session), relTime(r.Session.Activity))
+		}
 	}
 	return w.Flush()
+}
+
+// sessionID renders the short ID. An old server sends none; "-" beats a
+// column of zeros.
+func sessionID(s *tmuxSession) string {
+	if s.ID > 0 {
+		return fmt.Sprintf("%d", s.ID)
+	}
+	return "-"
+}
+
+func sessionClients(s *tmuxSession) string {
+	if s.Attached {
+		return fmt.Sprintf("%d", s.AttachedClients)
+	}
+	return "-"
+}
+
+// offloadedWhen marks sessions the idle sweeper put to sleep, so one that
+// went away overnight doesn't read as something you did.
+func offloadedWhen(r listRow) string {
+	t := relTime(r.when())
+	if r.Offloaded.AutoOffloaded {
+		t += " (auto)"
+	}
+	return t
+}
+
+func dash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 func cmdStatus(args []string) error {

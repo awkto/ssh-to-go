@@ -55,3 +55,30 @@ func TestJoinDir(t *testing.T) {
 		}
 	}
 }
+
+// matchHost backs the host prompt: exact names win even when they prefix
+// another host, and an ambiguous prefix must not pick one silently.
+func TestMatchHost(t *testing.T) {
+	var hosts []hostState
+	for _, n := range []string{"pro", "prod-db", "lab"} {
+		var h hostState
+		h.Config.Name = n
+		hosts = append(hosts, h)
+	}
+	cases := []struct {
+		in, want string
+		ok       bool
+	}{
+		{"pro", "pro", true},
+		{"prod", "prod-db", true},
+		{"l", "lab", true},
+		{"pr", "", false},
+		{"nope", "", false},
+	}
+	for _, c := range cases {
+		got, ok := matchHost(hosts, c.in)
+		if got != c.want || ok != c.ok {
+			t.Errorf("matchHost(%q) = %q, %v; want %q, %v", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}

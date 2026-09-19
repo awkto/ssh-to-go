@@ -115,6 +115,20 @@ type hostState struct {
 	Online   bool          `json:"online"`
 	Error    string        `json:"error,omitempty"`
 	Sessions []tmuxSession `json:"sessions"`
+	// MissingSessions are sessions the server tracks but tmux no longer
+	// runs — offloaded, resumable. Only populated while the host is online.
+	MissingSessions []offloadedSession `json:"missing_sessions,omitempty"`
+}
+
+// offloadedSession mirrors the server's sessionreg.Entry, trimmed to what
+// the CLI shows.
+type offloadedSession struct {
+	Name          string    `json:"name"`
+	WorkingDir    string    `json:"working_dir,omitempty"`
+	Command       string    `json:"command,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastSeenAt    time.Time `json:"last_seen_at,omitempty"`
+	AutoOffloaded bool      `json:"auto_offloaded,omitempty"`
 }
 
 // serverSettings is the subset of GET /api/settings the CLI cares about.

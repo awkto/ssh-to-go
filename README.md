@@ -136,8 +136,10 @@ A small native client for Linux/macOS that talks to the same API as the dashboar
 
 ```bash
 stogo auth login          # point it at your server (password → API token)
-stogo list                # sessions, most recently active first (-a: sort by name)
-stogo new bug hunt        # create a session (quick-confirm prompts; alias: stogo create)
+stogo list                # active sessions, most recently active first (-a: sort by name)
+stogo list offloaded      # offloaded (resumable) sessions; `stogo list all` shows both
+stogo create              # create a session and attach — asks name, host, dir, command
+stogo new bug hunt        # same, name given up front (new and create are aliases)
 stogo connect mysession   # attach in your real terminal (alias: stogo c)
 stogo connect 3           # ...or use the short ID from `stogo list`
 stogo offload mysession   # stop a session but keep it resumable
@@ -150,27 +152,31 @@ execs it, so your local `ssh` and the target host's `tmux` do all the work — n
 custom terminal emulation. You need SSH access to the target host and `tmux`
 installed there (which ssh-to-go already requires).
 
-`stogo new` is three prefilled prompts — directory, launch command, connect
-now? — where Enter accepts, so a repeat run is name + Enter-Enter-Enter:
+`stogo new` (alias `create`) is a handful of prefilled prompts — name, host,
+directory, launch command — where Enter accepts, so a repeat run is name +
+Enter-Enter-Enter. It always attaches afterwards; pass `-bg` not to:
 
 ```
-$ stogo new bug hunt
-session: bug-hunt (on pro)
+$ stogo create
+name: bug hunt
+host    [pro] (or: lab, box): ⏎
+session: bug-hunt (from "bug hunt", on pro)
 dir     [~/sessions/bug-hunt]: ⏎
 command [claude -n $name] ('-' for none): ⏎
-connect now? [Y/n] ⏎
 created pro/bug-hunt — attaching…
 ```
 
-The host is never asked in the common case (`-host` flag → remembered pick →
-server default host → the sole host). The directory derives from the server's
+A name given on the command line skips the name prompt. The host prompt
+defaults to the remembered pick, then the server default host, then the first
+online host; answer with a host name or any unambiguous prefix. It is skipped
+when `-host` is passed or the server has a single host. The directory derives from the server's
 new-session directory setting plus a slug of the name — the same path the web
 form would use — and `$name`/`$date` expand server-side with the same rules.
-The launch command and the connect-or-not answer are remembered across runs
+The launch command and the host are remembered across runs
 (first run seeds the command from the dashboard's recent-commands list);
 remembered defaults live in the `"new"` section of the config file and can be
 edited there directly. Flags answer any prompt ahead of time (`-host`, `-dir`,
-`-cmd` with `-` meaning none, `-attach`/`-bg`), and `-y` — implied when stdin
+`-cmd` with `-` meaning none), and `-y` — implied when stdin
 isn't a terminal — accepts every default unprompted, so
 `stogo new -y quick fix` is scriptable.
 

@@ -34,7 +34,6 @@ type newDefaults struct {
 	// commands), and points at "" when the remembered answer is "no
 	// command".
 	Command *string `json:"command,omitempty"`
-	Attach  *bool   `json:"attach,omitempty"`
 }
 
 // updateNewDefaults mutates the stored `new` section and writes the file

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"golang.org/x/term"
@@ -13,18 +12,19 @@ import (
 	"github.com/awkto/ssh-to-go/internal/sessionvars"
 )
 
-// cmdNew creates a session through three prefilled prompts — directory,
-// launch command, connect-or-not — where Enter accepts the remembered
-// default, so a repeat run is Enter-Enter-Enter. Flags answer prompts ahead
-// of time; -y (or piped stdin) accepts every default unprompted. Only
-// interactively typed answers update the remembered defaults, so scripts
+// cmdNew creates a session through prefilled prompts — name (when not
+// given as an argument), host, directory, launch command — where Enter
+// accepts the remembered default, so a repeat run is a name and
+// Enter-Enter-Enter. It then attaches; -bg skips that. Flags answer prompts
+// ahead of time; -y (or piped stdin) accepts every default unprompted. Only
+// interactively given answers update the remembered defaults, so scripts
 // never silently retrain them.
 func cmdNew(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
 	hostFlag := fs.String("host", "", "target host (default: remembered, then server default, then sole host)")
 	dirFlag := fs.String("dir", "", "working directory ($name/$date expand server-side)")
 	cmdFlag := fs.String("cmd", "", `launch command ("-" for none)`)
-	attachFlag := fs.Bool("attach", false, "connect to the session after creating it")
+	attachFlag := fs.Bool("attach", false, "connect after creating (the default; kept for old scripts)")
 	bgFlag := fs.Bool("bg", false, "create in the background, don't connect")
 	yes := fs.Bool("y", false, "accept all defaults without prompting")
 	if err := fs.Parse(args); err != nil {
@@ -36,10 +36,6 @@ func cmdNew(args []string) error {
 	// Multi-word names need no quoting: everything after the flags is the
 	// name, and the server collapses the spaces to dashes anyway.
 	rawName := strings.TrimSpace(strings.Join(fs.Args(), " "))
-	if rawName == "" {
-		return fmt.Errorf("usage: stogo new [-host H] [-dir D] [-cmd C] [-attach|-bg] [-y] <name>")
-	}
-	name := sanitizeName(rawName)
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -49,6 +45,18 @@ func cmdNew(args []string) error {
 
 	interactive := !*yes && term.IsTerminal(int(os.Stdin.Fd()))
 	reader := bufio.NewReader(os.Stdin)
+
+	if rawName == "" {
+		if !interactive {
+			return fmt.Errorf("usage: stogo new [-host H] [-dir D] [-cmd C] [-bg] [-y] <name>")
+		}
+		for rawName == "" {
+			if rawName, err = promptLine(reader, "name: "); err != nil {
+				return err
+			}
+		}
+	}
+	name := sanitizeName(rawName)
 
 	nd := cfg.New
 	if nd == nil {
@@ -66,26 +74,25 @@ func cmdNew(args []string) error {
 	if host == "" {
 		host = st.DefaultHost
 	}
+	// The host prompt is skipped when -host answered it or there is nothing
+	// to choose between.
 	pickedHost := false
-	if host == "" {
+	if *hostFlag == "" && (interactive || host == "") {
 		hosts, err := c.hosts()
 		if err != nil {
 			return err
 		}
-		switch len(hosts) {
-		case 0:
+		switch {
+		case len(hosts) == 0:
 			return fmt.Errorf("no hosts configured on the server")
-		case 1:
+		case len(hosts) == 1:
 			host = hosts[0].Config.Name
+		case !interactive:
+			return fmt.Errorf("multiple hosts configured — pass -host (one of: %s)", strings.Join(hostNames(hosts), ", "))
 		default:
-			if !interactive {
-				var names []string
-				for _, h := range hosts {
-					names = append(names, h.Config.Name)
-				}
-				return fmt.Errorf("multiple hosts configured — pass -host (one of: %s)", strings.Join(names, ", "))
+			if host, err = pickHost(reader, hosts, host); err != nil {
+				return err
 			}
-			host = pickHost(reader, hosts)
 			pickedHost = true
 		}
 	}
@@ -163,35 +170,7 @@ func cmdNew(args []string) error {
 		}
 	}
 
-	attach := true
-	if nd.Attach != nil {
-		attach = *nd.Attach
-	}
-	attachAnswered := false
-	switch {
-	case *attachFlag:
-		attach = true
-	case *bgFlag:
-		attach = false
-	default:
-		if interactive {
-			hint := "[Y/n]"
-			if !attach {
-				hint = "[y/N]"
-			}
-			line, err := promptLine(reader, fmt.Sprintf("connect now? %s ", hint))
-			if err != nil {
-				return err
-			}
-			switch strings.ToLower(line) {
-			case "y", "yes":
-				attach = true
-			case "n", "no":
-				attach = false
-			}
-			attachAnswered = true
-		}
-	}
+	attach := !*bgFlag
 
 	if err := c.createSession(host, createSessionReq{
 		Name:      rawName,
@@ -204,7 +183,7 @@ func cmdNew(args []string) error {
 
 	// Remember only now that the session really exists — a failed create
 	// should not retrain the defaults.
-	if pickedHost || cmdAnswered || attachAnswered {
+	if pickedHost || cmdAnswered {
 		err := updateNewDefaults(func(nd *newDefaults) {
 			if pickedHost {
 				nd.Host = host
@@ -212,10 +191,6 @@ func cmdNew(args []string) error {
 			if cmdAnswered {
 				remembered := command
 				nd.Command = &remembered
-			}
-			if attachAnswered {
-				a := attach
-				nd.Attach = &a
 			}
 		})
 		if err != nil {
@@ -231,39 +206,81 @@ func cmdNew(args []string) error {
 	return nil
 }
 
-// pickHost shows a numbered list and reads a choice by number or name. The
-// default (Enter, or unparseable input) is the first online host — an
+// pickHost asks which host to use, Enter accepting def. An answer may be a
+// full host name or any unambiguous prefix of one; anything else re-asks
+// rather than quietly creating the session somewhere unintended. When def
+// is empty or no longer exists, the first online host stands in — an
 // offline default would turn Enter-Enter-Enter into a guaranteed failure.
-func pickHost(reader *bufio.Reader, hosts []hostState) string {
-	def := 0
-	for i, h := range hosts {
-		if h.Online {
-			def = i
+func pickHost(reader *bufio.Reader, hosts []hostState, def string) (string, error) {
+	known := false
+	for _, h := range hosts {
+		if h.Config.Name == def {
+			known = true
 			break
 		}
 	}
-	fmt.Println("hosts:")
-	for i, h := range hosts {
-		status := ""
-		if !h.Online {
-			status = " (offline)"
+	if !known {
+		def = hosts[0].Config.Name
+		for _, h := range hosts {
+			if h.Online {
+				def = h.Config.Name
+				break
+			}
 		}
-		fmt.Printf("  %d. %s%s\n", i+1, h.Config.Name, status)
 	}
-	line, err := promptLine(reader, fmt.Sprintf("host [%d = %s]: ", def+1, hosts[def].Config.Name))
-	if err != nil || line == "" {
-		return hosts[def].Config.Name
-	}
-	if n, err := strconv.Atoi(line); err == nil && n >= 1 && n <= len(hosts) {
-		return hosts[n-1].Config.Name
-	}
+
+	var others []string
 	for _, h := range hosts {
-		if h.Config.Name == line {
-			return line
+		if h.Config.Name == def {
+			continue
+		}
+		label := h.Config.Name
+		if !h.Online {
+			label += " (offline)"
+		}
+		others = append(others, label)
+	}
+	prompt := fmt.Sprintf("host    [%s] (or: %s): ", def, strings.Join(others, ", "))
+
+	for {
+		line, err := promptLine(reader, prompt)
+		if err != nil {
+			return "", err
+		}
+		if line == "" {
+			return def, nil
+		}
+		if match, ok := matchHost(hosts, line); ok {
+			return match, nil
+		}
+		fmt.Fprintf(os.Stderr, "no single host matches %q\n", line)
+	}
+}
+
+// matchHost resolves an exact host name, or failing that a prefix shared by
+// exactly one host.
+func matchHost(hosts []hostState, in string) (string, bool) {
+	var prefixed []string
+	for _, h := range hosts {
+		if h.Config.Name == in {
+			return in, true
+		}
+		if strings.HasPrefix(h.Config.Name, in) {
+			prefixed = append(prefixed, h.Config.Name)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "no host %q — using %s\n", line, hosts[def].Config.Name)
-	return hosts[def].Config.Name
+	if len(prefixed) == 1 {
+		return prefixed[0], true
+	}
+	return "", false
+}
+
+func hostNames(hosts []hostState) []string {
+	names := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		names = append(names, h.Config.Name)
+	}
+	return names
 }
 
 func promptLine(reader *bufio.Reader, prompt string) (string, error) {

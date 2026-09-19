@@ -19,8 +19,9 @@ const usageText = `stogo — terminal client for ssh-to-go
 Usage:
   stogo auth login [-url URL] [-name TOKEN_NAME]   authenticate with a server
   stogo auth logout                                revoke token and forget server
-  stogo list | ls [-t|-a] [-o json]                list tmux sessions (-t by activity, default; -a by name)
-  stogo new [flags] <name>                         create a session (quick-confirm prompts; see below)
+  stogo list | ls [active|offloaded|all]           list sessions: active (default), offloaded, or both
+                  [-t|-a] [-o json]                  (-t by activity, default; -a by name)
+  stogo new | create [flags] [name]                create a session and attach (prompts; see below)
   stogo connect | c <session>                      attach to a session (interactive)
   stogo offload <session>                          offload a session (stop it, keep it resumable)
   stogo kill <session>                             kill a session
@@ -31,11 +32,12 @@ Usage:
 Sessions may be addressed as NAME (unique across hosts), HOST/NAME, or the
 server-assigned numeric ID shown by "stogo list".
 
-"stogo new" (alias "create") prompts for directory, launch command and
-whether to connect, prefilled with remembered defaults — Enter accepts.
-$name and $date in the directory or command expand server-side. Flags
-answer prompts ahead of time: -host H, -dir D, -cmd C (- for none),
--attach | -bg, and -y accepts every default without prompting.
+"stogo new" (alias "create") prompts for the name (unless given), host,
+directory and launch command, prefilled with remembered defaults — Enter
+accepts — then attaches. $name and $date in the directory or command
+expand server-side. Flags answer prompts ahead of time: -host H, -dir D,
+-cmd C (- for none); -bg creates without attaching, and -y accepts every
+default without prompting.
 
 Config: ~/.config/stogo/config.json (overridable with STOGO_URL / STOGO_TOKEN
 environment variables for headless use). The "new" section there holds the
