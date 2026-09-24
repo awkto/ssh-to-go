@@ -181,6 +181,85 @@ func (c *apiClient) createSession(host string, req createSessionReq) error {
 	return c.do("POST", "/api/hosts/"+url.PathEscape(host)+"/sessions", req, nil)
 }
 
+// recreateResp is what the server answers when it brings an offloaded
+// session back. Name is the sanitized name the session now runs under —
+// a legacy spaced entry comes back hyphenated — so attach with that.
+type recreateResp struct {
+	Name       string `json:"name"`
+	WorkingDir string `json:"working_dir"`
+	Command    string `json:"command"`
+}
+
+// recreateSession brings an offloaded session back to life with the
+// directory and launch command the server recorded for it.
+func (c *apiClient) recreateSession(host, name string) (recreateResp, error) {
+	var out recreateResp
+	err := c.do("POST", sessionPath(host, name)+"/recreate", nil, &out)
+	if err == nil && out.Name == "" {
+		out.Name = name
+	}
+	return out, err
+}
+
+// findOffloaded looks an offloaded session up by name on one host. Names
+// compare sanitized, the way the server keys its registry, so "bug hunt"
+// finds the entry tracked as "bug-hunt" (and vice versa for legacy entries
+// that still carry the spaced form).
+func findOffloaded(hosts []hostState, host, name string) (offloadedSession, bool) {
+	want := sanitizeName(name)
+	for _, h := range hosts {
+		if h.Config.Name != host {
+			continue
+		}
+		for _, m := range h.MissingSessions {
+			if m.Name == name || sanitizeName(m.Name) == want {
+				return m, true
+			}
+		}
+	}
+	return offloadedSession{}, false
+}
+
+// resolveOffloaded turns NAME or HOST/NAME into the host and registry entry
+// of an offloaded session. Offloaded sessions have no server-assigned ID,
+// so only names work here.
+func (c *apiClient) resolveOffloaded(arg string) (string, offloadedSession, error) {
+	hosts, err := c.hosts()
+	if err != nil {
+		return "", offloadedSession{}, err
+	}
+	if h, s, ok := strings.Cut(arg, "/"); ok {
+		if m, found := findOffloaded(hosts, h, s); found {
+			return h, m, nil
+		}
+		return "", offloadedSession{}, fmt.Errorf("no offloaded session %q on %q (try `stogo list offloaded`)", s, h)
+	}
+
+	type match struct {
+		host  string
+		entry offloadedSession
+	}
+	var matches []match
+	for _, h := range hosts {
+		if m, found := findOffloaded(hosts, h.Config.Name, arg); found {
+			matches = append(matches, match{h.Config.Name, m})
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", offloadedSession{}, fmt.Errorf("no offloaded session named %q (try `stogo list offloaded`)", arg)
+	case 1:
+		return matches[0].host, matches[0].entry, nil
+	default:
+		var names []string
+		for _, m := range matches {
+			names = append(names, m.host+"/"+m.entry.Name)
+		}
+		return "", offloadedSession{}, fmt.Errorf("offloaded session %q exists on multiple hosts — use one of: %s",
+			arg, strings.Join(names, ", "))
+	}
+}
+
 // resolveSession turns NAME, HOST/NAME or a numeric ID (as shown by
 // `stogo list`) into a concrete (host, session) pair, rescanning once if
 // nothing matches. An exact name match wins over an ID interpretation, so a

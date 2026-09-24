@@ -9,7 +9,7 @@ _stogo() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "auth list ls new create connect c offload kill status completion version help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "auth list ls new create connect c resume offload kill status completion version help" -- "$cur") )
         return
     fi
 
@@ -24,15 +24,20 @@ _stogo() {
         new|create)
             [[ "$cur" == -* ]] && COMPREPLY=( $(compgen -W "-host -dir -cmd -bg -y" -- "$cur") )
             ;;
-        connect|c|offload|kill)
+        connect|c|resume|offload|kill)
             if [[ $COMP_CWORD -eq 2 ]]; then
                 # Session names come from the server; keep a tight timeout so a
-                # dead server never hangs the shell mid-tab.
-                local sessions
+                # dead server never hangs the shell mid-tab. connect also
+                # resumes offloaded sessions, resume only takes those.
+                local scope=active sessions
+                case "${COMP_WORDS[1]}" in
+                    connect|c) scope=all ;;
+                    resume) scope=offloaded ;;
+                esac
                 if command -v timeout >/dev/null 2>&1; then
-                    sessions=$(timeout 2 stogo __sessions 2>/dev/null)
+                    sessions=$(timeout 2 stogo __sessions "$scope" 2>/dev/null)
                 else
-                    sessions=$(stogo __sessions 2>/dev/null)
+                    sessions=$(stogo __sessions "$scope" 2>/dev/null)
                 fi
                 COMPREPLY=( $(compgen -W "$sessions" -- "$cur") )
             fi

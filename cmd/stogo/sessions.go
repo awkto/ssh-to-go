@@ -269,7 +269,7 @@ func cmdOffload(args []string) error {
 	if err := c.do("POST", sessionPath(host, session)+"/offload", nil, nil); err != nil {
 		return err
 	}
-	fmt.Printf("Offloaded %s/%s — resume it later from the dashboard or by recreating it\n", host, session)
+	fmt.Printf("Offloaded %s/%s — bring it back with: stogo resume %s\n", host, session, session)
 	return nil
 }
 

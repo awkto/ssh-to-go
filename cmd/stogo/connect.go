@@ -11,7 +11,9 @@ import (
 // the same `ssh -t user@host 'exec tmux attach-session ...'` one-liner the
 // dashboard's "handoff to native terminal" feature prints. The heavy
 // lifting is local ssh and the target host's tmux; stogo only resolves the
-// session and execs the command.
+// session and execs the command. A name that is offloaded rather than
+// running is resumed first — connecting to a session you put to sleep
+// should just wake it.
 func cmdConnect(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: stogo connect <session>")
@@ -23,6 +25,9 @@ func cmdConnect(args []string) error {
 	c := newClient(cfg)
 	host, session, err := c.resolveSession(args[0])
 	if err != nil {
+		if h, entry, oerr := c.resolveOffloaded(args[0]); oerr == nil {
+			return resumeSession(c, h, entry, true)
+		}
 		return err
 	}
 	return attachSession(c, host, session)

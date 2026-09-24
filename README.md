@@ -143,6 +143,7 @@ stogo new bug hunt        # same, name given up front (new and create are aliase
 stogo connect mysession   # attach in your real terminal (alias: stogo c)
 stogo connect 3           # ...or use the short ID from `stogo list`
 stogo offload mysession   # stop a session but keep it resumable
+stogo resume mysession    # bring an offloaded session back and attach (-bg: don't attach)
 stogo kill mysession      # kill a session
 stogo status              # server/host summary
 ```
@@ -179,6 +180,13 @@ edited there directly. Flags answer any prompt ahead of time (`-host`, `-dir`,
 `-cmd` with `-` meaning none), and `-y` — implied when stdin
 isn't a terminal — accepts every default unprompted, so
 `stogo new -y quick fix` is scriptable.
+
+Offloaded sessions come back with `stogo resume NAME`: the server recreates
+the session in the directory and with the launch command it recorded, then
+stogo attaches. `stogo connect NAME` does the same when the name turns out to
+be offloaded rather than running, and `stogo new NAME` resumes instead of
+erroring when that name is already tracked as offloaded — so whichever
+command you reach for, an offloaded session just wakes up.
 
 Install from a [GitHub release](https://github.com/awkto/ssh-to-go/releases)
 (`stogo-linux-amd64`, `stogo-darwin-arm64`, … or the `sshtogo` .deb), or:

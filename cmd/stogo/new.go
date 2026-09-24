@@ -74,14 +74,16 @@ func cmdNew(args []string) error {
 	if host == "" {
 		host = st.DefaultHost
 	}
+	// The host list serves the host prompt and, afterwards, the check for an
+	// offloaded session already tracked under this name.
+	hosts, err := c.hosts()
+	if err != nil {
+		return err
+	}
 	// The host prompt is skipped when -host answered it or there is nothing
 	// to choose between.
 	pickedHost := false
 	if *hostFlag == "" && (interactive || host == "") {
-		hosts, err := c.hosts()
-		if err != nil {
-			return err
-		}
 		switch {
 		case len(hosts) == 0:
 			return fmt.Errorf("no hosts configured on the server")
@@ -101,6 +103,18 @@ func cmdNew(args []string) error {
 		fmt.Printf("session: %s (from %q, on %s)\n", name, rawName, host)
 	} else {
 		fmt.Printf("session: %s (on %s)\n", name, host)
+	}
+
+	// An offloaded session of this name is not a collision, it is the thing
+	// being asked for: bring it back with its recorded directory and command
+	// instead of asking for new ones the server would refuse anyway.
+	if entry, ok := findOffloaded(hosts, host, name); ok {
+		if pickedHost {
+			if err := updateNewDefaults(func(nd *newDefaults) { nd.Host = host }); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not remember defaults: %v\n", err)
+			}
+		}
+		return resumeSession(c, host, entry, !*bgFlag)
 	}
 
 	// Directory. The value sent to the server may be a template — display

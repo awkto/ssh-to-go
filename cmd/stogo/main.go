@@ -22,7 +22,8 @@ Usage:
   stogo list | ls [active|offloaded|all]           list sessions: active (default), offloaded, or both
                   [-t|-a] [-o json]                  (-t by activity, default; -a by name)
   stogo new | create [flags] [name]                create a session and attach (prompts; see below)
-  stogo connect | c <session>                      attach to a session (interactive)
+  stogo connect | c <session>                      attach to a session (resumes it if offloaded)
+  stogo resume [-bg] <session>                     recreate an offloaded session and attach
   stogo offload <session>                          offload a session (stop it, keep it resumable)
   stogo kill <session>                             kill a session
   stogo status                                     server connectivity and summary
@@ -37,7 +38,8 @@ directory and launch command, prefilled with remembered defaults — Enter
 accepts — then attaches. $name and $date in the directory or command
 expand server-side. Flags answer prompts ahead of time: -host H, -dir D,
 -cmd C (- for none); -bg creates without attaching, and -y accepts every
-default without prompting.
+default without prompting. A name that is already tracked as an offloaded
+session is resumed instead (same as "stogo resume").
 
 Config: ~/.config/stogo/config.json (overridable with STOGO_URL / STOGO_TOKEN
 environment variables for headless use). The "new" section there holds the
@@ -64,6 +66,8 @@ func main() {
 		err = cmdNew(os.Args[2:])
 	case "connect", "c":
 		err = cmdConnect(os.Args[2:])
+	case "resume":
+		err = cmdResume(os.Args[2:])
 	case "offload":
 		err = cmdOffload(os.Args[2:])
 	case "kill":
@@ -72,8 +76,8 @@ func main() {
 		err = cmdStatus(os.Args[2:])
 	case "completion":
 		err = cmdCompletion(os.Args[2:])
-	case "__sessions": // hidden: feeds bash completion
-		err = cmdCompleteSessions()
+	case "__sessions": // hidden: feeds bash completion ("all"/"offloaded" widen it)
+		err = cmdCompleteSessions(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Println(Version)
 	case "help", "-h", "--help":

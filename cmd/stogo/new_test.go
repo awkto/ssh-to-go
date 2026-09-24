@@ -82,3 +82,32 @@ func TestMatchHost(t *testing.T) {
 		}
 	}
 }
+
+func TestFindOffloaded(t *testing.T) {
+	var hosts []hostState
+	pro := hostState{}
+	pro.Config.Name = "pro"
+	pro.MissingSessions = []offloadedSession{{Name: "bug-hunt", WorkingDir: "/x"}, {Name: "legacy name"}}
+	lab := hostState{}
+	lab.Config.Name = "lab"
+	lab.MissingSessions = []offloadedSession{{Name: "other"}}
+	hosts = append(hosts, pro, lab)
+
+	cases := []struct {
+		host, name, want string
+		ok               bool
+	}{
+		{"pro", "bug-hunt", "bug-hunt", true},
+		{"pro", "bug hunt", "bug-hunt", true},       // typed form sanitizes to the key
+		{"pro", "legacy-name", "legacy name", true}, // legacy spaced entry
+		{"pro", "other", "", false},                 // right name, wrong host
+		{"lab", "other", "other", true},
+		{"nope", "other", "", false},
+	}
+	for _, c := range cases {
+		got, ok := findOffloaded(hosts, c.host, c.name)
+		if ok != c.ok || got.Name != c.want {
+			t.Errorf("findOffloaded(%q, %q) = (%q, %v), want (%q, %v)", c.host, c.name, got.Name, ok, c.want, c.ok)
+		}
+	}
+}
