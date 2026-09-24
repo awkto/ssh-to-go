@@ -356,6 +356,7 @@ func (h *Handlers) KillSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("kill session failed: %v", err), http.StatusInternalServerError)
 		return
 	}
+	h.Hub.DropSession(hostName, sessionName)
 
 	if h.Registry != nil {
 		if err := h.Registry.Remove(hostName, sessionName); err != nil {
@@ -423,6 +424,9 @@ func (h *Handlers) OffloadSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("kill session failed: %v", err), http.StatusInternalServerError)
 		return
 	}
+	// Drop it from the cached host state now, so a create or resume that
+	// follows immediately sees it as offloaded rather than still running.
+	h.Hub.DropSession(hostName, sessionName)
 
 	// Intentionally leave the registry entry in place — that's the whole point.
 	writeJSON(w, map[string]string{"status": "offloaded", "name": sessionName})

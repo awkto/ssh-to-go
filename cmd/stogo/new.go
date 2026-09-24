@@ -192,6 +192,13 @@ func cmdNew(args []string) error {
 		CreateDir: true,
 		Command:   command,
 	}); err != nil {
+		// The host list checked above can lag a just-offloaded session by
+		// one poll; the server's refusal is authoritative, so resume it.
+		if strings.Contains(err.Error(), "offloaded session") {
+			if h, entry, oerr := c.resolveOffloaded(host + "/" + name); oerr == nil {
+				return resumeSession(c, h, entry, attach)
+			}
+		}
 		return err
 	}
 

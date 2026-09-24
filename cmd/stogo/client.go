@@ -224,26 +224,46 @@ func findOffloaded(hosts []hostState, host, name string) (offloadedSession, bool
 // of an offloaded session. Offloaded sessions have no server-assigned ID,
 // so only names work here.
 func (c *apiClient) resolveOffloaded(arg string) (string, offloadedSession, error) {
-	hosts, err := c.hosts()
-	if err != nil {
-		return "", offloadedSession{}, err
-	}
-	if h, s, ok := strings.Cut(arg, "/"); ok {
-		if m, found := findOffloaded(hosts, h, s); found {
-			return h, m, nil
-		}
-		return "", offloadedSession{}, fmt.Errorf("no offloaded session %q on %q (try `stogo list offloaded`)", s, h)
-	}
-
 	type match struct {
 		host  string
 		entry offloadedSession
 	}
-	var matches []match
-	for _, h := range hosts {
-		if m, found := findOffloaded(hosts, h.Config.Name, arg); found {
-			matches = append(matches, match{h.Config.Name, m})
+	find := func() ([]match, error) {
+		hosts, err := c.hosts()
+		if err != nil {
+			return nil, err
 		}
+		if h, s, ok := strings.Cut(arg, "/"); ok {
+			if m, found := findOffloaded(hosts, h, s); found {
+				return []match{{h, m}}, nil
+			}
+			return nil, nil
+		}
+		var matches []match
+		for _, h := range hosts {
+			if m, found := findOffloaded(hosts, h.Config.Name, arg); found {
+				matches = append(matches, match{h.Config.Name, m})
+			}
+		}
+		return matches, nil
+	}
+
+	matches, err := find()
+	if err != nil {
+		return "", offloadedSession{}, err
+	}
+	if len(matches) == 0 {
+		// A session offloaded seconds ago still shows as live until the
+		// next host poll notices it is gone. Force one so "offload, then
+		// resume" works back to back.
+		if scanErr := c.do("POST", "/api/scan", nil, nil); scanErr == nil {
+			if matches, err = find(); err != nil {
+				return "", offloadedSession{}, err
+			}
+		}
+	}
+	if h, s, ok := strings.Cut(arg, "/"); ok && len(matches) == 0 {
+		return "", offloadedSession{}, fmt.Errorf("no offloaded session %q on %q (try `stogo list offloaded`)", s, h)
 	}
 	switch len(matches) {
 	case 0:

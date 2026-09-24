@@ -147,6 +147,28 @@ func (h *Hub) Update(result tmux.PollResult) {
 	}
 }
 
+// DropSession removes one session from a host's cached list right away,
+// for handlers that just killed it. Without this the next poll (seconds
+// away) is the first to notice, and in between the session reads as live:
+// creating it again is refused as "already running" instead of resuming
+// the offloaded entry, and the dashboard shows a session that is gone.
+func (h *Hub) DropSession(host, session string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	state, ok := h.hosts[host]
+	if !ok {
+		return
+	}
+	kept := state.Sessions[:0]
+	for _, s := range state.Sessions {
+		if s.Name != session {
+			kept = append(kept, s)
+		}
+	}
+	state.Sessions = kept
+}
+
 // AllSessions returns a flat list of all sessions across all hosts.
 func (h *Hub) AllSessions() []HostSession {
 	h.mu.RLock()
