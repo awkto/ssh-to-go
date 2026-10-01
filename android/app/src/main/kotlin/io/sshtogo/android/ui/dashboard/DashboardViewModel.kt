@@ -83,4 +83,26 @@ class DashboardViewModel(private val profile: ServerProfile) : ViewModel() {
             }
         }
     }
+
+    /**
+     * Resume an offloaded session on [hostName] — the server recreates it
+     * with its recorded directory and launch command. Invokes [onResult]
+     * like [createSession]: (null, nameToOpen) or (errorMessage, null).
+     */
+    fun recreateSession(
+        hostName: String,
+        sessionName: String,
+        onResult: (error: String?, name: String?) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val api = SshToGoClient.forProfile(profile)
+            try {
+                val resp = api.recreateSession(hostName, sessionName)
+                onResult(null, resp.name.ifBlank { sessionName })
+                refresh()
+            } catch (t: Throwable) {
+                onResult(t.message ?: "Failed to resume session", null)
+            }
+        }
+    }
 }

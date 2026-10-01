@@ -44,6 +44,16 @@ interface SshToGoApi {
         @Body req: CreateSessionRequest,
     ): CreateSessionResponse
 
+    // Bring an offloaded session back: the server recreates it in the
+    // directory and with the launch command it recorded. 409 if it is
+    // already live, 404 if it is no longer tracked. The response carries
+    // the sanitized name it now runs under — open the terminal with that.
+    @POST("api/hosts/{host}/sessions/{session}/recreate")
+    suspend fun recreateSession(
+        @Path("host") host: String,
+        @Path("session") session: String,
+    ): RecreateSessionResponse
+
     // Commands sessions were started with, most recent first (server-side
     // list, shared with the web New Session form's chips; capped at 20).
     @GET("api/recent-commands")
@@ -139,6 +149,13 @@ data class CreateSessionResponse(
 )
 
 @Serializable
+data class RecreateSessionResponse(
+    val name: String = "",
+    @SerialName("working_dir") val workingDir: String = "",
+    val command: String = "",
+)
+
+@Serializable
 data class RecentCommand(
     val command: String,
     @SerialName("last_used") val lastUsed: String = "",
@@ -158,9 +175,14 @@ data class MissingSession(
     val host: String,
     val name: String,
     @SerialName("working_dir") val workingDir: String = "",
+    val command: String = "",
     @SerialName("created_at") val createdAt: String = "",
     @SerialName("last_seen_at") val lastSeenAt: String = "",
-)
+    @SerialName("auto_offloaded") val autoOffloaded: Boolean = false,
+) {
+    // Epoch millis the poller last saw it running; 0 if unknown.
+    val lastSeenEpochMs: Long get() = parseEpochMs(lastSeenAt)
+}
 
 // /api/sessions returns a flat list keyed by host_name.
 @Serializable

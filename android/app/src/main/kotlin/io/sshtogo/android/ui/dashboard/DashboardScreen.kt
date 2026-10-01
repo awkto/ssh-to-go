@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Palette
@@ -47,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import android.widget.Toast
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -56,6 +60,7 @@ import io.sshtogo.android.appVersionName
 import io.sshtogo.android.net.CreateSessionRequest
 import io.sshtogo.android.net.HostSession
 import io.sshtogo.android.net.HostState
+import io.sshtogo.android.net.MissingSession
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -175,6 +180,7 @@ fun DashboardScreen(
                     serverNewSessionDir = state.serverNewSessionDir,
                     onOpenSession = onOpenSession,
                     onCreateSession = { host, req, cb -> vm.createSession(host, req, cb) },
+                    onResumeSession = { host, name, cb -> vm.recreateSession(host, name, cb) },
                 )
             }
         }
@@ -190,6 +196,7 @@ private fun DashboardList(
     serverNewSessionDir: String,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
     onCreateSession: (host: String, req: CreateSessionRequest, onResult: (String?, String?) -> Unit) -> Unit,
+    onResumeSession: (host: String, name: String, onResult: (String?, String?) -> Unit) -> Unit,
 ) {
     val sessionsByHost = sessions.groupBy { it.host }
     // Reading this state-backed pref here re-sorts the list when toggled.
@@ -212,6 +219,7 @@ private fun DashboardList(
                 serverNewSessionDir = serverNewSessionDir,
                 onOpenSession = onOpenSession,
                 onCreateSession = onCreateSession,
+                onResumeSession = onResumeSession,
             )
         }
     }
@@ -225,6 +233,7 @@ private fun HostCard(
     serverNewSessionDir: String,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
     onCreateSession: (host: String, req: CreateSessionRequest, onResult: (String?, String?) -> Unit) -> Unit,
+    onResumeSession: (host: String, name: String, onResult: (String?, String?) -> Unit) -> Unit,
 ) {
     var showCreate by remember { mutableStateOf(false) }
 
@@ -265,7 +274,7 @@ private fun HostCard(
             }
             Text(subtitle, style = MaterialTheme.typography.bodySmall)
 
-            if (sessions.isEmpty()) {
+            if (sessions.isEmpty() && host.missingSessions.isEmpty()) {
                 Text(
                     "No sessions",
                     style = MaterialTheme.typography.bodySmall,
@@ -314,6 +323,112 @@ private fun HostCard(
                             }
                         }
                     }
+                }
+            }
+
+            if (host.missingSessions.isNotEmpty()) {
+                OffloadedSessions(
+                    hostName = host.name,
+                    // Most recently seen first — the one you just offloaded is on top.
+                    offloaded = host.missingSessions.sortedByDescending { it.lastSeenEpochMs },
+                    onResume = { name, cb -> onResumeSession(host.name, name, cb) },
+                    onOpenSession = onOpenSession,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sessions the server still tracks but tmux no longer runs (offloaded by
+ * hand or by auto-sleep). Collapsed by default so they don't crowd the live
+ * list; tapping one recreates it with its recorded directory and launch
+ * command, then opens the terminal — the app's version of the web
+ * dashboard's Recreate button and `stogo resume`.
+ */
+@Composable
+private fun OffloadedSessions(
+    hostName: String,
+    offloaded: List<MissingSession>,
+    onResume: (name: String, onResult: (String?, String?) -> Unit) -> Unit,
+    onOpenSession: (hostName: String, sessionName: String) -> Unit,
+) {
+    val context = LocalContext.current
+    var expanded by remember(hostName) { mutableStateOf(false) }
+    // Name currently being resumed; blocks double taps while the server works.
+    var resuming by remember(hostName) { mutableStateOf<String?>(null) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Offloaded (${offloaded.size})",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = if (expanded) "Hide offloaded sessions" else "Show offloaded sessions",
+            tint = MaterialTheme.colorScheme.outline,
+        )
+    }
+    if (!expanded) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        offloaded.forEach { m ->
+            val busy = resuming == m.name
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = resuming == null) {
+                        resuming = m.name
+                        onResume(m.name) { error, name ->
+                            resuming = null
+                            if (error != null) {
+                                Toast.makeText(context, "Resume failed: $error", Toast.LENGTH_LONG).show()
+                            } else if (name != null) {
+                                onOpenSession(hostName, name)
+                            }
+                        }
+                    }
+                    .padding(horizontal = 4.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(modifier = Modifier.size(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        m.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val detail = listOfNotNull(
+                        m.workingDir.ifBlank { null },
+                        m.command.ifBlank { null },
+                        if (m.autoOffloaded) "auto-slept" else null,
+                    ).joinToString("  ·  ")
+                    if (detail.isNotEmpty()) {
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (busy) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        "resume",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
         }
