@@ -2,6 +2,23 @@
 # Installed by the sshtogo .deb; or load manually:
 #   source <(stogo completion bash)
 
+# Server lookups for completion; a tight timeout so a dead server never
+# hangs the shell mid-tab.
+_stogo_sessions() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 2 stogo __sessions "$1" 2>/dev/null
+    else
+        stogo __sessions "$1" 2>/dev/null
+    fi
+}
+_stogo_tags() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 2 stogo __tags 2>/dev/null
+    else
+        stogo __tags 2>/dev/null
+    fi
+}
+
 _stogo() {
     local cur prev
     COMPREPLY=()
@@ -9,7 +26,7 @@ _stogo() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "auth list ls new create connect c resume offload kill status completion version help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "auth list ls new create connect c resume offload kill tag untag tags status completion version help" -- "$cur") )
         return
     fi
 
@@ -18,8 +35,20 @@ _stogo() {
             [[ $COMP_CWORD -eq 2 ]] && COMPREPLY=( $(compgen -W "login logout" -- "$cur") )
             ;;
         list|ls)
-            [[ "$prev" == "-o" ]] && COMPREPLY=( $(compgen -W "json" -- "$cur") ) \
-                || COMPREPLY=( $(compgen -W "active offloaded all -t -a -o" -- "$cur") )
+            if [[ "$prev" == "-o" ]]; then
+                COMPREPLY=( $(compgen -W "json" -- "$cur") )
+            elif [[ "$prev" == "-tag" ]]; then
+                COMPREPLY=( $(compgen -W "- $(_stogo_tags)" -- "$cur") )
+            else
+                COMPREPLY=( $(compgen -W "active offloaded all -t -a -g -tag -o" -- "$cur") )
+            fi
+            ;;
+        tag|untag)
+            if [[ $COMP_CWORD -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$(_stogo_sessions all)" -- "$cur") )
+            else
+                COMPREPLY=( $(compgen -W "$(_stogo_tags)" -- "$cur") )
+            fi
             ;;
         new|create)
             [[ "$cur" == -* ]] && COMPREPLY=( $(compgen -W "-host -dir -cmd -bg -y" -- "$cur") )

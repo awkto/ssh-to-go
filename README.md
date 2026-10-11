@@ -145,6 +145,9 @@ stogo connect 3           # ...or use the short ID from `stogo list`
 stogo offload mysession   # stop a session but keep it resumable
 stogo resume mysession    # bring an offloaded session back and attach (-bg: don't attach)
 stogo kill mysession      # kill a session
+stogo tag mysession work  # tag a session (-work removes; stogo untag works too)
+stogo list -tag work      # only sessions tagged work (-tag -: untagged; -g: group by tag)
+stogo tags                # every tag, in its dashboard colour, with a session count
 stogo status              # server/host summary
 ```
 

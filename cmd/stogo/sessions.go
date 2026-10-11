@@ -20,6 +20,7 @@ type listRow struct {
 	State     string            `json:"state"` // "active" | "offloaded"
 	Session   *tmuxSession      `json:"session,omitempty"`
 	Offloaded *offloadedSession `json:"offloaded,omitempty"`
+	Tags      []string          `json:"tags,omitempty"`
 }
 
 func (r listRow) name() string {
@@ -41,13 +42,15 @@ func (r listRow) when() time.Time {
 	return r.Session.Activity
 }
 
-const listUsage = "usage: stogo list [active|offloaded|all] [-t|-a] [-o json]"
+const listUsage = "usage: stogo list [active|offloaded|all] [-t|-a|-g] [-tag TAG] [-o json]"
 
 func cmdList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	output := fs.String("o", "", "output format (json)")
 	byTime := fs.Bool("t", false, "sort by last activity, most recent first (default)")
 	byName := fs.Bool("a", false, "sort alphabetically by session name")
+	byTag := fs.Bool("g", false, "group by tag (first tag alphabetically; untagged last)")
+	tagFilter := fs.String("tag", "", "only sessions with this tag (- for untagged)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -67,8 +70,8 @@ func cmdList(args []string) error {
 	if filter != "active" && filter != "offloaded" && filter != "all" {
 		return fmt.Errorf("unknown filter %q\n%s", filter, listUsage)
 	}
-	if *byTime && *byName {
-		return fmt.Errorf("-t and -a are mutually exclusive")
+	if n := btoi(*byTime) + btoi(*byName) + btoi(*byTag); n > 1 {
+		return fmt.Errorf("-t, -a and -g are mutually exclusive")
 	}
 
 	cfg, err := loadConfig()
@@ -101,10 +104,33 @@ func cmdList(args []string) error {
 		}
 	}
 
-	// Active sessions always sort ahead of offloaded ones; -t/-a order
-	// within each group.
+	// Tags are optional garnish: an older server without them still lists.
+	prefs, _ := c.sessionPrefsAll()
+	colors, _ := c.tagColors()
+	want := normalizeTag(*tagFilter)
+	kept := rows[:0]
+	for _, r := range rows {
+		r.Tags = prefs[r.HostName+":"+r.name()].tags()
+		switch {
+		case *tagFilter == "-" && len(r.Tags) > 0:
+			continue
+		case *tagFilter != "" && *tagFilter != "-" && !contains(r.Tags, want):
+			continue
+		}
+		kept = append(kept, r)
+	}
+	rows = kept
+
+	// -g groups by first tag (untagged last) ahead of everything else.
+	// Otherwise active sessions sort ahead of offloaded ones, and -t/-a
+	// order within each group.
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
+		if *byTag {
+			if ga, gb := firstTag(a), firstTag(b); ga != gb {
+				return gb == "" || (ga != "" && ga < gb)
+			}
+		}
 		if a.State != b.State {
 			return a.State == "active"
 		}
@@ -145,29 +171,30 @@ func cmdList(args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 2, 4, 2, ' ', 0)
 	switch filter {
 	case "offloaded":
-		fmt.Fprintln(w, "SESSION\tHOST\tDIR\tCOMMAND\tLAST SEEN")
+		fmt.Fprintln(w, "SESSION\tHOST\tDIR\tCOMMAND\tLAST SEEN\tTAGS")
 		for _, r := range rows {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 				r.name(), r.HostName, dash(r.Offloaded.WorkingDir), dash(r.Offloaded.Command),
-				offloadedWhen(r))
+				offloadedWhen(r), renderTags(r.Tags, colors))
 		}
 	case "all":
-		fmt.Fprintln(w, "ID\tSESSION\tHOST\tSTATE\tWINDOWS\tCLIENTS\tACTIVITY")
+		fmt.Fprintln(w, "ID\tSESSION\tHOST\tSTATE\tWINDOWS\tCLIENTS\tACTIVITY\tTAGS")
 		for _, r := range rows {
 			if r.Offloaded != nil {
-				fmt.Fprintf(w, "-\t%s\t%s\toffloaded\t-\t-\t%s\n", r.name(), r.HostName, offloadedWhen(r))
+				fmt.Fprintf(w, "-\t%s\t%s\toffloaded\t-\t-\t%s\t%s\n", r.name(), r.HostName, offloadedWhen(r),
+					renderTags(r.Tags, colors))
 				continue
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\tactive\t%d\t%s\t%s\n",
+			fmt.Fprintf(w, "%s\t%s\t%s\tactive\t%d\t%s\t%s\t%s\n",
 				sessionID(r.Session), r.name(), r.HostName, r.Session.Windows,
-				sessionClients(r.Session), relTime(r.Session.Activity))
+				sessionClients(r.Session), relTime(r.Session.Activity), renderTags(r.Tags, colors))
 		}
 	default:
-		fmt.Fprintln(w, "ID\tSESSION\tHOST\tWINDOWS\tCLIENTS\tACTIVITY")
+		fmt.Fprintln(w, "ID\tSESSION\tHOST\tWINDOWS\tCLIENTS\tACTIVITY\tTAGS")
 		for _, r := range rows {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n",
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 				sessionID(r.Session), r.name(), r.HostName, r.Session.Windows,
-				sessionClients(r.Session), relTime(r.Session.Activity))
+				sessionClients(r.Session), relTime(r.Session.Activity), renderTags(r.Tags, colors))
 		}
 	}
 	return w.Flush()
@@ -197,6 +224,29 @@ func offloadedWhen(r listRow) string {
 		t += " (auto)"
 	}
 	return t
+}
+
+func firstTag(r listRow) string {
+	if len(r.Tags) == 0 {
+		return ""
+	}
+	return r.Tags[0]
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func dash(s string) string {

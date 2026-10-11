@@ -20,12 +20,16 @@ Usage:
   stogo auth login [-url URL] [-name TOKEN_NAME]   authenticate with a server
   stogo auth logout                                revoke token and forget server
   stogo list | ls [active|offloaded|all]           list sessions: active (default), offloaded, or both
-                  [-t|-a] [-o json]                  (-t by activity, default; -a by name)
+                  [-t|-a|-g] [-tag TAG] [-o json]    (-t by activity, default; -a by name; -g grouped
+                                                     by tag; -tag shows one tag, "-tag -" untagged)
   stogo new | create [flags] [name]                create a session and attach (prompts; see below)
   stogo connect | c <session>                      attach to a session (resumes it if offloaded)
   stogo resume [-bg] <session>                     recreate an offloaded session and attach
   stogo offload <session>                          offload a session (stop it, keep it resumable)
   stogo kill <session>                             kill a session
+  stogo tag <session> [tag ...]                    show or add tags ("-tag" in the list removes one)
+  stogo untag <session> <tag> ...                  remove tags
+  stogo tags                                       list every tag and how many sessions carry it
   stogo status                                     server connectivity and summary
   stogo completion bash                            print bash completion script
   stogo version                                    print client version
@@ -72,12 +76,20 @@ func main() {
 		err = cmdOffload(os.Args[2:])
 	case "kill":
 		err = cmdKill(os.Args[2:])
+	case "tag":
+		err = cmdTag(os.Args[2:], false)
+	case "untag":
+		err = cmdTag(os.Args[2:], true)
+	case "tags":
+		err = cmdTags(os.Args[2:])
 	case "status":
 		err = cmdStatus(os.Args[2:])
 	case "completion":
 		err = cmdCompletion(os.Args[2:])
 	case "__sessions": // hidden: feeds bash completion ("all"/"offloaded" widen it)
 		err = cmdCompleteSessions(os.Args[2:])
+	case "__tags": // hidden: feeds bash completion
+		err = cmdCompleteTags()
 	case "version", "-v", "--version":
 		fmt.Println(Version)
 	case "help", "-h", "--help":

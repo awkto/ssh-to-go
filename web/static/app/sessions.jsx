@@ -243,6 +243,19 @@ const TagEditor = ({ anchor, session: s, allTags, onClose }) => {
   const r = anchor.getBoundingClientRect();
   const width = 240;
   const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+  // Open below the button when it fits, else above it; failing both, pin it
+  // to the bottom edge. Re-run every render: expanding a tag's swatches
+  // changes the height. Set on the node directly so it never re-renders.
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const h = el.offsetHeight;
+    const below = r.bottom + 6;
+    const above = r.top - 6 - h;
+    el.style.top = (below + h <= window.innerHeight - 8 ? below
+      : above >= 8 ? above
+      : Math.max(8, window.innerHeight - h - 8)) + 'px';
+  });
   const save = async (next) => {
     setCurrent(next);
     setErr('');
