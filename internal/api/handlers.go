@@ -1302,6 +1302,26 @@ func (h *Handlers) SetSessionIcon(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "ok"})
 }
 
+// GetTagColors returns tag -> OKLCH hue for every tag ever used.
+func (h *Handlers) GetTagColors(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, h.SessionIcons.TagColors())
+}
+
+func (h *Handlers) SetTagColor(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Hue *int `json:"hue"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Hue == nil {
+		http.Error(w, "body must be {\"hue\": 0-359}", http.StatusBadRequest)
+		return
+	}
+	if err := h.SessionIcons.SetTagColor(r.PathValue("tag"), *req.Hue); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
 // GetRecentCommands lists the commands sessions have been launched with,
 // most recently used first. Always an array, never null, so the UI can map
 // over it without a guard.

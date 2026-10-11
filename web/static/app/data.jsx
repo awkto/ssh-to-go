@@ -7,6 +7,7 @@ const STORE = {
   keypairs: [],
   settings: {},
   icons: {},
+  tagColors: {},
   recentCommands: [],
   pubkey: null,
   version: '',
@@ -26,7 +27,7 @@ async function authFetch(url, opts) {
 
 async function refresh() {
   try {
-    const [h, s, k, st, ic, rc] = await Promise.all([
+    const [h, s, k, st, ic, rc, tc] = await Promise.all([
       authFetch('/api/hosts').then(r => r.json()),
       authFetch('/api/sessions').then(r => r.json()),
       authFetch('/api/keypairs').then(r => r.json()),
@@ -35,6 +36,7 @@ async function refresh() {
       // Tolerated separately: an older server without the endpoint should
       // still boot the rest of the dashboard.
       authFetch('/api/recent-commands').then(r => r.json()).catch(() => []),
+      authFetch('/api/tag-colors').then(r => r.json()).catch(() => ({})),
     ]);
     STORE.hosts = h || [];
     STORE.sessions = s || [];
@@ -42,6 +44,7 @@ async function refresh() {
     STORE.settings = st || {};
     STORE.icons = ic || {};
     STORE.recentCommands = rc || [];
+    STORE.tagColors = tc || {};
     STORE.loading = false;
     STORE.error = null;
     STORE._lastRefresh = Date.now();
@@ -392,6 +395,25 @@ function normalizeTag(t) {
 async function setSessionTags(hostName, sessionName, tags) {
   const clean = [...new Set(tags.map(normalizeTag).filter(Boolean))].sort();
   await setSessionIconPatch(hostName, sessionName, { tags: clean });
+  // The server gives a tag it hasn't seen before a random colour; pick it up.
+  if (clean.some(t => !(t in STORE.tagColors))) {
+    try {
+      STORE.tagColors = await authFetch('/api/tag-colors').then(r => r.json()) || {};
+      notify();
+    } catch (e) {}
+  }
+}
+
+// Recolours a tag everywhere it appears. hue is an OKLCH hue, 0-359.
+async function setTagColor(tag, hue) {
+  STORE.tagColors = { ...STORE.tagColors, [tag]: hue };
+  notify();
+  const r = await authFetch(`/api/tag-colors/${encodeURIComponent(tag)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hue }),
+  });
+  if (!r.ok) throw new Error(await r.text());
 }
 
 async function addHost(payload) {
@@ -423,7 +445,7 @@ Object.assign(window, {
   STORE, useStore, refresh,
   createSession, killSession, offloadSession, recreateSession, forgetSession,
   renameSession, getHandoff, forgetRecentCommand,
-  setSessionIconPatch, setSessionTags, tagCounts, normalizeTag,
+  setSessionIconPatch, setSessionTags, setTagColor, tagCounts, normalizeTag,
   addHost, scanAll, openTerminal,
   timeAgo, formatUptime,
 });

@@ -116,6 +116,8 @@ func NewRouter(rc RouterConfig) http.Handler {
 	// Session icons API
 	mux.HandleFunc("GET /api/session-icons", handlers.GetSessionIcons)
 	mux.HandleFunc("PUT /api/session-icons/{host}/{session}", handlers.SetSessionIcon)
+	mux.HandleFunc("GET /api/tag-colors", handlers.GetTagColors)
+	mux.HandleFunc("PUT /api/tag-colors/{tag}", handlers.SetTagColor)
 
 	// Recent commands. DELETE takes an optional {"command": "..."} body:
 	// with one it forgets that command, without one it clears the list.

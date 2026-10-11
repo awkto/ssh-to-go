@@ -95,22 +95,71 @@ func NormalizeTags(in []string) []string {
 	return out
 }
 
-// SessionIconStore persists session icon/color overrides to a JSON file.
+// TagHues is the swatch palette tag colours are drawn from: OKLCH hues
+// (red, orange, amber, yellow, lime, green, teal, cyan, blue, indigo,
+// violet, pink). Mirrors TAG_HUES in web/static/app/sessions.jsx.
+var TagHues = []int{25, 55, 75, 95, 125, 150, 180, 210, 245, 275, 305, 345}
+
+// SessionIconStore persists session icon/color overrides to a JSON file,
+// plus the colour of each tag, which is shared by every session carrying it.
 type SessionIconStore struct {
-	mu    sync.RWMutex
-	path  string
-	icons map[string]SessionIcon // key: "host:session"
+	mu       sync.RWMutex
+	path     string
+	icons    map[string]SessionIcon // key: "host:session"
+	tagsPath string
+	tagHues  map[string]int // tag -> OKLCH hue, 0-359
 }
 
 func NewSessionIconStore(dataDir string) (*SessionIconStore, error) {
 	s := &SessionIconStore{
-		path:  filepath.Join(dataDir, "session-icons.json"),
-		icons: make(map[string]SessionIcon),
+		path:     filepath.Join(dataDir, "session-icons.json"),
+		icons:    make(map[string]SessionIcon),
+		tagsPath: filepath.Join(dataDir, "tag-colors.json"),
+		tagHues:  make(map[string]int),
 	}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
+	if data, err := os.ReadFile(s.tagsPath); err == nil {
+		if err := json.Unmarshal(data, &s.tagHues); err != nil {
+			return nil, fmt.Errorf("read tag colors: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read tag colors: %w", err)
+	}
 	return s, nil
+}
+
+func (s *SessionIconStore) saveTagHues() error {
+	data, err := json.MarshalIndent(s.tagHues, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.tagsPath, data, 0600)
+}
+
+// TagColors returns every tag's hue. A tag keeps its colour after the last
+// session drops it, so re-adding it brings the same colour back.
+func (s *SessionIconStore) TagColors() map[string]int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cp := make(map[string]int, len(s.tagHues))
+	for k, v := range s.tagHues {
+		cp[k] = v
+	}
+	return cp
+}
+
+// SetTagColor sets one tag's hue (wrapped into 0-359).
+func (s *SessionIconStore) SetTagColor(tag string, hue int) error {
+	norm := NormalizeTags([]string{tag})
+	if len(norm) == 0 {
+		return fmt.Errorf("empty tag")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tagHues[norm[0]] = ((hue % 360) + 360) % 360
+	return s.saveTagHues()
 }
 
 func (s *SessionIconStore) load() error {
@@ -157,6 +206,19 @@ func (s *SessionIconStore) Set(host, session string, icon SessionIcon) error {
 	defer s.mu.Unlock()
 	key := sessionKey(host, session)
 	icon.Tags = NormalizeTags(icon.Tags)
+	// A tag seen for the first time gets a random colour from the palette.
+	fresh := false
+	for _, t := range icon.Tags {
+		if _, ok := s.tagHues[t]; !ok {
+			s.tagHues[t] = TagHues[rand.Intn(len(TagHues))]
+			fresh = true
+		}
+	}
+	if fresh {
+		if err := s.saveTagHues(); err != nil {
+			return err
+		}
+	}
 	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && icon.LastAccessed == "" && !icon.Starred && !icon.KeepAwake && len(icon.Tags) == 0 {
 		delete(s.icons, key)
 	} else {

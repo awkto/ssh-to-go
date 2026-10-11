@@ -193,7 +193,10 @@ const groupOrder = (a, b) => {
   if (!gb) return -1;
   return ga.localeCompare(gb);
 };
+const TAG_HUES = [25, 55, 75, 95, 125, 150, 180, 210, 245, 275, 305, 345];
 const tagHue = tag => {
+  const stored = STORE.tagColors && STORE.tagColors[tag];
+  if (typeof stored === 'number') return stored;
   let h = 0;
   for (let i = 0; i < tag.length; i++) h = h * 31 + tag.charCodeAt(i) >>> 0;
   return h % 360;
@@ -340,6 +343,7 @@ const TagEditor = ({
   onClose
 }) => {
   const [draft, setDraft] = React.useState('');
+  const [coloring, setColoring] = React.useState(null);
   const [current, setCurrent] = React.useState(s.tags);
   const [err, setErr] = React.useState('');
   const ref = React.useRef(null);
@@ -384,15 +388,36 @@ const TagEditor = ({
     value: draft,
     maxLength: 32,
     onChange: e => setDraft(e.target.value)
-  })), suggestions.map(tag => React.createElement("button", {
-    key: tag,
+  })), suggestions.map(tag => React.createElement(React.Fragment, {
+    key: tag
+  }, React.createElement("div", {
+    className: "tag-editor-row"
+  }, React.createElement("button", {
+    className: `tag-swatch-btn ${coloring === tag ? 'open' : ''}`,
+    style: {
+      '--tag-h': tagHue(tag)
+    },
+    title: `Change the colour of "${tag}"`,
+    "aria-label": `Change colour of ${tag}`,
+    onClick: () => setColoring(coloring === tag ? null : tag)
+  }), React.createElement("button", {
     className: `sort-opt ${current.includes(tag) ? 'active' : ''}`,
     onClick: () => toggle(tag)
   }, React.createElement(TagChip, {
     tag: tag
   }), current.includes(tag) && React.createElement(IconCheck, {
     size: 14
-  }))), !suggestions.length && React.createElement("div", {
+  }))), coloring === tag && React.createElement("div", {
+    className: "tag-swatches"
+  }, TAG_HUES.map(h => React.createElement("button", {
+    key: h,
+    className: `tag-swatch ${tagHue(tag) === h ? 'selected' : ''}`,
+    style: {
+      '--tag-h': h
+    },
+    "aria-label": `Hue ${h}`,
+    onClick: () => setTagColor(tag, h).catch(e => setErr('colour save failed: ' + e.message))
+  }))))), !suggestions.length && React.createElement("div", {
     className: "tag-pop-hint"
   }, "Try \"work\" or \"personal\"."), err && React.createElement("div", {
     className: "tag-pop-hint",

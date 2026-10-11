@@ -51,3 +51,42 @@ func TestSessionTagsPersistAndRename(t *testing.T) {
 		t.Fatal("empty entry should be deleted")
 	}
 }
+
+func TestNewTagGetsPaletteColourThatSticks(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewSessionIconStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Set("h", "a", SessionIcon{Tags: []string{"work"}}); err != nil {
+		t.Fatal(err)
+	}
+	hue, ok := s.TagColors()["work"]
+	if !ok {
+		t.Fatal("new tag got no colour")
+	}
+	inPalette := false
+	for _, h := range TagHues {
+		inPalette = inPalette || h == hue
+	}
+	if !inPalette {
+		t.Fatalf("hue %d not from the palette", hue)
+	}
+	// Reusing the tag on another session keeps its colour.
+	if err := s.Set("h", "b", SessionIcon{Tags: []string{"work"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.TagColors()["work"]; got != hue {
+		t.Fatalf("colour changed on reuse: %d -> %d", hue, got)
+	}
+	if err := s.SetTagColor("Work", -10); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := NewSessionIconStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.TagColors()["work"]; got != 350 {
+		t.Fatalf("hue after set+reload = %d, want 350", got)
+	}
+}

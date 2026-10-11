@@ -142,8 +142,16 @@ const groupOrder = (a, b) => {
   return ga.localeCompare(gb);
 };
 
-// Stable per-tag hue so "work" is always the same colour everywhere.
+// Swatches for tag colours, as OKLCH hues. Mirrors keystore.TagHues, which
+// the server draws a new tag's random colour from.
+const TAG_HUES = [25, 55, 75, 95, 125, 150, 180, 210, 245, 275, 305, 345];
+
+// A tag's colour is stored server-side (STORE.tagColors). Tags from before
+// colours were stored fall back to a hue hashed from the name, so they stay
+// stable until someone picks one.
 const tagHue = (tag) => {
+  const stored = STORE.tagColors && STORE.tagColors[tag];
+  if (typeof stored === 'number') return stored;
   let h = 0;
   for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0;
   return h % 360;
@@ -227,6 +235,8 @@ const TagFilterMenu = ({ tags, tagFilter, setTagFilter, untaggedCount }) => {
 // would be cut off.
 const TagEditor = ({ anchor, session: s, allTags, onClose }) => {
   const [draft, setDraft] = React.useState('');
+  // The tag whose colour swatches are expanded, if any.
+  const [coloring, setColoring] = React.useState(null);
   const [current, setCurrent] = React.useState(s.tags);
   const [err, setErr] = React.useState('');
   const ref = React.useRef(null);
@@ -257,10 +267,26 @@ const TagEditor = ({ anchor, session: s, allTags, onClose }) => {
                onChange={e => setDraft(e.target.value)} />
       </form>
       {suggestions.map(tag => (
-        <button key={tag} className={`sort-opt ${current.includes(tag) ? 'active' : ''}`} onClick={() => toggle(tag)}>
-          <TagChip tag={tag} />
-          {current.includes(tag) && <IconCheck size={14} />}
-        </button>
+        <React.Fragment key={tag}>
+          <div className="tag-editor-row">
+            <button className={`tag-swatch-btn ${coloring === tag ? 'open' : ''}`} style={{'--tag-h': tagHue(tag)}}
+                    title={`Change the colour of "${tag}"`} aria-label={`Change colour of ${tag}`}
+                    onClick={() => setColoring(coloring === tag ? null : tag)} />
+            <button className={`sort-opt ${current.includes(tag) ? 'active' : ''}`} onClick={() => toggle(tag)}>
+              <TagChip tag={tag} />
+              {current.includes(tag) && <IconCheck size={14} />}
+            </button>
+          </div>
+          {coloring === tag && (
+            <div className="tag-swatches">
+              {TAG_HUES.map(h => (
+                <button key={h} className={`tag-swatch ${tagHue(tag) === h ? 'selected' : ''}`} style={{'--tag-h': h}}
+                        aria-label={`Hue ${h}`}
+                        onClick={() => setTagColor(tag, h).catch(e => setErr('colour save failed: ' + e.message))} />
+              ))}
+            </div>
+          )}
+        </React.Fragment>
       ))}
       {!suggestions.length && <div className="tag-pop-hint">Try "work" or "personal".</div>}
       {err && <div className="tag-pop-hint" style={{color:'var(--err)'}}>{err}</div>}
