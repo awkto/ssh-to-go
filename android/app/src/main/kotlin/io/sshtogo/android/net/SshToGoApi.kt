@@ -2,9 +2,11 @@ package io.sshtogo.android.net
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 
 @Serializable
@@ -63,7 +65,35 @@ interface SshToGoApi {
     // decoder ignores the rest.
     @GET("api/settings")
     suspend fun settings(): ServerSettings
+
+    // Per-session preferences keyed "host:session" (icon, colour, star,
+    // theme, keep_awake, last_accessed, tags). Kept as raw JSON objects so
+    // a save can send back every field, including ones the app doesn't
+    // model — the PUT replaces the whole entry.
+    @GET("api/session-icons")
+    suspend fun sessionIcons(): Map<String, JsonObject>
+
+    @PUT("api/session-icons/{host}/{session}")
+    suspend fun setSessionIcon(
+        @Path("host") host: String,
+        @Path("session") session: String,
+        @Body entry: JsonObject,
+    ): Map<String, String>
+
+    // Tag -> OKLCH hue (0-359). The server gives a tag a random palette hue
+    // the first time a session carries it.
+    @GET("api/tag-colors")
+    suspend fun tagColors(): Map<String, Int>
+
+    @PUT("api/tag-colors/{tag}")
+    suspend fun setTagColor(
+        @Path("tag") tag: String,
+        @Body req: TagColorRequest,
+    ): Map<String, String>
 }
+
+@Serializable
+data class TagColorRequest(val hue: Int)
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Wire format mirrors the Go shapes in internal/hub/hub.go and the
@@ -201,6 +231,8 @@ data class HostSession(
     // Epoch millis of last activity (or created as fallback); 0 if unknown.
     // Used to sort sessions most-recently-used first.
     val activityEpochMs: Long,
+    // Free-form labels (work, personal, …) from the session's icon entry.
+    val tags: List<String> = emptyList(),
 )
 
 fun HostSessionEntry.toHostSession(): HostSession = HostSession(

@@ -1,7 +1,9 @@
 package io.sshtogo.android.ui.dashboard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,6 +63,10 @@ import io.sshtogo.android.net.CreateSessionRequest
 import io.sshtogo.android.net.HostSession
 import io.sshtogo.android.net.HostState
 import io.sshtogo.android.net.MissingSession
+import io.sshtogo.android.ui.tags.TagChips
+import io.sshtogo.android.ui.tags.TagEditorDialog
+import io.sshtogo.android.ui.tags.TagFilterRow
+import io.sshtogo.android.ui.tags.UNTAGGED
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,9 +184,13 @@ fun DashboardScreen(
                     sessions = state.sessions,
                     recentCommands = state.recentCommands,
                     serverNewSessionDir = state.serverNewSessionDir,
+                    sessionTags = state.sessionTags,
+                    tagColors = state.tagColors,
                     onOpenSession = onOpenSession,
                     onCreateSession = { host, req, cb -> vm.createSession(host, req, cb) },
                     onResumeSession = { host, name, cb -> vm.recreateSession(host, name, cb) },
+                    onSaveTags = { host, name, tags, cb -> vm.saveTags(host, name, tags, cb) },
+                    onSetTagColor = { tag, hue, onErr -> vm.setTagColor(tag, hue, onErr) },
                 )
             }
         }
@@ -194,46 +204,127 @@ private fun DashboardList(
     sessions: List<HostSession>,
     recentCommands: List<String>,
     serverNewSessionDir: String,
+    sessionTags: Map<String, List<String>>,
+    tagColors: Map<String, Int>,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
     onCreateSession: (host: String, req: CreateSessionRequest, onResult: (String?, String?) -> Unit) -> Unit,
     onResumeSession: (host: String, name: String, onResult: (String?, String?) -> Unit) -> Unit,
+    onSaveTags: (host: String, name: String, tags: List<String>, onResult: (String?) -> Unit) -> Unit,
+    onSetTagColor: (tag: String, hue: Int, onError: (String) -> Unit) -> Unit,
 ) {
+    val context = LocalContext.current
+    val prefs = SshToGoApplication.instance.prefs
     val sessionsByHost = sessions.groupBy { it.host }
     // Reading this state-backed pref here re-sorts the list when toggled.
-    val sortByRecent = SshToGoApplication.instance.prefs.sortSessionsByRecent
+    val sortByRecent = prefs.sortSessionsByRecent
+
+    // Tag filter over live and offloaded sessions alike. A remembered tag
+    // nobody carries any more falls back to "all" rather than hiding
+    // everything.
+    val tagsOf = { host: String, name: String -> sessionTags[tagKey(host, name)].orEmpty() }
+    val everySession = sessions.map { it.host to it.name } +
+        hosts.flatMap { h -> h.missingSessions.map { h.name to it.name } }
+    val counts = everySession.flatMap { (h, n) -> tagsOf(h, n) }
+        .groupingBy { it }.eachCount().toSortedMap().toList()
+    val untaggedCount = everySession.count { (h, n) -> tagsOf(h, n).isEmpty() }
+    val filter = prefs.tagFilter.takeIf { it.isEmpty() || it == UNTAGGED || counts.any { c -> c.first == it } } ?: ""
+    val matches = { tags: List<String> ->
+        when (filter) {
+            "" -> true
+            UNTAGGED -> tags.isEmpty()
+            else -> filter in tags
+        }
+    }
+
+    // With a filter on, a host with nothing matching is just noise.
+    val visibleHosts = if (filter.isEmpty()) hosts else hosts.filter { h ->
+        sessionsByHost[h.name].orEmpty().any { matches(it.tags) } ||
+            h.missingSessions.any { matches(tagsOf(h.name, it.name)) }
+    }
+
+    // Session whose tags are being edited: (host, name, current tags).
+    var editing by remember { mutableStateOf<Triple<String, String, List<String>>?>(null) }
+    editing?.let { (host, name, current) ->
+        TagEditorDialog(
+            sessionName = name,
+            current = current,
+            allTags = counts.map { it.first },
+            colors = tagColors,
+            onSave = { tags ->
+                editing = null
+                onSaveTags(host, name, tags) { err ->
+                    if (err != null) Toast.makeText(context, "Saving tags failed: $err", Toast.LENGTH_LONG).show()
+                }
+            },
+            onSetColor = { tag, hue ->
+                onSetTagColor(tag, hue) { err ->
+                    Toast.makeText(context, "Colour change failed: $err", Toast.LENGTH_LONG).show()
+                }
+            },
+            onDismiss = { editing = null },
+        )
+    }
+    val onEditTags = { host: String, name: String -> editing = Triple(host, name, tagsOf(host, name)) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(hosts, key = { it.name }) { host ->
-            val hostSessions = sessionsByHost[host.name].orEmpty()
+        item(key = "tag-filter") {
+            if (counts.isEmpty()) {
+                Text(
+                    "Long-press a session to tag it (work, personal, …).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            } else {
+                TagFilterRow(
+                    counts = counts,
+                    untaggedCount = untaggedCount,
+                    colors = tagColors,
+                    selected = filter,
+                    onSelect = { prefs.tagFilter = it },
+                )
+            }
+        }
+        items(visibleHosts, key = { it.name }) { host ->
+            val hostSessions = sessionsByHost[host.name].orEmpty().filter { matches(it.tags) }
+            val offloaded = host.missingSessions.filter { matches(tagsOf(host.name, it.name)) }
             HostCard(
                 host = host,
                 // Stable sort: most-recently-used first, ties keep server order.
                 sessions = if (sortByRecent)
                     hostSessions.sortedByDescending { it.activityEpochMs }
                 else hostSessions,
+                offloaded = offloaded,
+                tagColors = tagColors,
+                tagsOf = tagsOf,
                 recentCommands = recentCommands,
                 serverNewSessionDir = serverNewSessionDir,
                 onOpenSession = onOpenSession,
                 onCreateSession = onCreateSession,
                 onResumeSession = onResumeSession,
+                onEditTags = onEditTags,
             )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HostCard(
     host: HostState,
     sessions: List<HostSession>,
+    offloaded: List<MissingSession>,
+    tagColors: Map<String, Int>,
+    tagsOf: (host: String, name: String) -> List<String>,
     recentCommands: List<String>,
     serverNewSessionDir: String,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
     onCreateSession: (host: String, req: CreateSessionRequest, onResult: (String?, String?) -> Unit) -> Unit,
     onResumeSession: (host: String, name: String, onResult: (String?, String?) -> Unit) -> Unit,
+    onEditTags: (host: String, name: String) -> Unit,
 ) {
     var showCreate by remember { mutableStateOf(false) }
 
@@ -274,7 +365,7 @@ private fun HostCard(
             }
             Text(subtitle, style = MaterialTheme.typography.bodySmall)
 
-            if (sessions.isEmpty() && host.missingSessions.isEmpty()) {
+            if (sessions.isEmpty() && offloaded.isEmpty()) {
                 Text(
                     "No sessions",
                     style = MaterialTheme.typography.bodySmall,
@@ -292,7 +383,11 @@ private fun HostCard(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onOpenSession(host.name, s.name) }
+                                .combinedClickable(
+                                    onClick = { onOpenSession(host.name, s.name) },
+                                    onLongClick = { onEditTags(host.name, s.name) },
+                                    onLongClickLabel = "Edit tags",
+                                )
                                 .padding(horizontal = 4.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -309,11 +404,15 @@ private fun HostCard(
                                 }
                             }
                             Spacer(modifier = Modifier.size(8.dp))
-                            Text(
-                                "›  ${s.name}",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f),
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "›  ${s.name}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                TagChips(s.tags, tagColors, Modifier.padding(start = 18.dp, top = 3.dp))
+                            }
                             if (s.attached) {
                                 Text(
                                     "attached",
@@ -326,13 +425,16 @@ private fun HostCard(
                 }
             }
 
-            if (host.missingSessions.isNotEmpty()) {
+            if (offloaded.isNotEmpty()) {
                 OffloadedSessions(
                     hostName = host.name,
                     // Most recently seen first — the one you just offloaded is on top.
-                    offloaded = host.missingSessions.sortedByDescending { it.lastSeenEpochMs },
+                    offloaded = offloaded.sortedByDescending { it.lastSeenEpochMs },
+                    tagColors = tagColors,
+                    tagsOf = { name -> tagsOf(host.name, name) },
                     onResume = { name, cb -> onResumeSession(host.name, name, cb) },
                     onOpenSession = onOpenSession,
+                    onEditTags = { name -> onEditTags(host.name, name) },
                 )
             }
         }
@@ -346,12 +448,16 @@ private fun HostCard(
  * command, then opens the terminal — the app's version of the web
  * dashboard's Recreate button and `stogo resume`.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OffloadedSessions(
     hostName: String,
     offloaded: List<MissingSession>,
+    tagColors: Map<String, Int>,
+    tagsOf: (name: String) -> List<String>,
     onResume: (name: String, onResult: (String?, String?) -> Unit) -> Unit,
     onOpenSession: (hostName: String, sessionName: String) -> Unit,
+    onEditTags: (name: String) -> Unit,
 ) {
     val context = LocalContext.current
     var expanded by remember(hostName) { mutableStateOf(false) }
@@ -385,7 +491,11 @@ private fun OffloadedSessions(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = resuming == null) {
+                    .combinedClickable(
+                        enabled = resuming == null,
+                        onLongClick = { onEditTags(m.name) },
+                        onLongClickLabel = "Edit tags",
+                    ) {
                         resuming = m.name
                         onResume(m.name) { error, name ->
                             resuming = null
@@ -420,6 +530,7 @@ private fun OffloadedSessions(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    TagChips(tagsOf(m.name), tagColors, Modifier.padding(top = 3.dp))
                 }
                 if (busy) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)

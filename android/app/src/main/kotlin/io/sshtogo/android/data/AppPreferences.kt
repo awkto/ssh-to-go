@@ -50,6 +50,18 @@ class AppPreferences(context: Context) {
         }
 
     /**
+     * Dashboard tag filter: "" = all sessions, ":untagged", or one tag.
+     * State-backed so changing it re-filters the list.
+     */
+    private val tagFilterState = mutableStateOf(prefs.getString(KEY_TAG_FILTER, "") ?: "")
+    var tagFilter: String
+        get() = tagFilterState.value
+        set(value) {
+            tagFilterState.value = value
+            prefs.edit().putString(KEY_TAG_FILTER, value).apply()
+        }
+
+    /**
      * New Session form: last-used values, persisted so a repeat create is
      * just tap-+, tap-Create — the mobile analog of the web form's
      * localStorage defaults and stogo's ~/.config defaults. The directory
@@ -114,6 +126,7 @@ class AppPreferences(context: Context) {
         private const val KEY_PALETTE_PREFIX = "palette."
         private const val KEY_THEME_MODE = "app_theme_mode"
         private const val KEY_SORT_BY_RECENT = "sort_sessions_by_recent"
+        private const val KEY_TAG_FILTER = "dashboard_tag_filter"
         private const val KEY_NS_DIR = "new_session_dir"
         private const val KEY_NS_COMMAND = "new_session_command"
         private const val KEY_NS_CREATE_DIR = "new_session_create_dir"
