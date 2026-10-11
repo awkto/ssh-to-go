@@ -23,26 +23,10 @@ const StatusDot = ({ status, pulse }) => {
   return <span className={`dot ${cls} ${pulse ? 'pulse' : ''}`}></span>;
 };
 
-const Presence = ({ clients, max = 3 }) => {
-  if (!clients || clients.length === 0) return <span className="subtle" style={{fontFamily:'var(--font-mono)', fontSize:11}}>—</span>;
-  const shown = clients.slice(0, max);
-  const extra = clients.length - shown.length;
-  const colorMap = {
-    indigo: { bg: 'oklch(0.58 0.18 270 / 0.2)', fg: 'oklch(0.75 0.16 270)' },
-    violet: { bg: 'oklch(0.58 0.2 300 / 0.2)', fg: 'oklch(0.75 0.18 300)' },
-    teal: { bg: 'oklch(0.62 0.12 195 / 0.2)', fg: 'oklch(0.75 0.12 195)' },
-    amber: { bg: 'oklch(0.78 0.14 75 / 0.2)', fg: 'oklch(0.8 0.14 75)' },
-  };
-  return (
-    <span className="presence">
-      {shown.map((c, i) => {
-        const col = colorMap[c.color] || colorMap.indigo;
-        return <span key={i} className="av" style={{ background: col.bg, color: col.fg }}>{c.name}</span>;
-      })}
-      {extra > 0 && <span className="av more">+{extra}</span>}
-    </span>
-  );
-};
+// Number of tmux clients attached to a session; a dash when none.
+const ClientCount = ({ count }) => count
+  ? <span className="mono num" style={{fontSize:12.5}}>{count}</span>
+  : <span className="subtle" style={{fontFamily:'var(--font-mono)', fontSize:11}}>—</span>;
 
 // "now" | "12s ago" | idle pill
 const ActivityCell = ({ session }) => {
@@ -118,4 +102,4 @@ const ActivityCell = ({ session }) => {
   window.addEventListener('scroll', hide, true);
 })();
 
-Object.assign(window, { Button, Pill, Kbd, StatusDot, Presence, ActivityCell });
+Object.assign(window, { Button, Pill, Kbd, StatusDot, ClientCount, ActivityCell });

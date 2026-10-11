@@ -130,13 +130,6 @@ function adaptSessions() {
     const activityMs = s.activity ? new Date(s.activity).getTime() : createdMs;
     const idleSec = Math.max(0, Math.floor((now - activityMs) / 1000));
     const activity = s.attached ? 'active' : 'idle';
-    const clients = [];
-    for (let i = 0; i < (s.attached_clients || 0); i++) {
-      clients.push({
-        name: '··',
-        color: 'indigo'
-      });
-    }
     const lastAccessedMs = icon.last_accessed ? new Date(icon.last_accessed).getTime() : 0;
     return {
       id: s.name,
@@ -146,9 +139,7 @@ function adaptSessions() {
       activity,
       lastInput: s.attached ? 'attached' : timeAgo(new Date(activityMs)),
       idle: activity === 'active' ? 0 : idleSec,
-      clients,
-      pid: null,
-      win: s.windows || 1,
+      clients: s.attached_clients || 0,
       iconKind: icon.icon || 'terminal',
       iconColor: icon.color || 'indigo',
       starred: !!icon.starred,
@@ -181,9 +172,7 @@ function adaptSessions() {
         activity: 'offloaded',
         lastInput: activityMs ? 'off ' + timeAgo(new Date(activityMs)) : 'offloaded',
         idle: 0,
-        clients: [],
-        pid: null,
-        win: 0,
+        clients: 0,
         iconKind: icon.icon || 'terminal',
         iconColor: icon.color || 'indigo',
         starred: !!icon.starred,

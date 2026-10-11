@@ -7,7 +7,7 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
   // Offloaded sessions are merged into store.sessions with status:'offloaded'
   // and rendered at the bottom of the Recent sessions table.
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
-  const attached = SESSIONS.filter(s => s.clients.length > 0).length;
+  const attached = SESSIONS.filter(s => s.clients > 0).length;
   const totalHostLoad = HOSTS.length
     ? HOSTS.reduce((sum, h) => sum.map((v, i) => v + (h.load[i] || 0)), Array(20).fill(0)).map(v => v / HOSTS.length)
     : Array(20).fill(0);
@@ -43,8 +43,8 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
         />
         <StatCard
           label="Attached clients"
-          value={<>{SESSIONS.reduce((n,s)=>n+s.clients.length,0)}<span style={{fontSize:14, color:'var(--fg-subtle)', fontWeight:500, marginLeft:6}}>across {attached}</span></>}
-          sub={<Presence clients={[{name:'AC',color:'indigo'},{name:'MB',color:'teal'},{name:'JP',color:'amber'},{name:'SR',color:'violet'}]} max={4} />}
+          value={<>{SESSIONS.reduce((n,s)=>n+s.clients,0)}<span style={{fontSize:14, color:'var(--fg-subtle)', fontWeight:500, marginLeft:6}}>across {attached}</span></>}
+          sub={<span>browser tabs, apps and terminals</span>}
           delta={null}
         />
         <StatCard
@@ -328,7 +328,7 @@ const SessionRow = ({ session: s, onOpen }) => {
       </td>
       <td className="muted mono col-h3" style={{fontSize:12.5}}>{s.host}</td>
       <td className="col-act">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
-      <td className="col-h2">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <Presence clients={s.clients} />}</td>
+      <td className="col-h2">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ClientCount count={s.clients} />}</td>
       <td className="muted num col-h4">{s.uptime}</td>
       <td>
         <div className="actions-cell">

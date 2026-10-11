@@ -32,7 +32,7 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
   const cmp = sortComparators[sortBy] || sortComparators.activity;
   const filtered = SESSIONS.filter(s => {
     if (filter === 'active' && s.activity !== 'active') return false;
-    if (filter === 'attached' && s.clients.length === 0) return false;
+    if (filter === 'attached' && !s.clients) return false;
     if (filter === 'favorites' && !s.starred) return false;
     if (tagFilter === UNTAGGED && s.tags.length) return false;
     if (tagFilter && tagFilter !== UNTAGGED && !tagGone && !s.tags.includes(tagFilter)) return false;
@@ -81,7 +81,7 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
         <div className="seg">
           <button className={`seg-btn ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>All <span className="count">{SESSIONS.length}</span></button>
           <button className={`seg-btn ${filter==='active'?'active':''}`} onClick={()=>setFilter('active')}>Active <span className="count">{SESSIONS.filter(s=>s.activity==='active').length}</span></button>
-          <button className={`seg-btn ${filter==='attached'?'active':''}`} onClick={()=>setFilter('attached')}>Attached <span className="count">{SESSIONS.filter(s=>s.clients.length>0).length}</span></button>
+          <button className={`seg-btn ${filter==='attached'?'active':''}`} onClick={()=>setFilter('attached')}>Attached <span className="count">{SESSIONS.filter(s=>s.clients>0).length}</span></button>
           <button className={`seg-btn ${filter==='favorites'?'active':''}`} onClick={()=>setFilter('favorites')}>Favorites <span className="count">{SESSIONS.filter(s=>s.starred).length}</span></button>
         </div>
         <div className="search-sm">
@@ -103,8 +103,6 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
               <th className="col-h3">Host</th>
               <th className="col-act">Activity</th>
               <th className="col-h2">Clients</th>
-              <th className="col-h1">Window</th>
-              <th className="col-h1">PID</th>
               <th className="col-h4">Up</th>
               <th style={{textAlign:'right'}}>Actions</th>
             </tr>
@@ -172,7 +170,7 @@ const TagGroupRow = ({ tag, count }) => (
       <span className="count">{count}</span>
     </td>
     <td className="col-h3"></td><td className="col-act"></td><td className="col-h2"></td>
-    <td className="col-h1"></td><td className="col-h1"></td><td className="col-h4"></td><td></td>
+    <td className="col-h4"></td><td></td>
   </tr>
 );
 
@@ -462,9 +460,7 @@ const FullSessionRow = ({ session: s, onOpen, allTags, onTagClick }) => {
       </td>
       <td className="muted mono col-h3" style={{fontSize:12.5}}>{s.host}</td>
       <td className="col-act">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ActivityCell session={s} />}</td>
-      <td className="col-h2">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <Presence clients={s.clients} />}</td>
-      <td className="mono num muted col-h1" style={{fontSize:12}}>{offloaded ? '—' : s.win}</td>
-      <td className="mono num muted col-h1" style={{fontSize:12}}>{offloaded ? '—' : s.pid}</td>
+      <td className="col-h2">{offloaded ? <span className="muted" style={{fontSize:12}}>—</span> : <ClientCount count={s.clients} />}</td>
       <td className="muted num col-h4">{s.uptime}</td>
       <td>
         <div className="actions-cell">

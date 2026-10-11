@@ -8,7 +8,7 @@ const Dashboard = ({
   const SESSIONS = store.sessions;
   const KEYPAIRS = store.keypairs;
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
-  const attached = SESSIONS.filter(s => s.clients.length > 0).length;
+  const attached = SESSIONS.filter(s => s.clients > 0).length;
   const totalHostLoad = HOSTS.length ? HOSTS.reduce((sum, h) => sum.map((v, i) => v + (h.load[i] || 0)), Array(20).fill(0)).map(v => v / HOSTS.length) : Array(20).fill(0);
   return React.createElement("div", null, React.createElement("div", {
     className: "page-head"
@@ -62,7 +62,7 @@ const Dashboard = ({
     })
   }), React.createElement(StatCard, {
     label: "Attached clients",
-    value: React.createElement(React.Fragment, null, SESSIONS.reduce((n, s) => n + s.clients.length, 0), React.createElement("span", {
+    value: React.createElement(React.Fragment, null, SESSIONS.reduce((n, s) => n + s.clients, 0), React.createElement("span", {
       style: {
         fontSize: 14,
         color: 'var(--fg-subtle)',
@@ -70,22 +70,7 @@ const Dashboard = ({
         marginLeft: 6
       }
     }, "across ", attached)),
-    sub: React.createElement(Presence, {
-      clients: [{
-        name: 'AC',
-        color: 'indigo'
-      }, {
-        name: 'MB',
-        color: 'teal'
-      }, {
-        name: 'JP',
-        color: 'amber'
-      }, {
-        name: 'SR',
-        color: 'violet'
-      }],
-      max: 4
-    }),
+    sub: React.createElement("span", null, "browser tabs, apps and terminals"),
     delta: null
   }), React.createElement(StatCard, {
     label: "SSH keypairs",
@@ -502,8 +487,8 @@ const SessionRow = ({
     style: {
       fontSize: 12
     }
-  }, "\u2014") : React.createElement(Presence, {
-    clients: s.clients
+  }, "\u2014") : React.createElement(ClientCount, {
+    count: s.clients
   })), React.createElement("td", {
     className: "muted num col-h4"
   }, s.uptime), React.createElement("td", null, React.createElement("div", {

@@ -37,7 +37,7 @@ const Sessions = ({
   const cmp = sortComparators[sortBy] || sortComparators.activity;
   const filtered = SESSIONS.filter(s => {
     if (filter === 'active' && s.activity !== 'active') return false;
-    if (filter === 'attached' && s.clients.length === 0) return false;
+    if (filter === 'attached' && !s.clients) return false;
     if (filter === 'favorites' && !s.starred) return false;
     if (tagFilter === UNTAGGED && s.tags.length) return false;
     if (tagFilter && tagFilter !== UNTAGGED && !tagGone && !s.tags.includes(tagFilter)) return false;
@@ -108,7 +108,7 @@ const Sessions = ({
     onClick: () => setFilter('attached')
   }, "Attached ", React.createElement("span", {
     className: "count"
-  }, SESSIONS.filter(s => s.clients.length > 0).length)), React.createElement("button", {
+  }, SESSIONS.filter(s => s.clients > 0).length)), React.createElement("button", {
     className: `seg-btn ${filter === 'favorites' ? 'active' : ''}`,
     onClick: () => setFilter('favorites')
   }, "Favorites ", React.createElement("span", {
@@ -156,10 +156,6 @@ const Sessions = ({
   }, "Activity"), React.createElement("th", {
     className: "col-h2"
   }, "Clients"), React.createElement("th", {
-    className: "col-h1"
-  }, "Window"), React.createElement("th", {
-    className: "col-h1"
-  }, "PID"), React.createElement("th", {
     className: "col-h4"
   }, "Up"), React.createElement("th", {
     style: {
@@ -230,10 +226,6 @@ const TagGroupRow = ({
   className: "col-act"
 }), React.createElement("td", {
   className: "col-h2"
-}), React.createElement("td", {
-  className: "col-h1"
-}), React.createElement("td", {
-  className: "col-h1"
 }), React.createElement("td", {
   className: "col-h4"
 }), React.createElement("td", null));
@@ -727,19 +719,9 @@ const FullSessionRow = ({
     style: {
       fontSize: 12
     }
-  }, "\u2014") : React.createElement(Presence, {
-    clients: s.clients
+  }, "\u2014") : React.createElement(ClientCount, {
+    count: s.clients
   })), React.createElement("td", {
-    className: "mono num muted col-h1",
-    style: {
-      fontSize: 12
-    }
-  }, offloaded ? '—' : s.win), React.createElement("td", {
-    className: "mono num muted col-h1",
-    style: {
-      fontSize: 12
-    }
-  }, offloaded ? '—' : s.pid), React.createElement("td", {
     className: "muted num col-h4"
   }, s.uptime), React.createElement("td", null, React.createElement("div", {
     className: "actions-cell"

@@ -1,4 +1,3 @@
-function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const Button = ({
   variant = 'secondary',
   size = 'md',
@@ -8,10 +7,11 @@ const Button = ({
   ...rest
 }) => {
   const cls = `btn btn-${variant}${size === 'sm' ? ' btn-sm' : ''}${size === 'xs' ? ' btn-xs' : ''}`;
-  return React.createElement("button", _extends({
+  return React.createElement("button", {
     className: cls,
-    onClick: onClick
-  }, rest), Icon && React.createElement(Icon, {
+    onClick: onClick,
+    ...rest
+  }, Icon && React.createElement(Icon, {
     size: size === 'xs' ? 12 : 14
   }), children);
 };
@@ -36,53 +36,20 @@ const StatusDot = ({
     className: `dot ${cls} ${pulse ? 'pulse' : ''}`
   });
 };
-const Presence = ({
-  clients,
-  max = 3
-}) => {
-  if (!clients || clients.length === 0) return React.createElement("span", {
-    className: "subtle",
-    style: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 11
-    }
-  }, "\u2014");
-  const shown = clients.slice(0, max);
-  const extra = clients.length - shown.length;
-  const colorMap = {
-    indigo: {
-      bg: 'oklch(0.58 0.18 270 / 0.2)',
-      fg: 'oklch(0.75 0.16 270)'
-    },
-    violet: {
-      bg: 'oklch(0.58 0.2 300 / 0.2)',
-      fg: 'oklch(0.75 0.18 300)'
-    },
-    teal: {
-      bg: 'oklch(0.62 0.12 195 / 0.2)',
-      fg: 'oklch(0.75 0.12 195)'
-    },
-    amber: {
-      bg: 'oklch(0.78 0.14 75 / 0.2)',
-      fg: 'oklch(0.8 0.14 75)'
-    }
-  };
-  return React.createElement("span", {
-    className: "presence"
-  }, shown.map((c, i) => {
-    const col = colorMap[c.color] || colorMap.indigo;
-    return React.createElement("span", {
-      key: i,
-      className: "av",
-      style: {
-        background: col.bg,
-        color: col.fg
-      }
-    }, c.name);
-  }), extra > 0 && React.createElement("span", {
-    className: "av more"
-  }, "+", extra));
-};
+const ClientCount = ({
+  count
+}) => count ? React.createElement("span", {
+  className: "mono num",
+  style: {
+    fontSize: 12.5
+  }
+}, count) : React.createElement("span", {
+  className: "subtle",
+  style: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11
+  }
+}, "\u2014");
 const ActivityCell = ({
   session
 }) => {
@@ -153,6 +120,6 @@ Object.assign(window, {
   Pill,
   Kbd,
   StatusDot,
-  Presence,
+  ClientCount,
   ActivityCell
 });
