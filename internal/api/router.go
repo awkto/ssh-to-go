@@ -89,6 +89,10 @@ func NewRouter(rc RouterConfig) http.Handler {
 	mux.HandleFunc("POST /api/hosts/{host}/sessions/{session}/detach-clients", handlers.DetachClients)
 	mux.HandleFunc("POST /api/scan", handlers.ScanAll)
 
+	// Image paste: store an uploaded image on the host and return its path,
+	// which the client then pastes into the terminal. See paste.go.
+	mux.HandleFunc("POST /api/hosts/{host}/paste-image", handlers.PasteImage)
+
 	// One-off command execution (async jobs). Lets users and other apps —
 	// including LLM agents — run a shell command on a host and poll for
 	// status/exit code/output by id.

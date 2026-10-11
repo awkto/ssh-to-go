@@ -30,6 +30,8 @@ Usage:
   stogo tag <session> [tag ...]                    show or add tags ("-tag" in the list removes one)
   stogo untag <session> <tag> ...                  remove tags
   stogo tags                                       list every tag and how many sessions carry it
+  stogo paste-image <session> [file]               upload the clipboard image (or file) to the
+                                                     session's host and put its path on the clipboard
   stogo status                                     server connectivity and summary
   stogo completion bash                            print bash completion script
   stogo version                                    print client version
@@ -82,6 +84,8 @@ func main() {
 		err = cmdTag(os.Args[2:], true)
 	case "tags":
 		err = cmdTags(os.Args[2:])
+	case "paste-image":
+		err = cmdPasteImage(os.Args[2:])
 	case "status":
 		err = cmdStatus(os.Args[2:])
 	case "completion":

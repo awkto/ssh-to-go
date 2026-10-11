@@ -26,7 +26,7 @@ _stogo() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "auth list ls new create connect c resume offload kill tag untag tags status completion version help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "auth list ls new create connect c resume offload kill tag untag tags paste-image status completion version help" -- "$cur") )
         return
     fi
 
@@ -48,6 +48,13 @@ _stogo() {
                 COMPREPLY=( $(compgen -W "$(_stogo_sessions all)" -- "$cur") )
             else
                 COMPREPLY=( $(compgen -W "$(_stogo_tags)" -- "$cur") )
+            fi
+            ;;
+        paste-image)
+            if [[ $COMP_CWORD -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$(_stogo_sessions active)" -- "$cur") )
+            elif [[ $COMP_CWORD -eq 3 ]]; then
+                COMPREPLY=( $(compgen -f -- "$cur") )
             fi
             ;;
         new|create)

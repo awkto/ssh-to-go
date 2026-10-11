@@ -39,6 +39,10 @@ Full terminal emulation in the browser via xterm.js with WebSocket relay.
 - Automatic terminal resize
 - Binary data streaming for responsive I/O
 - SSH keepalive prevents idle timeouts
+- Image paste: paste (or drop) a screenshot into the terminal and it is saved
+  on the session's host (`~/.ssh-to-go/paste/`, kept a day) and its path is
+  pasted in — Claude Code and similar tools attach it as an image. A remote
+  app can't read your desktop clipboard, so this stands in for it
 
 
 ### Dashboard
@@ -148,6 +152,8 @@ stogo kill mysession      # kill a session
 stogo tag mysession work  # tag a session (-work removes; stogo untag works too)
 stogo list -tag work      # only sessions tagged work (-tag -: untagged; -g: group by tag)
 stogo tags                # every tag, in its dashboard colour, with a session count
+stogo paste-image mysession  # clipboard image -> session's host; its path goes on
+                             # the clipboard to paste into a native SSH terminal
 stogo status              # server/host summary
 ```
 

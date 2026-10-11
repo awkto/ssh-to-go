@@ -1,6 +1,7 @@
 package sshutil
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -60,6 +61,26 @@ func Exec(client *ssh.Client, cmd string) (string, error) {
 	}
 
 	return string(out), nil
+}
+
+// ExecInput runs cmd with stdin fed from input and returns its stdout.
+// Stderr is kept out of the result and only reported on failure, so a
+// command that prints a value (a path, an id) can be parsed directly.
+func ExecInput(client *ssh.Client, cmd string, input []byte) (string, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("new session: %w", err)
+	}
+	defer session.Close()
+
+	var stdout, stderr bytes.Buffer
+	session.Stdin = bytes.NewReader(input)
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	if err := session.Run(cmd); err != nil {
+		return "", fmt.Errorf("exec: %w (stderr: %s)", err, bytes.TrimSpace(stderr.Bytes()))
+	}
+	return stdout.String(), nil
 }
 
 func Shell(client *ssh.Client, cols, rows int) (*ssh.Session, error) {

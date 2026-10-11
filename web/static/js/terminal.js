@@ -733,22 +733,10 @@ function initTerminal(host, session) {
         term.focus();
     });
 
-    // Paste button — read clipboard and send to terminal
+    // Paste button — read clipboard (text or an image) and send to terminal
     document.getElementById("paste-btn").addEventListener("click", async function () {
-        try {
-            const text = await clipPaste();
-            if (text && activeWs && activeWs.readyState === WebSocket.OPEN) {
-                activeWs.send(new TextEncoder().encode(text));
-            }
-            term.focus();
-        } catch (e) {
-            // Clipboard read requires HTTPS — prompt user to paste manually
-            var input = prompt("Paste text here (clipboard read requires HTTPS):");
-            if (input && activeWs && activeWs.readyState === WebSocket.OPEN) {
-                activeWs.send(new TextEncoder().encode(input));
-            }
-            term.focus();
-        }
+        await pasteClipboard();
+        term.focus();
     });
 
     // Zoom controls — the size row lives inside the font panel, which
@@ -1316,6 +1304,108 @@ function initTerminal(host, session) {
         return Promise.reject(new Error("Clipboard read requires HTTPS"));
     }
 
+    function sendText(text) {
+        if (text && activeWs && activeWs.readyState === WebSocket.OPEN) {
+            activeWs.send(new TextEncoder().encode(text));
+        }
+    }
+
+    // Paste button / menu: an image on the clipboard goes through
+    // pasteImage, anything else is sent as text. clipboard.read() (needed
+    // for images) is newer than readText() and may be refused, so fall
+    // back to text, then to a prompt on plain HTTP.
+    async function pasteClipboard() {
+        if (navigator.clipboard && navigator.clipboard.read && window.isSecureContext) {
+            try {
+                const items = await navigator.clipboard.read();
+                if (!items.some(function (it) { return it.types.includes("text/plain"); })) {
+                    for (const it of items) {
+                        const type = it.types.find(function (t) { return t.startsWith("image/"); });
+                        if (type) { pasteImage(await it.getType(type)); return; }
+                    }
+                }
+            } catch (_) {}
+        }
+        try {
+            sendText(await clipPaste());
+        } catch (_) {
+            sendText(prompt("Paste text here (clipboard read requires HTTPS):"));
+        }
+    }
+
+    // Image paste. The terminal only carries text, and the program in the
+    // pane reads the clipboard of the host it runs on, not this browser's.
+    // So the image is uploaded and saved as a file on the session's host,
+    // and its path is pasted instead — Claude Code and similar tools
+    // attach an image given its path. The path goes as a "paste" message
+    // rather than keystrokes: the server pastes it through tmux, which
+    // wraps it in bracketed paste when the app asked for that, so the app
+    // sees one paste. (xterm can't do that itself here: modes the app set
+    // before this page attached never reach it.)
+    const pasteStatus = document.createElement("div");
+    pasteStatus.style.cssText = "display:none;position:fixed;left:50%;bottom:72px;transform:translateX(-50%);z-index:1000;background:#1e1e38;border:1px solid #3a3a5a;border-radius:6px;padding:6px 14px;font-family:sans-serif;font-size:13px;color:#e0e0e8;box-shadow:0 4px 16px rgba(0,0,0,0.4);max-width:calc(100vw - 32px);";
+    pasteStatus.setAttribute("aria-live", "polite");
+    document.body.appendChild(pasteStatus);
+    let pasteStatusTimer = null;
+
+    function showPasteStatus(msg, ms) {
+        clearTimeout(pasteStatusTimer);
+        pasteStatus.textContent = msg;
+        pasteStatus.style.display = "block";
+        if (ms) pasteStatusTimer = setTimeout(function () { pasteStatus.style.display = "none"; }, ms);
+    }
+
+    async function pasteImage(blob) {
+        showPasteStatus("Uploading image…");
+        try {
+            const res = await fetch("/api/hosts/" + encodeURIComponent(host) + "/paste-image", {
+                method: "POST",
+                headers: { "Content-Type": blob.type || "application/octet-stream" },
+                body: blob,
+            });
+            if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+            const path = (await res.json()).path;
+            if (!activeWs || activeWs.readyState !== WebSocket.OPEN) throw new Error("not connected");
+            activeWs.send(JSON.stringify({ type: "paste", data: path + " " }));
+            showPasteStatus("Image pasted as " + path.split("/").pop(), 2000);
+        } catch (e) {
+            showPasteStatus("Image paste failed: " + e.message, 5000);
+        }
+        term.focus();
+    }
+
+    function imageFiles(dt) {
+        if (!dt) return [];
+        return Array.from(dt.files || []).filter(function (f) { return f.type.startsWith("image/"); });
+    }
+
+    // Capture phase, so this runs before xterm's own paste handler on its
+    // hidden textarea, which would otherwise paste nothing.
+    //
+    // An image is only taken when the clipboard has no text alongside it:
+    // spreadsheets and office apps put both a picture and the text on the
+    // clipboard, and there the text is what's wanted. (Dropped files often
+    // carry a text/plain path too, so the drop handler doesn't check.)
+    container.addEventListener("paste", function (e) {
+        const cd = e.clipboardData;
+        if (cd && Array.from(cd.types).includes("text/plain")) return;
+        const imgs = imageFiles(cd);
+        if (!imgs.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        pasteImage(imgs[0]);
+    }, true);
+
+    container.addEventListener("dragover", function (e) {
+        if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) e.preventDefault();
+    });
+    container.addEventListener("drop", async function (e) {
+        const imgs = imageFiles(e.dataTransfer);
+        if (!imgs.length) return;
+        e.preventDefault();
+        for (const img of imgs) await pasteImage(img);
+    });
+
     // Track the link under cursor for "Copy Link" in context menu
     let hoveredLink = null;
     container.addEventListener("mouseover", function (e) {
@@ -1376,17 +1466,7 @@ function initTerminal(host, session) {
                 } else if (action === "open-link") {
                     window.open(linkForMenu, "_blank");
                 } else if (action === "paste") {
-                    try {
-                        const text = await clipPaste();
-                        if (text && activeWs && activeWs.readyState === WebSocket.OPEN) {
-                            activeWs.send(new TextEncoder().encode(text));
-                        }
-                    } catch (_) {
-                        var input = prompt("Paste text here (clipboard read requires HTTPS):");
-                        if (input && activeWs && activeWs.readyState === WebSocket.OPEN) {
-                            activeWs.send(new TextEncoder().encode(input));
-                        }
-                    }
+                    await pasteClipboard();
                 }
                 term.focus();
             });

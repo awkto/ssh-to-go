@@ -396,6 +396,38 @@ func tmuxQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "") + "'"
 }
 
+// pasteCmds delivers text to the pane as a paste rather than keystrokes.
+// send-keys can't do that: the client only knows the pane's app enabled
+// bracketed paste if it saw the escape go by, and an app started before
+// the browser attached never re-sends it (tmux has no format to query
+// it). paste-buffer -p knows, and adds the markers only when the app
+// asked for them, so an app like Claude Code sees one paste — which is
+// what makes it treat a pasted image path as an attached image.
+//
+// The text travels inside a control-mode command line, so it is limited
+// to one line: control characters are dropped (a newline would end the
+// command), and \ " $ are escaped for tmux's double-quoted strings.
+func pasteCmds(target, text string) []string {
+	var b strings.Builder
+	for _, r := range text {
+		switch {
+		case r < 0x20 || r == 0x7f:
+			continue
+		case r == '\\' || r == '"' || r == '$':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	if b.Len() == 0 {
+		return nil
+	}
+	const buf = "ssh-to-go-paste"
+	return []string{
+		fmt.Sprintf(`set-buffer -b %s -- "%s"`, buf, b.String()),
+		fmt.Sprintf("paste-buffer -p -d -b %s -t %s", buf, target),
+	}
+}
+
 // relayControlMode bridges a WebSocket to a tmux session via control mode.
 // Mirrors RelayWithOptions' lifecycle (kick channel, close codes, teardown)
 // but speaks the -C line protocol instead of relaying a PTY byte stream.
@@ -657,6 +689,12 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 						clientW, clientH = msg.Cols, msg.Rows
 						sizeMu.Unlock()
 						sendCmd(cmdIgnore, fmt.Sprintf("refresh-client -C %dx%d", msg.Cols, msg.Rows))
+					}
+					continue
+				}
+				if msg.Type == "paste" {
+					for _, c := range pasteCmds(target, msg.Data) {
+						sendCmd(cmdIgnore, c)
 					}
 					continue
 				}

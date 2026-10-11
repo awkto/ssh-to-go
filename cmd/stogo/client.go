@@ -29,9 +29,14 @@ func newClient(cfg *cliConfig) *apiClient {
 }
 
 // do performs a request and decodes the JSON response into out (unless nil).
+// do sends body as JSON, or as-is when it is a []byte (an upload), and
+// decodes a JSON reply into out.
 func (c *apiClient) do(method, path string, body any, out any) error {
 	var reqBody io.Reader
-	if body != nil {
+	contentType := "application/json"
+	if raw, ok := body.([]byte); ok {
+		reqBody, contentType = bytes.NewReader(raw), "application/octet-stream"
+	} else if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
 			return err
@@ -43,7 +48,7 @@ func (c *apiClient) do(method, path string, body any, out any) error {
 		return err
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)

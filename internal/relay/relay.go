@@ -15,10 +15,13 @@ import (
 	"nhooyr.io/websocket"
 )
 
+// resizeMsg is a JSON control message from the client: "resize" (Cols,
+// Rows) or "paste" (Data, see pasteMsg handling in both relay modes).
 type resizeMsg struct {
 	Type string `json:"type"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
+	Data string `json:"data,omitempty"`
 }
 
 // Options controls per-attach relay behavior.
@@ -263,6 +266,16 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 				if json.Unmarshal(data, &msg) == nil && msg.Type == "resize" {
 					if msg.Cols > 0 && msg.Rows > 0 {
 						_ = session.WindowChange(msg.Rows, msg.Cols)
+					}
+					continue
+				}
+				// A paste the client wants delivered as one: wrap it in
+				// bracketed-paste markers as a terminal would. The tmux
+				// client on this PTY strips them and re-adds them only if
+				// the pane's app enabled bracketed paste.
+				if json.Unmarshal(data, &msg) == nil && msg.Type == "paste" {
+					if _, err := stdin.Write([]byte("\x1b[200~" + msg.Data + "\x1b[201~")); err != nil {
+						return
 					}
 					continue
 				}
