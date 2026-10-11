@@ -47,6 +47,11 @@ expand server-side. Flags answer prompts ahead of time: -host H, -dir D,
 default without prompting. A name that is already tracked as an offloaded
 session is resumed instead (same as "stogo resume").
 
+Image paste: when attaching (connect/new/resume) on a desktop with
+wl-clipboard or xclip, Ctrl+V with an image on the clipboard uploads it to
+the session's host and pastes its path, which Claude Code and similar tools
+attach as an image. Other keys pass through. STOGO_IMAGE_PASTE=0 disables.
+
 Config: ~/.config/stogo/config.json (overridable with STOGO_URL / STOGO_TOKEN
 environment variables for headless use). The "new" section there holds the
 remembered defaults and can be edited directly.

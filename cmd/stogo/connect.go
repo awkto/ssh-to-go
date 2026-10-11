@@ -52,7 +52,13 @@ func attachSession(c *apiClient, host, session string) error {
 
 	fmt.Fprintf(os.Stderr, "connecting to %s/%s (detach: Ctrl-B d)\n", host, session)
 
-	// Replace the stogo process entirely: ssh gets the real terminal, and
+	// With a desktop clipboard to read, stay in the middle so Ctrl+V can
+	// paste screenshots (attachpty.go).
+	if imagePasteAvailable() {
+		return runAttachWithImagePaste(c, host, out.Command)
+	}
+
+	// Otherwise replace the stogo process entirely: ssh gets the real terminal, and
 	// detaching or session exit behaves exactly like a hand-typed command.
 	shell := "/bin/sh"
 	if err := syscall.Exec(shell, []string{"sh", "-c", out.Command}, os.Environ()); err != nil {

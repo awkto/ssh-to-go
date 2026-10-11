@@ -152,8 +152,8 @@ stogo kill mysession      # kill a session
 stogo tag mysession work  # tag a session (-work removes; stogo untag works too)
 stogo list -tag work      # only sessions tagged work (-tag -: untagged; -g: group by tag)
 stogo tags                # every tag, in its dashboard colour, with a session count
-stogo paste-image mysession  # clipboard image -> session's host; its path goes on
-                             # the clipboard to paste into a native SSH terminal
+stogo paste-image mysession  # clipboard image -> session's host, path onto the
+                             # clipboard (for a plain ssh you didn't start via stogo)
 stogo status              # server/host summary
 ```
 
@@ -161,6 +161,16 @@ stogo status              # server/host summary
 execs it, so your local `ssh` and the target host's `tmux` do all the work — no
 custom terminal emulation. You need SSH access to the target host and `tmux`
 installed there (which ssh-to-go already requires).
+
+**Pasting screenshots.** A program in the remote pane (Claude Code, say)
+answers Ctrl+V by reading the clipboard of the host it runs on, not your
+desktop's, so a screenshot never arrives. When your desktop has a clipboard
+stogo can read (`wl-clipboard` on Wayland, `xclip` on X11), `connect`, `new`
+and `resume` stay in the middle of the attach: Ctrl+V with an image on the
+clipboard uploads it to the session's host and pastes the saved path, which
+the app attaches as an image. Any other Ctrl+V and every other key pass
+through untouched. `STOGO_IMAGE_PASTE=0` turns this off and restores the
+plain exec.
 
 `stogo new` (alias `create`) is a handful of prefilled prompts — name, host,
 directory, launch command — where Enter accepts, so a repeat run is name +

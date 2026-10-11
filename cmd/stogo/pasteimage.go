@@ -45,44 +45,63 @@ func cmdPasteImage(args []string) error {
 	if err != nil {
 		return err
 	}
-	var resp struct {
-		Path string `json:"path"`
-	}
-	if err := c.do("POST", "/api/hosts/"+url.PathEscape(host)+"/paste-image", img, &resp); err != nil {
+	path, err := uploadImage(c, host, img)
+	if err != nil {
 		return err
 	}
 
-	if err := clipboardSetText(resp.Path + " "); err != nil {
-		fmt.Println(resp.Path)
+	if err := clipboardSetText(path + " "); err != nil {
+		fmt.Println(path)
 		fmt.Fprintf(os.Stderr, "stogo: couldn't put the path on the clipboard (%v); paste it by hand\n", err)
 		return nil
 	}
-	fmt.Printf("%s\non the clipboard — paste it into the session\n", resp.Path)
+	fmt.Printf("%s\non the clipboard — paste it into the session\n", path)
 	return nil
+}
+
+// uploadImage stores img on host and returns the path it was saved at.
+func uploadImage(c *apiClient, host string, img []byte) (string, error) {
+	var resp struct {
+		Path string `json:"path"`
+	}
+	err := c.do("POST", "/api/hosts/"+url.PathEscape(host)+"/paste-image", img, &resp)
+	return resp.Path, err
+}
+
+// clipboardTool is the program stogo reads the desktop clipboard with:
+// wl-paste on Wayland, xclip on X11, or "" when there is neither.
+func clipboardTool() string {
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		if _, err := exec.LookPath("wl-paste"); err == nil {
+			return "wl-paste"
+		}
+	}
+	if os.Getenv("DISPLAY") != "" {
+		if _, err := exec.LookPath("xclip"); err == nil {
+			return "xclip"
+		}
+	}
+	return ""
 }
 
 // clipboardImage reads an image from the desktop clipboard with wl-paste
 // (Wayland) or xclip (X11), whichever the session has.
 func clipboardImage() ([]byte, error) {
-	if os.Getenv("WAYLAND_DISPLAY") != "" {
-		if _, err := exec.LookPath("wl-paste"); err == nil {
-			types, _ := exec.Command("wl-paste", "--list-types").Output()
-			t := imageType(string(types))
-			if t == "" {
-				return nil, fmt.Errorf("no image on the clipboard")
-			}
+	switch clipboardTool() {
+	case "wl-paste":
+		types, _ := exec.Command("wl-paste", "--list-types").Output()
+		if t := imageType(string(types)); t != "" {
 			return exec.Command("wl-paste", "--no-newline", "--type", t).Output()
 		}
-	}
-	if _, err := exec.LookPath("xclip"); err == nil && os.Getenv("DISPLAY") != "" {
+	case "xclip":
 		types, _ := exec.Command("xclip", "-selection", "clipboard", "-t", "TARGETS", "-o").Output()
-		t := imageType(string(types))
-		if t == "" {
-			return nil, fmt.Errorf("no image on the clipboard")
+		if t := imageType(string(types)); t != "" {
+			return exec.Command("xclip", "-selection", "clipboard", "-t", t, "-o").Output()
 		}
-		return exec.Command("xclip", "-selection", "clipboard", "-t", t, "-o").Output()
+	default:
+		return nil, fmt.Errorf("can't read the clipboard: install wl-clipboard (Wayland) or xclip (X11), or pass an image file")
 	}
-	return nil, fmt.Errorf("can't read the clipboard: install wl-clipboard (Wayland) or xclip (X11), or pass an image file")
+	return nil, fmt.Errorf("no image on the clipboard")
 }
 
 // imageType picks the first image MIME type from a newline-separated list
