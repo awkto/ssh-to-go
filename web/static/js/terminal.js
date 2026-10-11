@@ -1318,7 +1318,7 @@ function initTerminal(host, session) {
         if (navigator.clipboard && navigator.clipboard.read && window.isSecureContext) {
             try {
                 const items = await navigator.clipboard.read();
-                if (!items.some(function (it) { return it.types.includes("text/plain"); })) {
+                if (!items.some(function (it) { return it.types.includes("text/html") && it.types.includes("text/plain"); })) {
                     for (const it of items) {
                         const type = it.types.find(function (t) { return t.startsWith("image/"); });
                         if (type) { pasteImage(await it.getType(type)); return; }
@@ -1374,27 +1374,80 @@ function initTerminal(host, session) {
         term.focus();
     }
 
+    // Some browsers fill only items, others only files, for an OS
+    // clipboard image; look at both.
     function imageFiles(dt) {
         if (!dt) return [];
-        return Array.from(dt.files || []).filter(function (f) { return f.type.startsWith("image/"); });
+        const out = Array.from(dt.files || []).filter(function (f) { return f.type.startsWith("image/"); });
+        if (out.length) return out;
+        return Array.from(dt.items || []).filter(function (it) {
+            return it.kind === "file" && it.type.startsWith("image/");
+        }).map(function (it) { return it.getAsFile(); }).filter(Boolean);
+    }
+
+    // Spreadsheets and office apps put a picture of the selection on the
+    // clipboard next to its text and HTML; there the text is what's
+    // wanted. Screenshot tools often add text too (a file name, a URI, an
+    // empty string) but no HTML, and there the image is what's wanted.
+    function preferText(dt) {
+        const types = Array.from(dt.types || []);
+        return types.includes("text/html") && dt.getData("text/plain").trim() !== "";
     }
 
     // Capture phase, so this runs before xterm's own paste handler on its
     // hidden textarea, which would otherwise paste nothing.
     //
-    // An image is only taken when the clipboard has no text alongside it:
-    // spreadsheets and office apps put both a picture and the text on the
-    // clipboard, and there the text is what's wanted. (Dropped files often
-    // carry a text/plain path too, so the drop handler doesn't check.)
+    // An image is skipped when preferText says the text is the point.
+    // (Dropped files often carry a text/plain path too, so the drop
+    // handler doesn't check.)
     container.addEventListener("paste", function (e) {
         const cd = e.clipboardData;
-        if (cd && Array.from(cd.types).includes("text/plain")) return;
-        const imgs = imageFiles(cd);
+        const imgs = cd && !preferText(cd) ? imageFiles(cd) : [];
+        if (!imgs.length && cd && !cd.getData("text/plain") && !ctrlVPending) {
+            // Nothing xterm can paste either: say what was there instead
+            // of silently doing nothing.
+            const types = Array.from(cd.types || []).join(", ") || "nothing";
+            showPasteStatus("Nothing to paste (clipboard had: " + types + ")", 6000);
+        }
+        if (ctrlVPending) {
+            // A plain Ctrl+V (see below): an image is pasted, anything else
+            // becomes the ^V the key would have sent.
+            clearTimeout(ctrlVPending);
+            ctrlVPending = null;
+            e.preventDefault();
+            e.stopPropagation();
+            if (imgs.length) pasteImage(imgs[0]);
+            else sendBytes([0x16]);
+            return;
+        }
         if (!imgs.length) return;
         e.preventDefault();
         e.stopPropagation();
         pasteImage(imgs[0]);
     }, true);
+
+    // Ctrl+V. xterm turns it into ^V and cancels the browser's paste, so an
+    // image on the clipboard never reached the handler above — and Claude
+    // Code, which maps Ctrl+V to "paste image", then looked in the host's
+    // empty clipboard ("no image found"). So let the browser paste instead:
+    // the handler above takes an image and otherwise sends the ^V, keeping
+    // the key's meaning for vim, readline and the rest. If no paste event
+    // follows (clipboard access refused), the ^V is sent anyway. Not on
+    // macOS, where Cmd+V is paste and Ctrl+V stays an ordinary key.
+    let ctrlVPending = null;
+    if (!/Mac|iPhone|iPad/.test(navigator.platform)) {
+        term.attachCustomKeyEventHandler(function (e) {
+            if (e.type === "keydown" && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyV") {
+                clearTimeout(ctrlVPending);
+                ctrlVPending = setTimeout(function () {
+                    ctrlVPending = null;
+                    sendBytes([0x16]);
+                }, 150);
+                return false;
+            }
+            return true;
+        });
+    }
 
     container.addEventListener("dragover", function (e) {
         if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) e.preventDefault();
