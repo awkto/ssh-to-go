@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -56,6 +58,41 @@ type SessionIcon struct {
 	// in the registry, which records what a session IS rather than how its
 	// owner wants it treated.
 	KeepAwake bool `json:"keep_awake,omitempty"`
+	// Tags are free-form labels ("work", "personal") the sessions page
+	// filters and groups by. Stored normalised; see NormalizeTags.
+	Tags []string `json:"tags,omitempty"`
+}
+
+// Tag limits. Generous for labels, small enough that a hostile client
+// can't bloat session-icons.json.
+const (
+	maxTags   = 16
+	maxTagLen = 32
+)
+
+// NormalizeTags lowercases and trims each tag, turns inner whitespace into
+// dashes, drops empties and duplicates, and returns the rest sorted, so
+// "Work", " work " and "work" are one tag. Tags past the length or count
+// limits are cut. Returns nil for no tags so the field stays omitted.
+func NormalizeTags(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	var out []string
+	for _, t := range in {
+		t = strings.Join(strings.Fields(strings.ToLower(t)), "-")
+		if r := []rune(t); len(r) > maxTagLen {
+			t = string(r[:maxTagLen])
+		}
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	if len(out) > maxTags {
+		out = out[:maxTags]
+	}
+	return out
 }
 
 // SessionIconStore persists session icon/color overrides to a JSON file.
@@ -119,7 +156,8 @@ func (s *SessionIconStore) Set(host, session string, icon SessionIcon) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := sessionKey(host, session)
-	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && icon.LastAccessed == "" && !icon.Starred && !icon.KeepAwake {
+	icon.Tags = NormalizeTags(icon.Tags)
+	if icon.Icon == "" && icon.Color == "" && icon.Theme == "" && icon.LastAccessed == "" && !icon.Starred && !icon.KeepAwake && len(icon.Tags) == 0 {
 		delete(s.icons, key)
 	} else {
 		s.icons[key] = icon

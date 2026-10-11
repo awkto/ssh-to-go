@@ -1523,6 +1523,13 @@ a { color: inherit; text-decoration: none; }
 .filter-bar .search-sm input {
   flex: 1; border: 0; outline: 0; background: none; font-size: 13px;
 }
+/* Phones: the segment buttons alone fill the row, which pushed search, Tags
+   and Sort off-screen. Wrap them onto a second line instead. */
+@media (max-width: 640px) {
+  .filter-bar { flex-wrap: wrap; }
+  .filter-bar .seg { max-width: 100%; overflow-x: auto; }
+  .filter-bar .search-sm { min-width: 0; flex-basis: 100%; max-width: none; }
+}
 
 /* Compact sort dropdown — the button always reads "Sort"; the chosen value
    lives inside the popover, so it never gets cut off in a tight filter bar. */
@@ -1888,3 +1895,94 @@ a { color: inherit; text-decoration: none; }
 }
 .cell-session:hover .rename-btn { opacity: 1; }
 .rename-btn:hover { color: var(--fg); background: var(--row-hover); }
+
+/* Session tags — free-form labels (work, personal, …). Each tag gets a
+   stable hue (--tag-h, hashed from its name in sessions.jsx). */
+.tag-chip {
+  display: inline-flex; align-items: center;
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; font-weight: 500;
+  line-height: 16px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: oklch(0.78 0.12 var(--tag-h));
+  background: oklch(0.65 0.12 var(--tag-h) / 0.16);
+}
+[data-theme="light"] .tag-chip {
+  color: oklch(0.45 0.14 var(--tag-h));
+  background: oklch(0.65 0.12 var(--tag-h) / 0.14);
+}
+.tag-chip.clickable { cursor: pointer; }
+.tag-chip.clickable:hover { background: oklch(0.65 0.12 var(--tag-h) / 0.28); }
+.cell-session .tag-chip + .tag-chip { margin-left: -4px; }
+/* The name keeps a readable floor; the chips give way first. */
+.tbl .cell-session .name { flex-shrink: 0; max-width: 100%; }
+.tbl .cell-session .tag-chip { flex-shrink: 1; min-width: 24px; }
+/* On a phone there is no room for labels: each tag becomes a dot in its
+   colour, which is still enough to tell work rows from personal ones. */
+@container (max-width: 520px) {
+  .tbl .cell-session .name { flex-shrink: 1; }
+  .tbl .cell-session .tag-chip {
+    flex-shrink: 0; min-width: 0;
+    width: 8px; height: 8px; padding: 0;
+    font-size: 0;
+    background: oklch(0.7 0.14 var(--tag-h));
+  }
+  .cell-session .tag-chip + .tag-chip { margin-left: -6px; }
+}
+/* The tag button sits with rename and shows on hover, except on an untagged
+   row on a touch screen, where hover never happens and it is the only way in. */
+.tbl-fixed .cell-session .tag-btn { flex-shrink: 0; }
+@media (hover: none) {
+  .cell-session .tag-btn.untagged { opacity: 1; }
+}
+@container (max-width: 520px) {
+  .tbl-fixed .cell-session .tag-btn { display: inline-flex; }
+}
+.tag-group-row td {
+  background: var(--bg-elev);
+  overflow: visible !important;
+  white-space: nowrap;
+  padding-top: 6px !important; padding-bottom: 6px !important;
+  font-size: 12px;
+}
+.tag-group-row td .count {
+  margin-left: 8px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle);
+}
+.tag-opt { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.tag-opt .count { font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle); }
+.tag-filter-label { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sort-menu > .btn.tag-filter-on { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tag-pop-hint { font-size: 12px; color: var(--fg-subtle); padding: 6px 10px 8px; }
+.tag-editor {
+  position: fixed;
+  z-index: 60;
+  max-height: 60vh; overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  animation: popin 140ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.tag-editor .sort-pop-label {
+  font-size: 10.5px; color: var(--fg-subtle);
+  text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
+  padding: 8px 10px 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tag-editor-add { padding: 4px 6px 6px; }
+.tag-editor-add input {
+  width: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--fg);
+  outline: 0;
+}
+.tag-editor-add input:focus { border-color: var(--accent-border); }

@@ -207,7 +207,9 @@
         fetch("/api/session-icons/" + encodeURIComponent(hostName) + "/" + encodeURIComponent(sessionName), {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ icon: entry.icon || "", color: entry.color || "", starred: !!entry.starred, last_accessed: entry.last_accessed || "" }),
+            // Send the whole cached entry: listing fields here would silently
+            // drop the ones it forgot (theme, keep_awake, tags) on every save.
+            body: JSON.stringify(entry),
         }).catch(function() {});
     }
 

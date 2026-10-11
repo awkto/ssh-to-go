@@ -157,6 +157,9 @@ function adaptSessions() {
       starred: !!icon.starred,
       // Exempt from idle auto-offload. Only surfaced when the setting is on.
       keepAwake: !!icon.keep_awake,
+      // Free-form labels (work, personal, …) the Sessions page filters and
+      // groups by. Stored normalised server-side: lowercase, sorted.
+      tags: icon.tags || [],
       createdMs,
       activityMs,
       lastAccessedMs,
@@ -196,6 +199,7 @@ function adaptSessions() {
         iconColor: icon.color || 'indigo',
         starred: !!icon.starred,
         keepAwake: !!icon.keep_awake,
+        tags: icon.tags || [],
         createdMs,
         activityMs,
         lastAccessedMs,
@@ -372,6 +376,24 @@ async function setSessionIconPatch(hostName, sessionName, patch) {
   notify();
 }
 
+// Every tag in use across the given sessions, with how many carry it,
+// sorted by name. Drives the tag filter and the tag editor's suggestions.
+function tagCounts(sessions) {
+  const counts = {};
+  for (const s of sessions) for (const t of (s.tags || [])) counts[t] = (counts[t] || 0) + 1;
+  return Object.keys(counts).sort().map(tag => ({ tag, count: counts[tag] }));
+}
+
+// Mirrors keystore.NormalizeTags so the UI shows what the server will store.
+function normalizeTag(t) {
+  return (t || '').toLowerCase().trim().split(/\s+/).join('-').slice(0, 32);
+}
+
+async function setSessionTags(hostName, sessionName, tags) {
+  const clean = [...new Set(tags.map(normalizeTag).filter(Boolean))].sort();
+  await setSessionIconPatch(hostName, sessionName, { tags: clean });
+}
+
 async function addHost(payload) {
   const r = await authFetch('/api/hosts', {
     method: 'POST',
@@ -401,6 +423,7 @@ Object.assign(window, {
   STORE, useStore, refresh,
   createSession, killSession, offloadSession, recreateSession, forgetSession,
   renameSession, getHandoff, forgetRecentCommand,
-  setSessionIconPatch, addHost, scanAll, openTerminal,
+  setSessionIconPatch, setSessionTags, tagCounts, normalizeTag,
+  addHost, scanAll, openTerminal,
   timeAgo, formatUptime,
 });

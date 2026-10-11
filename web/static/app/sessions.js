@@ -11,6 +11,15 @@ const Sessions = ({
   React.useEffect(() => {
     localStorage.setItem('sshtogo.sessionSort', sortBy);
   }, [sortBy]);
+  const [tagFilter, setTagFilter] = React.useState(() => localStorage.getItem('sshtogo.sessionTag') || '');
+  React.useEffect(() => {
+    localStorage.setItem('sshtogo.sessionTag', tagFilter);
+  }, [tagFilter]);
+  const tags = tagCounts(SESSIONS);
+  const tagGone = tagFilter && tagFilter !== UNTAGGED && !tags.some(t => t.tag === tagFilter);
+  React.useEffect(() => {
+    if (tagGone && !store.loading) setTagFilter('');
+  }, [tagGone, store.loading]);
   React.useEffect(() => {
     if (initialFilter) setFilter(initialFilter);
   }, [initialFilter]);
@@ -30,14 +39,39 @@ const Sessions = ({
     if (filter === 'active' && s.activity !== 'active') return false;
     if (filter === 'attached' && s.clients.length === 0) return false;
     if (filter === 'favorites' && !s.starred) return false;
+    if (tagFilter === UNTAGGED && s.tags.length) return false;
+    if (tagFilter && tagFilter !== UNTAGGED && !tagGone && !s.tags.includes(tagFilter)) return false;
     if (search && !s.id.toLowerCase().includes(search.toLowerCase()) && !s.host.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).sort((a, b) => {
+    if (sortBy === 'tag') {
+      const g = groupOrder(a, b);
+      if (g) return g;
+    }
     if (a.status === 'offloaded' !== (b.status === 'offloaded')) {
       return a.status === 'offloaded' ? 1 : -1;
     }
     if (a.starred !== b.starred) return a.starred ? -1 : 1;
-    return cmp(a, b);
+    return (sortBy === 'tag' ? sortComparators.activity : cmp)(a, b);
+  });
+  const rows = [];
+  let group = null;
+  filtered.forEach(s => {
+    if (sortBy === 'tag' && primaryTag(s) !== group) {
+      group = primaryTag(s);
+      rows.push(React.createElement(TagGroupRow, {
+        key: 'group:' + group,
+        tag: group,
+        count: filtered.filter(x => primaryTag(x) === group).length
+      }));
+    }
+    rows.push(React.createElement(FullSessionRow, {
+      key: s.hostName + ':' + s.id,
+      session: s,
+      onOpen: () => openSession(s),
+      allTags: tags,
+      onTagClick: setTagFilter
+    }));
   });
   return React.createElement("div", null, React.createElement("div", {
     className: "page-head"
@@ -91,6 +125,11 @@ const Sessions = ({
     style: {
       flex: 1
     }
+  }), React.createElement(TagFilterMenu, {
+    tags: tags,
+    tagFilter: tagGone ? '' : tagFilter,
+    setTagFilter: setTagFilter,
+    untaggedCount: SESSIONS.filter(s => !s.tags.length).length
   }), React.createElement(SortMenu, {
     sortBy: sortBy,
     setSortBy: setSortBy
@@ -126,11 +165,7 @@ const Sessions = ({
     style: {
       textAlign: 'right'
     }
-  }, "Actions"))), React.createElement("tbody", null, filtered.map(s => React.createElement(FullSessionRow, {
-    key: s.id,
-    session: s,
-    onOpen: () => openSession(s)
-  }))))));
+  }, "Actions"))), React.createElement("tbody", null, rows))));
 };
 const SORT_OPTS = [{
   value: 'activity',
@@ -144,7 +179,228 @@ const SORT_OPTS = [{
 }, {
   value: 'name',
   label: 'Name (A–Z)'
+}, {
+  value: 'tag',
+  label: 'Tag (grouped)'
 }];
+const UNTAGGED = ':untagged';
+const primaryTag = s => s.tags && s.tags[0] || '';
+const groupOrder = (a, b) => {
+  const ga = primaryTag(a),
+    gb = primaryTag(b);
+  if (ga === gb) return 0;
+  if (!ga) return 1;
+  if (!gb) return -1;
+  return ga.localeCompare(gb);
+};
+const tagHue = tag => {
+  let h = 0;
+  for (let i = 0; i < tag.length; i++) h = h * 31 + tag.charCodeAt(i) >>> 0;
+  return h % 360;
+};
+const TagChip = ({
+  tag,
+  onClick,
+  title
+}) => React.createElement("span", {
+  className: `tag-chip ${onClick ? 'clickable' : ''}`,
+  style: {
+    '--tag-h': tagHue(tag)
+  },
+  onClick: onClick,
+  title: title
+}, tag);
+const TagGroupRow = ({
+  tag,
+  count
+}) => React.createElement("tr", {
+  className: "tag-group-row"
+}, React.createElement("td", null, tag ? React.createElement(TagChip, {
+  tag: tag
+}) : React.createElement("span", {
+  className: "muted"
+}, "Untagged"), React.createElement("span", {
+  className: "count"
+}, count)), React.createElement("td", {
+  className: "col-h3"
+}), React.createElement("td", {
+  className: "col-act"
+}), React.createElement("td", {
+  className: "col-h2"
+}), React.createElement("td", {
+  className: "col-h1"
+}), React.createElement("td", {
+  className: "col-h1"
+}), React.createElement("td", {
+  className: "col-h4"
+}), React.createElement("td", null));
+const useDismiss = (open, setOpen, refs) => {
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = e => {
+      if (!refs.some(r => r.current && r.current.contains(e.target))) setOpen(false);
+    };
+    const onKey = e => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+};
+const TagFilterMenu = ({
+  tags,
+  tagFilter,
+  setTagFilter,
+  untaggedCount
+}) => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  useDismiss(open, setOpen, [ref]);
+  const pick = v => {
+    setTagFilter(v);
+    setOpen(false);
+  };
+  const label = tagFilter === UNTAGGED ? 'Untagged' : tagFilter || 'Tags';
+  return React.createElement("div", {
+    className: "sort-menu",
+    ref: ref
+  }, React.createElement("button", {
+    className: `btn btn-secondary btn-sm ${open ? 'open' : ''} ${tagFilter ? 'tag-filter-on' : ''}`,
+    onClick: () => setOpen(o => !o),
+    title: "Filter by tag",
+    "aria-haspopup": "listbox",
+    "aria-expanded": open
+  }, React.createElement(IconTag, {
+    size: 14
+  }), React.createElement("span", {
+    className: "tag-filter-label"
+  }, label), React.createElement("svg", {
+    className: "caret",
+    width: "12",
+    height: "12",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, React.createElement("polyline", {
+    points: "6 9 12 15 18 9"
+  }))), open && React.createElement("div", {
+    className: "sort-pop",
+    role: "listbox"
+  }, React.createElement("div", {
+    className: "sort-pop-label"
+  }, "Show"), React.createElement("button", {
+    className: `sort-opt ${!tagFilter ? 'active' : ''}`,
+    role: "option",
+    "aria-selected": !tagFilter,
+    onClick: () => pick('')
+  }, React.createElement("span", null, "All tags"), !tagFilter && React.createElement(IconCheck, {
+    size: 14
+  })), tags.map(t => React.createElement("button", {
+    key: t.tag,
+    className: `sort-opt ${tagFilter === t.tag ? 'active' : ''}`,
+    role: "option",
+    "aria-selected": tagFilter === t.tag,
+    onClick: () => pick(t.tag)
+  }, React.createElement("span", {
+    className: "tag-opt"
+  }, React.createElement(TagChip, {
+    tag: t.tag
+  }), React.createElement("span", {
+    className: "count"
+  }, t.count)), tagFilter === t.tag && React.createElement(IconCheck, {
+    size: 14
+  }))), React.createElement("button", {
+    className: `sort-opt ${tagFilter === UNTAGGED ? 'active' : ''}`,
+    role: "option",
+    "aria-selected": tagFilter === UNTAGGED,
+    onClick: () => pick(UNTAGGED)
+  }, React.createElement("span", {
+    className: "tag-opt"
+  }, React.createElement("span", null, "Untagged"), React.createElement("span", {
+    className: "count"
+  }, untaggedCount)), tagFilter === UNTAGGED && React.createElement(IconCheck, {
+    size: 14
+  })), !tags.length && React.createElement("div", {
+    className: "tag-pop-hint"
+  }, "Tag a session with the ", React.createElement(IconTag, {
+    size: 11
+  }), " button next to its name.")));
+};
+const TagEditor = ({
+  anchor,
+  session: s,
+  allTags,
+  onClose
+}) => {
+  const [draft, setDraft] = React.useState('');
+  const [current, setCurrent] = React.useState(s.tags);
+  const [err, setErr] = React.useState('');
+  const ref = React.useRef(null);
+  const anchorRef = React.useRef(anchor);
+  useDismiss(true, onClose, [ref, anchorRef]);
+  const r = anchor.getBoundingClientRect();
+  const width = 240;
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+  const save = async next => {
+    setCurrent(next);
+    setErr('');
+    try {
+      await setSessionTags(s.hostName, s.id, next);
+    } catch (e) {
+      setErr('save failed: ' + e.message);
+    }
+  };
+  const toggle = tag => save(current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag].sort());
+  const add = e => {
+    e.preventDefault();
+    const t = normalizeTag(draft);
+    setDraft('');
+    if (t && !current.includes(t)) save([...current, t].sort());
+  };
+  const suggestions = [...new Set([...allTags.map(t => t.tag), ...current])].sort();
+  return ReactDOM.createPortal(React.createElement("div", {
+    className: "tag-editor",
+    ref: ref,
+    style: {
+      top: r.bottom + 6,
+      left,
+      width
+    }
+  }, React.createElement("div", {
+    className: "sort-pop-label"
+  }, "Tags for ", s.id), React.createElement("form", {
+    onSubmit: add,
+    className: "tag-editor-add"
+  }, React.createElement("input", {
+    autoFocus: true,
+    placeholder: "New tag, then Enter",
+    value: draft,
+    maxLength: 32,
+    onChange: e => setDraft(e.target.value)
+  })), suggestions.map(tag => React.createElement("button", {
+    key: tag,
+    className: `sort-opt ${current.includes(tag) ? 'active' : ''}`,
+    onClick: () => toggle(tag)
+  }, React.createElement(TagChip, {
+    tag: tag
+  }), current.includes(tag) && React.createElement(IconCheck, {
+    size: 14
+  }))), !suggestions.length && React.createElement("div", {
+    className: "tag-pop-hint"
+  }, "Try \"work\" or \"personal\"."), err && React.createElement("div", {
+    className: "tag-pop-hint",
+    style: {
+      color: 'var(--err)'
+    }
+  }, err)), document.body);
+};
 const SortMenu = ({
   sortBy,
   setSortBy
@@ -278,9 +534,12 @@ const OffloadedNote = ({
 };
 const FullSessionRow = ({
   session: s,
-  onOpen
+  onOpen,
+  allTags,
+  onTagClick
 }) => {
   const [starred, setStarred] = React.useState(s.starred);
+  const [tagAnchor, setTagAnchor] = React.useState(null);
   const [recreating, setRecreating] = React.useState(false);
   const [busy, setBusy] = React.useState(null);
   const toggleStar = e => {
@@ -397,7 +656,30 @@ const FullSessionRow = ({
     size: 12
   })), offloaded && React.createElement(Pill, {
     variant: "muted"
-  }, s.autoOffloaded ? 'slept' : 'offloaded')), offloaded && React.createElement(OffloadedNote, {
+  }, s.autoOffloaded ? 'slept' : 'offloaded'), s.tags.map(t => React.createElement(TagChip, {
+    key: t,
+    tag: t,
+    title: `Show only "${t}" sessions`,
+    onClick: onTagClick ? e => {
+      e.stopPropagation();
+      onTagClick(t);
+    } : undefined
+  })), React.createElement("button", {
+    className: `rename-btn tag-btn ${s.tags.length ? '' : 'untagged'}`,
+    "data-tip": "Edit tags",
+    "aria-label": "Edit tags",
+    onClick: e => {
+      e.stopPropagation();
+      setTagAnchor(tagAnchor ? null : e.currentTarget);
+    }
+  }, React.createElement(IconTag, {
+    size: 12
+  })), tagAnchor && React.createElement(TagEditor, {
+    anchor: tagAnchor,
+    session: s,
+    allTags: allTags || [],
+    onClose: () => setTagAnchor(null)
+  })), offloaded && React.createElement(OffloadedNote, {
     session: s
   })), React.createElement("td", {
     className: "muted mono col-h3",
@@ -488,5 +770,6 @@ Object.assign(window, {
   Sessions,
   FullSessionRow,
   KeepAwakeButton,
-  OffloadedNote
+  OffloadedNote,
+  TagChip
 });

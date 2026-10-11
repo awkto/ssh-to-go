@@ -169,9 +169,9 @@ func (h *Handlers) DuplicateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// A copy should look like what it copied. Icon, colour and terminal
-	// theme travel; "starred" and the last-accessed stamp do not — those
-	// are about the original, not the new session.
+	// A copy should look like what it copied. Icon, colour, terminal
+	// theme and tags travel; "starred" and the last-accessed stamp do not —
+	// those are about the original, not the new session.
 	if h.SessionIcons != nil {
 		src := h.SessionIcons.Get(hostName, sessionName)
 		icon := h.Settings.NewSessionIcon()
@@ -179,6 +179,7 @@ func (h *Handlers) DuplicateSession(w http.ResponseWriter, r *http.Request) {
 			icon.Icon, icon.Color = src.Icon, src.Color
 		}
 		icon.Theme = src.Theme
+		icon.Tags = src.Tags
 		if err := h.SessionIcons.Set(hostName, newName, icon); err != nil {
 			log.Printf("session icon assign %s/%s: %v", hostName, newName, err)
 		}

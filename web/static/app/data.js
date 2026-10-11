@@ -151,6 +151,7 @@ function adaptSessions() {
       iconColor: icon.color || 'indigo',
       starred: !!icon.starred,
       keepAwake: !!icon.keep_awake,
+      tags: icon.tags || [],
       createdMs,
       activityMs,
       lastAccessedMs,
@@ -185,6 +186,7 @@ function adaptSessions() {
         iconColor: icon.color || 'indigo',
         starred: !!icon.starred,
         keepAwake: !!icon.keep_awake,
+        tags: icon.tags || [],
         createdMs,
         activityMs,
         lastAccessedMs,
@@ -362,6 +364,23 @@ async function setSessionIconPatch(hostName, sessionName, patch) {
   STORE.icons[`${hostName}:${sessionName}`] = next;
   notify();
 }
+function tagCounts(sessions) {
+  const counts = {};
+  for (const s of sessions) for (const t of s.tags || []) counts[t] = (counts[t] || 0) + 1;
+  return Object.keys(counts).sort().map(tag => ({
+    tag,
+    count: counts[tag]
+  }));
+}
+function normalizeTag(t) {
+  return (t || '').toLowerCase().trim().split(/\s+/).join('-').slice(0, 32);
+}
+async function setSessionTags(hostName, sessionName, tags) {
+  const clean = [...new Set(tags.map(normalizeTag).filter(Boolean))].sort();
+  await setSessionIconPatch(hostName, sessionName, {
+    tags: clean
+  });
+}
 async function addHost(payload) {
   const r = await authFetch('/api/hosts', {
     method: 'POST',
@@ -402,6 +421,9 @@ Object.assign(window, {
   getHandoff,
   forgetRecentCommand,
   setSessionIconPatch,
+  setSessionTags,
+  tagCounts,
+  normalizeTag,
   addHost,
   scanAll,
   openTerminal,
