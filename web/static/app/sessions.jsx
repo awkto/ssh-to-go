@@ -31,6 +31,7 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
   };
   const cmp = sortComparators[sortBy] || sortComparators.activity;
   const filtered = SESSIONS.filter(s => {
+    if (filter === 'open' && s.status === 'offloaded') return false;
     if (filter === 'active' && s.activity !== 'active') return false;
     if (filter === 'attached' && !s.clients) return false;
     if (filter === 'favorites' && !s.starred) return false;
@@ -80,6 +81,7 @@ const Sessions = ({ store, openSession, openNewSession, initialFilter }) => {
       <div className="filter-bar">
         <div className="seg">
           <button className={`seg-btn ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>All <span className="count">{SESSIONS.length}</span></button>
+          <button className={`seg-btn ${filter==='open'?'active':''}`} onClick={()=>setFilter('open')}>Open <span className="count">{SESSIONS.filter(s=>s.status!=='offloaded').length}</span></button>
           <button className={`seg-btn ${filter==='active'?'active':''}`} onClick={()=>setFilter('active')}>Active <span className="count">{SESSIONS.filter(s=>s.activity==='active').length}</span></button>
           <button className={`seg-btn ${filter==='attached'?'active':''}`} onClick={()=>setFilter('attached')}>Attached <span className="count">{SESSIONS.filter(s=>s.clients>0).length}</span></button>
           <button className={`seg-btn ${filter==='favorites'?'active':''}`} onClick={()=>setFilter('favorites')}>Favorites <span className="count">{SESSIONS.filter(s=>s.starred).length}</span></button>
@@ -263,27 +265,50 @@ const TagEditor = ({ anchor, session: s, allTags, onClose }) => {
     catch (e) { setErr('save failed: ' + e.message); }
   };
   const toggle = (tag) => save(current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag].sort());
-  const add = (e) => {
-    e.preventDefault();
-    const t = normalizeTag(draft);
+  const allNames = [...new Set([...allTags.map(t => t.tag), ...current])].sort();
+  // Typing filters the list — tags starting with the text first, then ones
+  // containing it — and offers to create the tag only when nothing matches
+  // it exactly. The highlighted row is what Enter picks, so "wo" + Enter
+  // ticks "work" instead of creating "wo"; arrows move the highlight.
+  const q = normalizeTag(draft);
+  const suggestions = !q ? allNames : [
+    ...allNames.filter(t => t.startsWith(q)),
+    ...allNames.filter(t => !t.startsWith(q) && t.includes(q)),
+  ];
+  const canCreate = q && !allNames.includes(q);
+  const rowCount = suggestions.length + (canCreate ? 1 : 0);
+  const [hi, setHi] = React.useState(0);
+  React.useEffect(() => { setHi(0); }, [q]);
+  const pick = (i) => {
+    if (i < suggestions.length) toggle(suggestions[i]);
+    else if (canCreate) save([...current, q].sort());
     setDraft('');
-    if (t && !current.includes(t)) save([...current, t].sort());
   };
-  const suggestions = [...new Set([...allTags.map(t => t.tag), ...current])].sort();
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (rowCount) setHi(h => (h + (e.key === 'ArrowDown' ? 1 : rowCount - 1)) % rowCount);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (rowCount && (q || hi > 0)) pick(Math.min(hi, rowCount - 1));
+    }
+  };
   return ReactDOM.createPortal(
     <div className="tag-editor" ref={ref} style={{ top: r.bottom + 6, left, width }}>
       <div className="sort-pop-label">Tags for {s.id}</div>
-      <form onSubmit={add} className="tag-editor-add">
-        <input autoFocus placeholder="New tag, then Enter" value={draft} maxLength={32}
-               onChange={e => setDraft(e.target.value)} />
-      </form>
-      {suggestions.map(tag => (
+      <div className="tag-editor-add">
+        <input autoFocus placeholder="Type to find or add a tag" value={draft} maxLength={32}
+               onChange={e => setDraft(e.target.value)} onKeyDown={onKey}
+               role="combobox" aria-expanded="true" aria-autocomplete="list" />
+      </div>
+      {suggestions.map((tag, i) => (
         <React.Fragment key={tag}>
           <div className="tag-editor-row">
             <button className={`tag-swatch-btn ${coloring === tag ? 'open' : ''}`} style={{'--tag-h': tagHue(tag)}}
                     title={`Change the colour of "${tag}"`} aria-label={`Change colour of ${tag}`}
                     onClick={() => setColoring(coloring === tag ? null : tag)} />
-            <button className={`sort-opt ${current.includes(tag) ? 'active' : ''}`} onClick={() => toggle(tag)}>
+            <button className={`sort-opt ${current.includes(tag) ? 'active' : ''} ${(q || hi > 0) && i === hi ? 'hi' : ''}`}
+                    onClick={() => toggle(tag)} onMouseEnter={() => setHi(i)}>
               <TagChip tag={tag} />
               {current.includes(tag) && <IconCheck size={14} />}
             </button>
@@ -299,7 +324,13 @@ const TagEditor = ({ anchor, session: s, allTags, onClose }) => {
           )}
         </React.Fragment>
       ))}
-      {!suggestions.length && <div className="tag-pop-hint">Try "work" or "personal".</div>}
+      {canCreate && (
+        <button className={`sort-opt tag-create ${hi === suggestions.length ? 'hi' : ''}`}
+                onClick={() => pick(suggestions.length)} onMouseEnter={() => setHi(suggestions.length)}>
+          <span>Create <TagChip tag={q} /></span>
+        </button>
+      )}
+      {!allNames.length && !q && <div className="tag-pop-hint">Try "work" or "personal".</div>}
       {err && <div className="tag-pop-hint" style={{color:'var(--err)'}}>{err}</div>}
     </div>,
     document.body

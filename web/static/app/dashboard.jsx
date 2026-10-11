@@ -6,6 +6,8 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
   const KEYPAIRS = store.keypairs;
   // Offloaded sessions are merged into store.sessions with status:'offloaded'
   // and rendered at the bottom of the Recent sessions table.
+  const openCount = SESSIONS.filter(s => s.status !== 'offloaded').length;
+  const offloadedCount = SESSIONS.length - openCount;
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
   const attached = SESSIONS.filter(s => s.clients > 0).length;
   const totalHostLoad = HOSTS.length
@@ -17,7 +19,7 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
       <div className="page-head">
         <div className="page-title-block">
           <h1>Dashboard</h1>
-          <p>{HOSTS.length} hosts online · {activeCount} sessions active · {attached} with clients attached</p>
+          <p>{HOSTS.length} hosts online · {openCount} sessions open · {activeCount} active · {attached} with clients attached</p>
         </div>
         <div className="page-actions">
           <Button variant="secondary" size="sm" icon={IconRefresh} onClick={() => store.refresh()}>Refresh</Button>
@@ -35,11 +37,10 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
           spark={<Sparkline data={totalHostLoad} width={70} height={20} />}
         />
         <StatCard
-          label="Active sessions"
-          value={SESSIONS.length}
-          sub={<span>{activeCount} active · {SESSIONS.length - activeCount} idle</span>}
-          delta={{dir:'up', val:'+3'}}
-          spark={<Sparkline data={[8,9,10,9,10,11,12,12,11,12]} width={70} height={20} />}
+          label="Open sessions"
+          value={<>{openCount}<span style={{fontSize:14, color:'var(--fg-subtle)', fontWeight:500, marginLeft:6}}>of {SESSIONS.length}</span></>}
+          sub={<span>{activeCount} active · {openCount - activeCount} idle{offloadedCount > 0 && <> · {offloadedCount} offloaded</>}</span>}
+          delta={null}
         />
         <StatCard
           label="Attached clients"
@@ -66,9 +67,10 @@ const Dashboard = ({ store, setView, openSession, openNewSession }) => {
             <div className="row gap-3">
               <h2>Recent sessions</h2>
               <div className="seg">
-                <span className="seg-btn active">All <span className="count">{SESSIONS.length}</span></span>
-                <span className="seg-btn">Active <span className="count">{activeCount}</span></span>
-                <span className="seg-btn">Attached <span className="count">{attached}</span></span>
+                <button className="seg-btn active" onClick={() => setView('sessions', 'all')}>All <span className="count">{SESSIONS.length}</span></button>
+                <button className="seg-btn" onClick={() => setView('sessions', 'open')}>Open <span className="count">{openCount}</span></button>
+                <button className="seg-btn" onClick={() => setView('sessions', 'active')}>Active <span className="count">{activeCount}</span></button>
+                <button className="seg-btn" onClick={() => setView('sessions', 'attached')}>Attached <span className="count">{attached}</span></button>
               </div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => setView('sessions')}>

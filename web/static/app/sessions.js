@@ -36,6 +36,7 @@ const Sessions = ({
   };
   const cmp = sortComparators[sortBy] || sortComparators.activity;
   const filtered = SESSIONS.filter(s => {
+    if (filter === 'open' && s.status === 'offloaded') return false;
     if (filter === 'active' && s.activity !== 'active') return false;
     if (filter === 'attached' && !s.clients) return false;
     if (filter === 'favorites' && !s.starred) return false;
@@ -99,6 +100,11 @@ const Sessions = ({
   }, "All ", React.createElement("span", {
     className: "count"
   }, SESSIONS.length)), React.createElement("button", {
+    className: `seg-btn ${filter === 'open' ? 'active' : ''}`,
+    onClick: () => setFilter('open')
+  }, "Open ", React.createElement("span", {
+    className: "count"
+  }, SESSIONS.filter(s => s.status !== 'offloaded').length)), React.createElement("button", {
     className: `seg-btn ${filter === 'active' ? 'active' : ''}`,
     onClick: () => setFilter('active')
   }, "Active ", React.createElement("span", {
@@ -362,13 +368,28 @@ const TagEditor = ({
     }
   };
   const toggle = tag => save(current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag].sort());
-  const add = e => {
-    e.preventDefault();
-    const t = normalizeTag(draft);
+  const allNames = [...new Set([...allTags.map(t => t.tag), ...current])].sort();
+  const q = normalizeTag(draft);
+  const suggestions = !q ? allNames : [...allNames.filter(t => t.startsWith(q)), ...allNames.filter(t => !t.startsWith(q) && t.includes(q))];
+  const canCreate = q && !allNames.includes(q);
+  const rowCount = suggestions.length + (canCreate ? 1 : 0);
+  const [hi, setHi] = React.useState(0);
+  React.useEffect(() => {
+    setHi(0);
+  }, [q]);
+  const pick = i => {
+    if (i < suggestions.length) toggle(suggestions[i]);else if (canCreate) save([...current, q].sort());
     setDraft('');
-    if (t && !current.includes(t)) save([...current, t].sort());
   };
-  const suggestions = [...new Set([...allTags.map(t => t.tag), ...current])].sort();
+  const onKey = e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (rowCount) setHi(h => (h + (e.key === 'ArrowDown' ? 1 : rowCount - 1)) % rowCount);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (rowCount && (q || hi > 0)) pick(Math.min(hi, rowCount - 1));
+    }
+  };
   return ReactDOM.createPortal(React.createElement("div", {
     className: "tag-editor",
     ref: ref,
@@ -379,16 +400,19 @@ const TagEditor = ({
     }
   }, React.createElement("div", {
     className: "sort-pop-label"
-  }, "Tags for ", s.id), React.createElement("form", {
-    onSubmit: add,
+  }, "Tags for ", s.id), React.createElement("div", {
     className: "tag-editor-add"
   }, React.createElement("input", {
     autoFocus: true,
-    placeholder: "New tag, then Enter",
+    placeholder: "Type to find or add a tag",
     value: draft,
     maxLength: 32,
-    onChange: e => setDraft(e.target.value)
-  })), suggestions.map(tag => React.createElement(React.Fragment, {
+    onChange: e => setDraft(e.target.value),
+    onKeyDown: onKey,
+    role: "combobox",
+    "aria-expanded": "true",
+    "aria-autocomplete": "list"
+  })), suggestions.map((tag, i) => React.createElement(React.Fragment, {
     key: tag
   }, React.createElement("div", {
     className: "tag-editor-row"
@@ -401,8 +425,9 @@ const TagEditor = ({
     "aria-label": `Change colour of ${tag}`,
     onClick: () => setColoring(coloring === tag ? null : tag)
   }), React.createElement("button", {
-    className: `sort-opt ${current.includes(tag) ? 'active' : ''}`,
-    onClick: () => toggle(tag)
+    className: `sort-opt ${current.includes(tag) ? 'active' : ''} ${(q || hi > 0) && i === hi ? 'hi' : ''}`,
+    onClick: () => toggle(tag),
+    onMouseEnter: () => setHi(i)
   }, React.createElement(TagChip, {
     tag: tag
   }), current.includes(tag) && React.createElement(IconCheck, {
@@ -417,7 +442,13 @@ const TagEditor = ({
     },
     "aria-label": `Hue ${h}`,
     onClick: () => setTagColor(tag, h).catch(e => setErr('colour save failed: ' + e.message))
-  }))))), !suggestions.length && React.createElement("div", {
+  }))))), canCreate && React.createElement("button", {
+    className: `sort-opt tag-create ${hi === suggestions.length ? 'hi' : ''}`,
+    onClick: () => pick(suggestions.length),
+    onMouseEnter: () => setHi(suggestions.length)
+  }, React.createElement("span", null, "Create ", React.createElement(TagChip, {
+    tag: q
+  }))), !allNames.length && !q && React.createElement("div", {
     className: "tag-pop-hint"
   }, "Try \"work\" or \"personal\"."), err && React.createElement("div", {
     className: "tag-pop-hint",

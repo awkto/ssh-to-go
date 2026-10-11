@@ -7,6 +7,8 @@ const Dashboard = ({
   const HOSTS = store.hosts;
   const SESSIONS = store.sessions;
   const KEYPAIRS = store.keypairs;
+  const openCount = SESSIONS.filter(s => s.status !== 'offloaded').length;
+  const offloadedCount = SESSIONS.length - openCount;
   const activeCount = SESSIONS.filter(s => s.activity === 'active').length;
   const attached = SESSIONS.filter(s => s.clients > 0).length;
   const totalHostLoad = HOSTS.length ? HOSTS.reduce((sum, h) => sum.map((v, i) => v + (h.load[i] || 0)), Array(20).fill(0)).map(v => v / HOSTS.length) : Array(20).fill(0);
@@ -14,7 +16,7 @@ const Dashboard = ({
     className: "page-head"
   }, React.createElement("div", {
     className: "page-title-block"
-  }, React.createElement("h1", null, "Dashboard"), React.createElement("p", null, HOSTS.length, " hosts online \xB7 ", activeCount, " sessions active \xB7 ", attached, " with clients attached")), React.createElement("div", {
+  }, React.createElement("h1", null, "Dashboard"), React.createElement("p", null, HOSTS.length, " hosts online \xB7 ", openCount, " sessions open \xB7 ", activeCount, " active \xB7 ", attached, " with clients attached")), React.createElement("div", {
     className: "page-actions"
   }, React.createElement(Button, {
     variant: "secondary",
@@ -48,18 +50,17 @@ const Dashboard = ({
       height: 20
     })
   }), React.createElement(StatCard, {
-    label: "Active sessions",
-    value: SESSIONS.length,
-    sub: React.createElement("span", null, activeCount, " active \xB7 ", SESSIONS.length - activeCount, " idle"),
-    delta: {
-      dir: 'up',
-      val: '+3'
-    },
-    spark: React.createElement(Sparkline, {
-      data: [8, 9, 10, 9, 10, 11, 12, 12, 11, 12],
-      width: 70,
-      height: 20
-    })
+    label: "Open sessions",
+    value: React.createElement(React.Fragment, null, openCount, React.createElement("span", {
+      style: {
+        fontSize: 14,
+        color: 'var(--fg-subtle)',
+        fontWeight: 500,
+        marginLeft: 6
+      }
+    }, "of ", SESSIONS.length)),
+    sub: React.createElement("span", null, activeCount, " active \xB7 ", openCount - activeCount, " idle", offloadedCount > 0 && React.createElement(React.Fragment, null, " \xB7 ", offloadedCount, " offloaded")),
+    delta: null
   }), React.createElement(StatCard, {
     label: "Attached clients",
     value: React.createElement(React.Fragment, null, SESSIONS.reduce((n, s) => n + s.clients, 0), React.createElement("span", {
@@ -98,16 +99,24 @@ const Dashboard = ({
     className: "row gap-3"
   }, React.createElement("h2", null, "Recent sessions"), React.createElement("div", {
     className: "seg"
-  }, React.createElement("span", {
-    className: "seg-btn active"
+  }, React.createElement("button", {
+    className: "seg-btn active",
+    onClick: () => setView('sessions', 'all')
   }, "All ", React.createElement("span", {
     className: "count"
-  }, SESSIONS.length)), React.createElement("span", {
-    className: "seg-btn"
+  }, SESSIONS.length)), React.createElement("button", {
+    className: "seg-btn",
+    onClick: () => setView('sessions', 'open')
+  }, "Open ", React.createElement("span", {
+    className: "count"
+  }, openCount)), React.createElement("button", {
+    className: "seg-btn",
+    onClick: () => setView('sessions', 'active')
   }, "Active ", React.createElement("span", {
     className: "count"
-  }, activeCount)), React.createElement("span", {
-    className: "seg-btn"
+  }, activeCount)), React.createElement("button", {
+    className: "seg-btn",
+    onClick: () => setView('sessions', 'attached')
   }, "Attached ", React.createElement("span", {
     className: "count"
   }, attached)))), React.createElement("button", {

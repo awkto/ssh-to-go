@@ -1969,6 +1969,11 @@ a { color: inherit; text-decoration: none; }
   outline: 0;
 }
 .tag-editor-add input:focus { border-color: var(--accent-border); }
+/* Keyboard highlight: what Enter picks. A ring rather than a fill so it
+   reads separately from a ticked (.active) tag. */
+.tag-editor .sort-opt.hi { background: var(--row-hover); box-shadow: inset 0 0 0 1px var(--accent-border); }
+.tag-editor .tag-create { justify-content: flex-start; color: var(--fg-muted); }
+.tag-editor .tag-create span { display: inline-flex; align-items: center; gap: 6px; }
 
 /* Tag colour picker inside the tag editor: a dot per row opens a strip of
    swatches below it. */
