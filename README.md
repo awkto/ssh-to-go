@@ -382,7 +382,8 @@ Known limitations:
 - Don't restrict the ssh-to-go key with a forced command (`command="..."`): Windows
   OpenSSH then repeats the first command for every later one on the same connection,
   and ssh-to-go reuses connections.
-- psmux applies `mouse on` to every session rather than only the one it is set on.
+- psmux turns `mouse` on by default (tmux leaves it off), so `"native_mouse_mode": false`
+  doesn't turn it off on a psmux host; add `set -g mouse off` to `~\.psmux.conf` for that.
 
 ---
 
