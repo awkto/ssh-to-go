@@ -216,6 +216,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		CreateDir:    req.CreateDir,
 		Command:      req.Command,
 		Mouse:        h.Settings.NativeMouseMode(),
+		Psmux:        h.Hub.HostIsPsmux(hostName),
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return
@@ -1224,6 +1225,7 @@ func (h *Handlers) RecreateSession(w http.ResponseWriter, r *http.Request) {
 		CreateDir:    true,
 		Command:      entry.Command,
 		Mouse:        h.Settings.NativeMouseMode(),
+		Psmux:        h.Hub.HostIsPsmux(hostName),
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return

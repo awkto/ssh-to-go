@@ -28,6 +28,15 @@ func (m *Manager) DetectTmux(client *ssh.Client) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// IsPsmux reports whether a DetectTmux version string comes from psmux, the
+// native Windows tmux (https://github.com/psmux/psmux). Its `tmux -V` prints
+// "tmux 3.4.0" followed by a "psmux <version>" line. psmux speaks the tmux CLI
+// but runs one server per session and sends no reply block for the control-mode
+// connect command, so a few commands are shaped differently for it.
+func IsPsmux(version string) bool {
+	return strings.Contains(strings.ToLower(version), "psmux")
+}
+
 // ListSessions returns all tmux sessions on the remote host.
 func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 	out, err := sshutil.Exec(client, fmt.Sprintf("tmux list-sessions -F '%s'", ListFormat))
@@ -98,6 +107,9 @@ type CreateOptions struct {
 	// this option entirely — control-mode clients get no mouse DECSETs and
 	// the relay strips them on the legacy path.
 	Mouse bool
+	// Psmux marks a host whose tmux is psmux (native Windows); see IsPsmux.
+	// It changes where history-limit is set — see buildCreateCmd.
+	Psmux bool
 }
 
 // CreateSessionWith is CreateSession with the optional knobs. See CreateOptions.
@@ -143,9 +155,17 @@ func buildCreateCmd(name string, opts CreateOptions) string {
 	}
 	// One tmux invocation; commands separated by tmux's own "\;". The
 	// history-limit set-option must come first so the new pane inherits it.
-	hist := ""
+	// psmux is the exception: it runs one server per session, so a global
+	// set-option before new-session has no server to land on and fails the
+	// whole chain. There it goes on the session right after creating it,
+	// which psmux applies to the session's existing pane.
+	hist, histAfter := "", ""
 	if opts.HistoryLimit > 0 {
-		hist = fmt.Sprintf("set-option -g history-limit %d \\; ", opts.HistoryLimit)
+		if opts.Psmux {
+			histAfter = fmt.Sprintf(" \\; set-option -t %q history-limit %d", name, opts.HistoryLimit)
+		} else {
+			hist = fmt.Sprintf("set-option -g history-limit %d \\; ", opts.HistoryLimit)
+		}
 	}
 	geom, sizeOpt := "", windowSize
 	if w, h, ok := parseWxH(windowSize); ok {
@@ -157,7 +177,7 @@ func buildCreateCmd(name string, opts CreateOptions) string {
 	if dir != "" {
 		base += " -c " + dir
 	}
-	cmd := fmt.Sprintf("%s \\; set-option -t %q window-size %s", base, name, sizeOpt)
+	cmd := fmt.Sprintf("%s%s \\; set-option -t %q window-size %s", base, histAfter, name, sizeOpt)
 	if opts.Mouse {
 		cmd += fmt.Sprintf(" \\; set-option -t %q mouse on", name)
 	}

@@ -219,6 +219,16 @@ func (h *Hub) GetHost(name string) (*HostState, bool) {
 	return &copy, true
 }
 
+// HostIsPsmux reports whether the host's last detected tmux is psmux. False
+// for an unknown host or before the first poll has detected anything, which
+// keeps the plain-tmux behaviour as the default.
+func (h *Hub) HostIsPsmux(name string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	state, ok := h.hosts[name]
+	return ok && tmux.IsPsmux(state.TmuxVersion)
+}
+
 // GetHostConfig returns the config for a specific host.
 func (h *Hub) GetHostConfig(name string) (config.Host, bool) {
 	h.mu.RLock()
