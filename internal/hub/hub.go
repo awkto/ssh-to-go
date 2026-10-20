@@ -27,6 +27,10 @@ type HostState struct {
 	DetectedOS   string           `json:"detected_os,omitempty"`
 	Metrics      *metrics.Metrics `json:"metrics,omitempty"`
 	LoadHistory  []float64        `json:"load_history,omitempty"`
+
+	// psmux is the host's last detected flavour (tmux.IsPsmux), kept across
+	// failed polls. See Update.
+	psmux bool
 }
 
 // HostSession is a flattened view of a session with its host info.
@@ -119,6 +123,12 @@ func (h *Hub) Update(result tmux.PollResult) {
 	state.LastPoll = time.Now()
 	state.TmuxDetected = result.TmuxDetected
 	state.TmuxVersion = result.TmuxVersion
+	// A poll that fails before tmux -V (an SSH drop) carries no version. Keep
+	// the last detected flavour, or a create or attach right after a brief
+	// drop would get tmux's commands on a psmux host.
+	if result.TmuxVersion != "" {
+		state.psmux = tmux.IsPsmux(result.TmuxVersion)
+	}
 
 	if result.Error != nil {
 		state.Error = result.Error.Error()
@@ -219,14 +229,14 @@ func (h *Hub) GetHost(name string) (*HostState, bool) {
 	return &copy, true
 }
 
-// HostIsPsmux reports whether the host's last detected tmux is psmux. False
-// for an unknown host or before the first poll has detected anything, which
-// keeps the plain-tmux behaviour as the default.
+// HostIsPsmux reports whether the host's last detected tmux is psmux, also
+// while later polls fail. False for an unknown host or before the first poll
+// has detected anything, which keeps the plain-tmux behaviour as the default.
 func (h *Hub) HostIsPsmux(name string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	state, ok := h.hosts[name]
-	return ok && tmux.IsPsmux(state.TmuxVersion)
+	return ok && state.psmux
 }
 
 // GetHostConfig returns the config for a specific host.
