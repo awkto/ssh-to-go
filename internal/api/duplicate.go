@@ -148,6 +148,7 @@ func (h *Handlers) DuplicateSession(w http.ResponseWriter, r *http.Request) {
 		CreateDir:    createDir,
 		Command:      command,
 		Mouse:        h.Settings.NativeMouseMode(),
+		Psmux:        h.Hub.HostIsPsmux(hostName),
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("create session failed: %v", err), http.StatusInternalServerError)
 		return

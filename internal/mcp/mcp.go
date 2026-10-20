@@ -551,6 +551,7 @@ func (s *Server) callTool(name string, args map[string]any) map[string]any {
 			Cwd:          cwd,
 			HistoryLimit: historyLimit,
 			Mouse:        s.Settings.NativeMouseMode(),
+			Psmux:        s.Hub.HostIsPsmux(host),
 		}); err != nil {
 			return toolError("create session failed: " + err.Error())
 		}

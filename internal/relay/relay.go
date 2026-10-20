@@ -49,6 +49,11 @@ type Options struct {
 	// key the deliberate-termination registry (see terminate.go) — the relay
 	// itself dials by address. Empty disables termination signalling.
 	Host string
+
+	// Psmux marks a host running psmux (tmux.IsPsmux). It has no global
+	// server for HistoryLimit to land on, and its control mode sends no
+	// connect reply, so both are handled differently for it.
+	Psmux bool
 }
 
 // Relay bridges a WebSocket connection to a tmux session over SSH.
@@ -70,7 +75,7 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	go sshutil.KeepAlive(client, 15_000_000_000, done) // 15s
 
 	if opts.Mode == "control" {
-		return relayControlMode(ctx, ws, client, sessionName, windowSize, opts.HistoryLimit, opts.Host)
+		return relayControlMode(ctx, ws, client, sessionName, windowSize, opts.HistoryLimit, opts.Host, opts.Psmux)
 	}
 
 	// Default size, will be resized by first client message
@@ -120,24 +125,33 @@ func RelayWithOptions(ctx context.Context, ws *websocket.Conn, address, user, ke
 	// is useless here: with no session it starts a server that exits before
 	// the next command runs, so the pane is born in a fresh default server.
 	// Empty when HistoryLimit<=0.
-	histInline := ""
+	//
+	// psmux has no global server for that set -g to land on (one server per
+	// session), so there the session is created up front with a per-session
+	// limit instead, and the attach below finds it already there.
+	histInline, preCreate := "", ""
 	if opts.HistoryLimit > 0 {
-		histInline = fmt.Sprintf("set-option -g history-limit %d \\; ", opts.HistoryLimit)
+		if opts.Psmux {
+			preCreate = fmt.Sprintf(`tmux has-session -t %q 2>/dev/null || tmux new-session -d -s %q \; set-option -t %q history-limit %d; `,
+				sessionName, sessionName, sessionName, opts.HistoryLimit)
+		} else {
+			histInline = fmt.Sprintf("set-option -g history-limit %d \\; ", opts.HistoryLimit)
+		}
 	}
 	var cmd string
 	if opts.Mouse == "off" {
 		cmd = fmt.Sprintf(
-			`printf '%%s\x00' "$(tty)"; `+
+			`printf '%%s\x00' "$(tty)"; %s`+
 				`tmux has-session -t %q 2>/dev/null || tmux %snew-session -d -s %q; `+
 				`tmux capture-pane -p -e -S -5000 -E -1 -t %q 2>/dev/null; `+
 				`printf '\x1b[0m'; `+
 				`exec tmux %snew-session -A -s %q \; set-option window-size %s`,
-			sessionName, histInline, sessionName, sessionName, histInline, sessionName, windowSize,
+			preCreate, sessionName, histInline, sessionName, sessionName, histInline, sessionName, windowSize,
 		)
 	} else {
 		cmd = fmt.Sprintf(
-			`printf '%%s\x00' "$(tty)"; exec tmux %snew-session -A -s %q \; set-option window-size %s%s`,
-			histInline, sessionName, windowSize, mouseOpt,
+			`printf '%%s\x00' "$(tty)"; %sexec tmux %snew-session -A -s %q \; set-option window-size %s%s`,
+			preCreate, histInline, sessionName, windowSize, mouseOpt,
 		)
 	}
 	if err := session.Start(cmd); err != nil {

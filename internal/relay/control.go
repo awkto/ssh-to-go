@@ -73,6 +73,9 @@ type controlParser struct {
 	// because a repaint (triggered from a debounce timer goroutine) closes the
 	// gate again mid-stream.
 	historyDone bool
+	// connectByFlag recognises the connect reply by its %begin flag instead
+	// of expecting it at the head of the queue. See queueConnectReply.
+	connectByFlag bool
 	// paneID is the active pane whose %output we forward ("" = forward all).
 	paneID string
 
@@ -136,7 +139,13 @@ func (p *controlParser) feedLine(line string) {
 		if len(f) >= 3 {
 			p.blockTime, p.blockNum = f[1], f[2]
 		}
-		p.blockKind = p.popCmd()
+		if p.connectByFlag && len(f) >= 4 && f[3] == "0" {
+			// Not a reply to anything we wrote (those carry flag 1): the
+			// connect reply. Leave the queue alone. See queueConnectReply.
+			p.blockKind = cmdConnect
+		} else {
+			p.blockKind = p.popCmd()
+		}
 		p.inBlock = true
 		p.blockLines = nil
 
@@ -431,7 +440,63 @@ func pasteCmds(target, text string) []string {
 // relayControlMode bridges a WebSocket to a tmux session via control mode.
 // Mirrors RelayWithOptions' lifecycle (kick channel, close codes, teardown)
 // but speaks the -C line protocol instead of relaying a PTY byte stream.
-func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Client, sessionName, windowSize string, historyLimit int, hostName string) error {
+// ensureSessionCmd creates the session with historyLimit lines of scrollback
+// unless it already exists. tmux takes the limit globally in the SAME
+// invocation as new-session (see relayControlMode); psmux has no global server
+// for that to land on, so it gets the limit on the session right after.
+func ensureSessionCmd(sessionName string, historyLimit int, psmux bool) string {
+	q := tmuxQuote(sessionName)
+	if psmux {
+		return fmt.Sprintf(`tmux has-session -t %s 2>/dev/null || tmux new-session -d -s %s \; set-option -t %s history-limit %d`,
+			q, q, q, historyLimit)
+	}
+	return fmt.Sprintf(`tmux has-session -t %s 2>/dev/null || tmux set-option -g history-limit %d \; new-session -d -s %s`,
+		q, historyLimit, q)
+}
+
+// psmuxPasteCmd is pasteCmds for psmux, as one shell command rather than
+// control-mode lines: psmux's control mode has no set-buffer/paste-buffer.
+// Its CLI does, but a buffer set by a command with no target lands on no
+// session's server (one server per session), so the chain opens with a
+// command aimed at the session and the buffer commands ride on its server.
+// Each argument is shell-quoted and passed as its own argv word, so the text
+// never meets tmux's command parser.
+func psmuxPasteCmd(sessionName, text string) string {
+	var b strings.Builder
+	for _, r := range text {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	s, t := shellQuote(sessionName), shellQuote(b.String())
+	return fmt.Sprintf(`tmux select-pane -t %s \; set-buffer -b ssh-to-go-paste -- %s \; paste-buffer -p -d -b ssh-to-go-paste -t %s`, s, t, s)
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// queueConnectReply expects the reply block tmux sends for the new-session
+// on its command line, ahead of any command written to stdin. psmux (as of
+// 3.4) sends none: queuing one there would hand every later reply to the
+// command before it, so the history capture would never be dispatched and
+// %output would stay gated shut. So for psmux nothing is queued and the
+// parser recognises a connect reply by its flag instead — tmux marks replies
+// to commands read from the control client's stdin with flag 1 and the
+// command-line one with 0 — which keeps working if psmux starts sending it.
+func queueConnectReply(p *controlParser, psmux bool) {
+	if psmux {
+		p.connectByFlag = true
+		return
+	}
+	p.pushCmd(cmdConnect)
+}
+
+func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Client, sessionName, windowSize string, historyLimit int, hostName string, psmux bool) error {
 	// No PTY: control mode is a line protocol over pipes. A PTY would add
 	// input echo and CRLF translation that corrupt parsing.
 	session, err := client.NewSession()
@@ -464,10 +529,7 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	// session already exists this is a no-op. Best-effort; done outside the
 	// control stream so it can't disturb the connect-reply block ordering.
 	if historyLimit > 0 {
-		q := tmuxQuote(sessionName)
-		_, _ = sshutil.Exec(client, fmt.Sprintf(
-			`tmux has-session -t %s 2>/dev/null || tmux set-option -g history-limit %d \; new-session -d -s %s`,
-			q, historyLimit, q))
+		_, _ = sshutil.Exec(client, ensureSessionCmd(sessionName, historyLimit, psmux))
 	}
 
 	cmd := fmt.Sprintf(`exec tmux -C new-session -A -s %q`, sessionName)
@@ -573,8 +635,8 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 	}()
 
 	// The reply to the connect command (new-session -A on the tmux command
-	// line) is the first block on the wire.
-	parser.pushCmd(cmdConnect)
+	// line) is the first block on the wire — except under psmux.
+	queueConnectReply(parser, psmux)
 
 	sendCmd(cmdIgnore, fmt.Sprintf("set-option window-size %s", windowSize))
 	sendCmd(cmdMeta, fmt.Sprintf(`display-message -p -t %s "#{client_name},#{pane_id}"`, target))
@@ -693,6 +755,14 @@ func relayControlMode(ctx context.Context, ws *websocket.Conn, client *ssh.Clien
 					continue
 				}
 				if msg.Type == "paste" {
+					if psmux {
+						if c := psmuxPasteCmd(sessionName, msg.Data); c != "" {
+							if out, err := sshutil.Exec(client, c); err != nil {
+								log.Printf("control relay: psmux paste: %v %s", err, strings.TrimSpace(out))
+							}
+						}
+						continue
+					}
 					for _, c := range pasteCmds(target, msg.Data) {
 						sendCmd(cmdIgnore, c)
 					}

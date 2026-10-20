@@ -349,6 +349,44 @@ hosts:
 
 ---
 
+## Windows Hosts (psmux)
+
+A Windows machine can be a host through [psmux](https://github.com/psmux/psmux), a
+native Windows tmux. ssh-to-go spots it from `tmux -V` and adjusts the few commands
+psmux handles differently, so nothing changes for tmux hosts.
+
+On the Windows machine (elevated PowerShell):
+
+```powershell
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+# ssh-to-go sends POSIX shell commands, so SSH logins need Git Bash, not cmd/PowerShell
+New-ItemProperty HKLM:\SOFTWARE\OpenSSH -Name DefaultShell -PropertyType String -Force `
+  -Value 'C:\Program Files\Git\bin\bash.exe'
+Set-Service sshd -StartupType Automatic; Start-Service sshd
+winget install psmux
+```
+
+Add ssh-to-go's public key to `~\.ssh\authorized_keys`, or for a user in the
+Administrators group to `C:\ProgramData\ssh\administrators_authorized_keys` (readable
+only by Administrators and SYSTEM). Git Bash only runs ssh-to-go's commands: the panes
+run psmux's default shell, which you can set to PowerShell with
+`set -g default-shell pwsh` in `~\.psmux.conf`.
+
+Known limitations:
+
+- **Sessions created over SSH can't use Windows Credential Manager** (`gh`, HTTPS `git`,
+  `az`...). A key-based OpenSSH login never unlocks the user's stored credentials, and
+  every process started from it inherits that. psmux sessions are reachable from any
+  logon, so a session started on the desktop (e.g. from Windows Terminal) and attached
+  from ssh-to-go keeps them.
+- Don't restrict the ssh-to-go key with a forced command (`command="..."`): Windows
+  OpenSSH then repeats the first command for every later one on the same connection,
+  and ssh-to-go reuses connections.
+- psmux turns `mouse` on by default (tmux leaves it off), so `"native_mouse_mode": false`
+  doesn't turn it off on a psmux host; add `set -g mouse off` to `~\.psmux.conf` for that.
+
+---
+
 ## How It Works
 
 ```
