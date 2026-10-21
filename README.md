@@ -37,6 +37,8 @@ Full terminal emulation in the browser via xterm.js with WebSocket relay.
 
 - 8+ built-in color themes (Dracula, Nord, Monokai, Solarized, Gruvbox, and more)
 - Automatic terminal resize
+- WebGL rendering: block and box-drawing characters join up (pixel art, TUI frames);
+  falls back to the DOM renderer without WebGL, and `?renderer=dom` forces it
 - Binary data streaming for responsive I/O
 - SSH keepalive prevents idle timeouts
 - Image paste: paste (or drop) a screenshot into the terminal and it is saved

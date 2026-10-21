@@ -352,6 +352,22 @@ function initTerminal(host, session) {
 
     const container = document.getElementById("terminal");
     term.open(container);
+
+    // WebGL renderer: it draws block and box-drawing characters itself
+    // (customGlyphs), so pixel art and frames built from them (the Claude Code
+    // mascot, TUI borders) join up instead of showing gaps between rows the
+    // way font glyphs do in the DOM renderer. It is also faster on busy
+    // output. Falls back to the DOM renderer where WebGL is unavailable or its
+    // context is lost; ?renderer=dom forces the DOM renderer, to compare.
+    if (new URLSearchParams(location.search).get("renderer") !== "dom" && window.WebglAddon) {
+        try {
+            const webglAddon = new WebglAddon.WebglAddon();
+            webglAddon.onContextLoss(function () { webglAddon.dispose(); });
+            term.loadAddon(webglAddon);
+        } catch (e) {
+            console.warn("WebGL renderer unavailable, using the DOM renderer:", e);
+        }
+    }
     fitAddon.fit();
 
     // Resize-war handling (issue #80): when another tmux client (a native
