@@ -487,6 +487,72 @@ function initTerminal(host, session) {
                    "\x1b[90m" + detail + "\x1b[0m\r\n");
     }
 
+    // ── Working marker in the tab title ──
+    // While the session streams output (a build, an agent at work) the tab
+    // title gets WORKING_MARK in front and the favicon a green dot, so a
+    // busy tab stands out in a row of them. Working means output in at
+    // least 3 of the last 5 one-second buckets: an idle TUI's occasional
+    // repaint lasts a second or two and must not count. Output right
+    // after a keystroke or resize is our own echo or a repaint, and the
+    // history replayed on (re)connect isn't new, so those are ignored.
+    const WORKING_MARK = "\u25CF ";
+    const ECHO_MS = 400, RESIZE_MS = 1500, CONNECT_MS = 2500;
+    const SVG_PREFIX = "data:image/svg+xml,";
+    let baseTitle = document.title;
+    let baseFavicon = (document.querySelector("link[rel=icon]") || {}).href || "";
+    let workingFavicon = withWorkingDot(baseFavicon);
+    let working = false;
+    let ignoreOutputUntil = Date.now() + CONNECT_MS;
+    const outputBuckets = new Set(); // whole seconds that saw output
+
+    // The favicon is the session's own icon (set by the page template);
+    // working adds a green dot in its top-right corner.
+    function withWorkingDot(href) {
+        if (href.indexOf(SVG_PREFIX) !== 0) return href;
+        let svg;
+        try { svg = decodeURIComponent(href.slice(SVG_PREFIX.length)); } catch (_) { return href; }
+        const dot = '<circle cx="19" cy="5" r="5" fill="#22c55e" stroke="#0b1220" stroke-width="1.5"/>';
+        if (svg.indexOf("</svg>") < 0) return href;
+        return SVG_PREFIX + encodeURIComponent(svg.replace("</svg>", dot + "</svg>"));
+    }
+    function renderTitle() {
+        document.title = (working ? WORKING_MARK : "") + baseTitle;
+        const link = document.querySelector("link[rel=icon]");
+        if (link && baseFavicon) link.href = working ? workingFavicon : baseFavicon;
+    }
+    function setBaseTitle(t) { baseTitle = t; renderTitle(); }
+    window.setTabTitle = setBaseTitle;
+    window.setTabFavicon = function (href) {
+        baseFavicon = href;
+        workingFavicon = withWorkingDot(href);
+        renderTitle();
+    };
+    function ignoreOutputFor(ms) {
+        ignoreOutputUntil = Math.max(ignoreOutputUntil, Date.now() + ms);
+    }
+    function noteOutput() {
+        const now = Date.now();
+        if (now < ignoreOutputUntil) return;
+        outputBuckets.add(Math.floor(now / 1000));
+        updateWorking();
+    }
+    function updateWorking() {
+        const sec = Math.floor(Date.now() / 1000);
+        let recent = 0, last3 = 0;
+        for (const b of outputBuckets) {
+            if (b <= sec - 5) { outputBuckets.delete(b); continue; }
+            recent++;
+            if (b > sec - 3) last3++;
+        }
+        // Start at 3 of 5 seconds; stop once the last 3 seconds were quiet.
+        const next = working ? last3 > 0 : recent >= 3;
+        if (next !== working) { working = next; renderTitle(); }
+    }
+    // Background tabs get this throttled (down to once a minute in Chrome
+    // after a while); starting is driven by output so it stays instant,
+    // only clearing the mark can lag.
+    setInterval(updateWorking, 1000);
+
     function sendBytes(bytes) {
         if (activeWs && activeWs.readyState === WebSocket.OPEN) {
             activeWs.send(new Uint8Array(bytes));
@@ -531,6 +597,7 @@ function initTerminal(host, session) {
 
         ws.onopen = function () {
             statusEl.className = "status connected";
+            ignoreOutputFor(CONNECT_MS);
             // A fresh relay starts on the normal buffer with a fresh
             // server-side mouse filter; resync the client-side filter's
             // state too (the cmdAlt attach handshake re-enters the alt
@@ -564,6 +631,7 @@ function initTerminal(host, session) {
                 var filtered = filterMouseSeqs(str);
                 if (filtered.length > 0) {
                     term.write(filtered);
+                    noteOutput();
                 }
             } else {
                 // Check for control messages (resize acks, tty, etc)
@@ -624,6 +692,7 @@ function initTerminal(host, session) {
         onDataDisposable = term.onData(function (data) {
             data = data.replace(reportReplyRegex, "");
             if (data.length === 0) return;
+            ignoreOutputFor(ECHO_MS);
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(new TextEncoder().encode(data));
             }
@@ -633,6 +702,7 @@ function initTerminal(host, session) {
         // as our declared size — the server tracks the browser's REAL fit
         // size so it can tell when the window returns to it.
         onResizeDisposable = term.onResize(function (size) {
+            ignoreOutputFor(RESIZE_MS);
             if (applyingWinsize) return;
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
@@ -707,7 +777,7 @@ function initTerminal(host, session) {
             session = newName;
             var title = window.formatTabTitle(host, newName);
             document.getElementById("session-label").textContent = title;
-            document.title = title;
+            setBaseTitle(title);
             window.history.replaceState(null, "", `/terminal/${encodeURIComponent(host)}/${encodeURIComponent(newName)}`);
             term.focus();
         } catch (e) {

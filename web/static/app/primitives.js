@@ -50,9 +50,36 @@ const ClientCount = ({
     fontSize: 11
   }
 }, "\u2014");
+const shortAge = ms => {
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`;
+};
 const ActivityCell = ({
   session
 }) => {
+  if (session.state) {
+    const working = session.state === 'working';
+    const tip = working ? 'Output is streaming in this session' : session.state === 'waiting' ? 'A program is running but has gone quiet' : 'Shell at its prompt, nothing running';
+    return React.createElement("span", {
+      className: "row gap-2",
+      "data-tip": tip
+    }, React.createElement(StatusDot, {
+      status: working ? 'active' : session.state === 'waiting' ? 'warn' : '',
+      pulse: working
+    }), React.createElement("span", {
+      className: working ? '' : 'muted',
+      style: {
+        fontFamily: 'var(--font-mono)',
+        fontSize: 12
+      }
+    }, session.state, !working && session.lastOutputMs ? React.createElement("span", {
+      className: "act-age"
+    }, ` · ${shortAge(session.lastOutputMs)}`) : null));
+  }
   const isActive = session.activity === 'active';
   return React.createElement("span", {
     className: "row gap-2"

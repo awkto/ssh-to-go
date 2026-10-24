@@ -139,6 +139,8 @@ function adaptSessions() {
       activity,
       lastInput: s.attached ? 'attached' : timeAgo(new Date(activityMs)),
       idle: activity === 'active' ? 0 : idleSec,
+      state: s.state || '',
+      lastOutputMs: s.last_output ? new Date(s.last_output).getTime() : 0,
       clients: s.attached_clients || 0,
       iconKind: icon.icon || 'terminal',
       iconColor: icon.color || 'indigo',

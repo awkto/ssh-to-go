@@ -546,13 +546,14 @@ a { color: inherit; text-decoration: none; }
    hide on narrow panels, so the title stays as legible as possible. Every other
    column is fixed-width (Session's inline width:26/30% is overridden to auto). */
 .tbl-fixed th:first-child { width: auto !important; }
-.tbl-fixed .col-act { width: 116px; } /* Activity */
+.tbl-fixed .col-act { width: 140px; } /* Activity — fits "waiting · 59m" */
 .tbl-fixed .col-h3  { width: 96px; }  /* Host */
 .tbl-fixed .col-h2  { width: 66px; }  /* Clients */
 .tbl-fixed .col-h4  { width: 62px; }  /* Up */
 .tbl-fixed th:last-child { width: 148px; } /* Actions — fits 4 icon btns / Recreate+Forget */
 @container (max-width: 520px) {
-  .tbl-fixed .col-act { width: 84px; }
+  .tbl-fixed .col-act { width: 92px; }
+  .tbl-fixed .act-age { display: none; } /* state word only on phones */
   .tbl-fixed th:last-child { width: 128px; }
   /* Reclaim horizontal space for the title on phones: tighter cell padding and
      drop the hover-only rename affordance (unreachable on touch anyway). */

@@ -30,7 +30,12 @@ func (m *Manager) DetectTmux(client *ssh.Client) (string, error) {
 
 // ListSessions returns all tmux sessions on the remote host.
 func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
-	out, err := sshutil.Exec(client, fmt.Sprintf("tmux list-sessions -F '%s'", ListFormat))
+	// One round trip: the session list, then the host clock and every
+	// pane's output time and foreground command for Session.Classify.
+	// The pane half is best-effort; if it fails the sessions still list.
+	out, err := sshutil.Exec(client, fmt.Sprintf(
+		"tmux list-sessions -F '%s' && { echo %s; date +%%s; tmux list-panes -a -F '%s' 2>/dev/null; echo %s; ps -A -o pid=,pgid=,tpgid= 2>/dev/null; true; }",
+		ListFormat, paneMarker, PaneFormat, procMarker))
 	if err != nil {
 		// No tmux server running or no sessions is not an error — just empty
 		errStr := err.Error()
@@ -45,7 +50,9 @@ func (m *Manager) ListSessions(client *ssh.Client) ([]Session, error) {
 	// Hide throwaway sessions created by the exec API: their pane output is
 	// redirected to a file (nothing to attach to) and they'd only clutter
 	// the dashboard's session/MRU list.
-	all := ParseSessions(out)
+	sessOut, paneOut, _ := strings.Cut(out, paneMarker+"\n")
+	all := ParseSessions(sessOut)
+	applyPanes(all, paneOut, time.Now())
 	filtered := all[:0]
 	for _, s := range all {
 		if strings.HasPrefix(s.Name, execjob.SessionPrefix) {

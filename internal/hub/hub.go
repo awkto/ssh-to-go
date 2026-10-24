@@ -126,6 +126,13 @@ func (h *Hub) Update(result tmux.PollResult) {
 	} else {
 		state.Error = ""
 		state.Online = true
+		prev := make(map[string]*tmux.Session, len(state.Sessions))
+		for i := range state.Sessions {
+			prev[state.Sessions[i].Name] = &state.Sessions[i]
+		}
+		for i := range result.Sessions {
+			result.Sessions[i].Classify(prev[result.Sessions[i].Name])
+		}
 		state.Sessions = result.Sessions
 		if h.ids != nil {
 			for i := range state.Sessions {

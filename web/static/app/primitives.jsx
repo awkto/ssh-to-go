@@ -28,8 +28,34 @@ const ClientCount = ({ count }) => count
   ? <span className="mono num" style={{fontSize:12.5}}>{count}</span>
   : <span className="subtle" style={{fontFamily:'var(--font-mono)', fontSize:11}}>—</span>;
 
-// "now" | "12s ago" | idle pill
+// "4m" — compact age for the state label; no "ago", the state says it.
+const shortAge = ms => {
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`;
+};
+
+// working | waiting · 4m | idle · 2h — falls back to the old
+// attached / "12s ago" label when the host gave no state.
 const ActivityCell = ({ session }) => {
+  if (session.state) {
+    const working = session.state === 'working';
+    const tip = working ? 'Output is streaming in this session'
+      : session.state === 'waiting' ? 'A program is running but has gone quiet'
+      : 'Shell at its prompt, nothing running';
+    return (
+      <span className="row gap-2" data-tip={tip}>
+        <StatusDot status={working ? 'active' : session.state === 'waiting' ? 'warn' : ''} pulse={working} />
+        <span className={working ? '' : 'muted'} style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          {session.state}
+          {!working && session.lastOutputMs ? <span className="act-age">{` · ${shortAge(session.lastOutputMs)}`}</span> : null}
+        </span>
+      </span>
+    );
+  }
   const isActive = session.activity === 'active';
   return (
     <span className="row gap-2">

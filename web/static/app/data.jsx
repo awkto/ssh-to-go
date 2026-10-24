@@ -148,6 +148,10 @@ function adaptSessions() {
       activity,
       lastInput: s.attached ? 'attached' : timeAgo(new Date(activityMs)),
       idle: activity === 'active' ? 0 : idleSec,
+      // working | waiting | idle, from pane output over the last few polls
+      // (tmux.Session.Classify). Empty when the host didn't report it.
+      state: s.state || '',
+      lastOutputMs: s.last_output ? new Date(s.last_output).getTime() : 0,
       // How many tmux clients (browser tabs, apps, plain `tmux attach`) are
       // attached right now.
       clients: s.attached_clients || 0,
